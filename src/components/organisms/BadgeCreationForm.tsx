@@ -69,84 +69,109 @@ export function BadgeCreationForm() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-12 max-w-7xl mx-auto">
       {/* Form Section */}
-      <div className="space-y-6">
-        <Card>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {/* BASICS Section */}
+        <Card className="bg-card border border-border">
           <CardHeader>
-            <CardTitle>Badge Information</CardTitle>
+            <CardTitle className="text-lg font-semibold">BASICS</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              {/* Badge Name */}
-              <div className="space-y-2">
-                <Label htmlFor="badge_name">Badge Name</Label>
-                <Input
-                  id="badge_name"
-                  {...form.register('badge_name')}
-                  onBlur={(e) => handleFormChange('badge_name', e.target.value)}
-                  placeholder="Enter your badge name"
-                />
-                {form.formState.errors.badge_name && (
-                  <p className="text-sm text-red-500">{form.formState.errors.badge_name.message}</p>
-                )}
+            {/* Contact Email */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label htmlFor="email" className="text-sm font-medium">Contact Email*</Label>
               </div>
+              <Input
+                id="email"
+                type="email"
+                {...form.register('email')}
+                onBlur={(e) => handleFormChange('email', e.target.value)}
+                placeholder="hello@example.com"
+                className="h-10"
+              />
+              {form.formState.errors.email && (
+                <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>
+              )}
+            </div>
 
-              {/* Email */}
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  {...form.register('email')}
-                  onBlur={(e) => handleFormChange('email', e.target.value)}
-                  placeholder="Enter your email"
-                />
-                {form.formState.errors.email && (
-                  <p className="text-sm text-red-500">{form.formState.errors.email.message}</p>
-                )}
+            {/* Badge Name */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label htmlFor="badge_name" className="text-sm font-medium">Badge Name*</Label>
+                <span className="text-xs text-muted-foreground">
+                  {form.watch('badge_name')?.length || 0}/85
+                </span>
               </div>
-
-              {/* Photo Upload */}
-              <div className="space-y-2">
-                <Label>Photo</Label>
-                <ImageUpload />
-              </div>
-
-              {/* Social Media Handles */}
-              <div className="space-y-2">
-                <Label>Social Media Handles (up to 3)</Label>
-                <SocialMediaInput
-                  platforms={socialMediaPlatforms}
-                  value={form.watch('social_media_handles')}
-                  onChange={(handles) => handleFormChange('social_media_handles', handles)}
-                  error={form.formState.errors.social_media_handles?.message}
-                />
-              </div>
-
-              {/* Submit Button */}
-              <Button 
-                type="submit" 
-                className="w-full" 
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? 'Creating Badge...' : 'Create Badge'}
-              </Button>
-            </form>
+              <Input
+                id="badge_name"
+                {...form.register('badge_name')}
+                onBlur={(e) => handleFormChange('badge_name', e.target.value)}
+                placeholder="Sgt. Thunder Beef"
+                className="h-10"
+              />
+              {form.formState.errors.badge_name && (
+                <p className="text-sm text-destructive">{form.formState.errors.badge_name.message}</p>
+              )}
+            </div>
           </CardContent>
         </Card>
-      </div>
+
+        {/* PHOTO Section */}
+        <Card className="bg-card border border-border">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold">PHOTO</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Please refrain from using any pornography (e.g. genitals or sex acts)
+            </p>
+            <ImageUpload />
+            <div className="text-xs text-muted-foreground">
+              Max size: 1MB Accepted Types: .jpg .png .gif
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* SOCIALS Section */}
+        <Card className="bg-card border border-border">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold">SOCIALS</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <SocialMediaInput
+              platforms={socialMediaPlatforms}
+              value={form.watch('social_media_handles')}
+              onChange={(handles) => handleFormChange('social_media_handles', handles)}
+              error={form.formState.errors.social_media_handles?.message}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Action Buttons */}
+        <div className="flex gap-4">
+          <Button 
+            type="button" 
+            variant="outline" 
+            className="flex-1 h-10"
+            onClick={() => form.reset()}
+          >
+            Reset
+          </Button>
+          <Button 
+            type="submit" 
+            className="flex-1 h-10" 
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Creating...' : 'Finished'}
+          </Button>
+        </div>
+      </form>
 
       {/* Preview Section */}
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Live Preview</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <BadgePreview />
-          </CardContent>
-        </Card>
+      <div className="flex justify-center">
+        <BadgePreview />
       </div>
     </div>
   )

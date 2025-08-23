@@ -27,8 +27,8 @@ The Badge Maker application is a web-based platform that enables users to create
 - **FR-015**: Users must be able to view confirmation screen after finalization
 
 #### 3. Badge Template
-- **FR-016**: System must provide a single badge template matching Figma design
-- **FR-017**: Template must display exactly as designed in Figma
+- **FR-016**: System must provide a single badge template matching the Figma design specifications
+- **FR-017**: Template must display exactly as designed in the Figma mockups
 - **FR-018**: Template must be responsive for different screen sizes
 - **FR-019**: Template must support real-time text updates on input blur
 - **FR-020**: Template must support photo updates when cropping is saved
@@ -49,7 +49,7 @@ The Badge Maker application is a web-based platform that enables users to create
 #### 5. Live Preview
 - **FR-032**: Badge preview must update text elements on input blur
 - **FR-033**: Badge preview must update photo when cropping is saved
-- **FR-034**: Preview must show exact final badge appearance as designed in Figma
+- **FR-034**: Preview must show exact final badge appearance as designed in the Figma mockups
 - **FR-035**: Preview must be responsive across different devices
 - **FR-036**: Preview must support different viewing modes (print, screen)
 
@@ -122,7 +122,7 @@ The Badge Maker application is a web-based platform that enables users to create
 - **UI-007**: Clear error messages and validation feedback
 - **UI-008**: Real-time preview updates
 - **UI-009**: Single template interface
-- **UI-010**: Single badge template matching Figma design
+- **UI-010**: Single badge template matching the Figma design specifications
 - **UI-011**: Form inputs with onBlur text updates
 - **UI-012**: Image upload and cropping interface
 - **UI-013**: Real-time preview updates
@@ -130,7 +130,7 @@ The Badge Maker application is a web-based platform that enables users to create
 - **UI-015**: Clear form sections and labels
 - **UI-016**: Text inputs with onBlur updates
 - **UI-017**: Image upload and cropping interface
-- **UI-018**: Real-time preview matching Figma design
+- **UI-018**: Real-time preview matching the Figma design specifications
 
 #### 2. Badge Editor
 - **UI-019**: Intuitive image cropping controls with square aspect ratio
@@ -208,7 +208,7 @@ The Badge Maker application is a web-based platform that enables users to create
 ### Template Data
 - **DATA-015**: Single template configuration (JSON)
 - **DATA-016**: Template design specifications
-- **DATA-017**: Figma design reference
+- **DATA-017**: Figma design specifications and mockups
 
 ## 🔐 Security Requirements
 
