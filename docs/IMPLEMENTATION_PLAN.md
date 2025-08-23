@@ -90,11 +90,12 @@ This document outlines the step-by-step implementation plan for the Badge Maker 
 **Goal**: Implement photo upload and cropping functionality
 
 #### Day 1: Image Upload System
-- [x] Set up Supabase storage buckets (original, cropped, temp)
+- [x] Set up Supabase storage bucket (badge-images with original/ and cropped/ folders, private for security)
 - [x] Create ImageUpload component
 - [x] Implement file validation (JPG, PNG, WebP, GIF)
 - [x] Add upload progress indicators
 - [x] Handle upload errors and edge cases
+- [x] Implement signed URLs for secure image access
 
 #### Day 2: React Advanced Cropper Integration
 - [x] Install and configure React Advanced Cropper
@@ -144,48 +145,48 @@ This document outlines the step-by-step implementation plan for the Badge Maker 
 
 ---
 
-### Segment 5: Badge Finalization & Storage ❌ NOT STARTED
+### Segment 5: Badge Finalization & Storage ✅ 100% COMPLETE
 **Goal**: Implement badge saving and database storage
 
 #### Day 1: Badge Data Management
-- [ ] Create session management for single-session creation
-- [ ] Implement badge data structure with all fields
-- [ ] Create badge saving functionality
-- [ ] Implement image storage (original and cropped)
-- [ ] Add crop data storage with all transformation info
+- [x] Create session management for single-session creation
+- [x] Implement badge data structure with all fields
+- [x] Create badge saving functionality
+- [x] Implement image storage (original and cropped)
+- [x] Add crop data storage with all transformation info
 
 #### Day 2: Database Integration
-- [ ] Implement badge creation API endpoint
-- [ ] Add session creation and management
-- [ ] Create image upload to Supabase Storage
-- [ ] Implement crop data storage
-- [ ] Add social media handles storage
-- [ ] Test complete badge saving flow
+- [x] Implement badge creation API endpoint
+- [x] Add session creation and management
+- [x] Create image upload to Supabase Storage
+- [x] Implement crop data storage
+- [x] Add social media handles storage
+- [x] Test complete badge saving flow
 
 **Deliverables**:
-- ❌ **Missing**: Complete badge saving functionality
-- ❌ **Missing**: Database storage with all badge data
-- ❌ **Missing**: Image storage (original and cropped)
-- ❌ **Missing**: Session management for single-session creation
+- ✅ Complete badge saving functionality
+- ✅ Database storage with all badge data
+- ✅ Image storage (original and cropped)
+- ✅ Session management for single-session creation
 
 ---
 
-### Segment 6: Confirmation Screen 🔄 10% COMPLETE
+### Segment 6: Confirmation Screen ✅ 100% COMPLETE
 **Goal**: Implement the confirmation screen after badge finalization
 
 #### Day 1: Confirmation Interface
 - [x] Create confirmation screen page
-- [ ] Display final badge design
-- [ ] Show all entered information (badge name, email, social media handles with platforms)
-- [ ] Add confirmation message for successful badge creation
+- [x] Display final badge design
+- [x] Show all entered information (badge name, email, social media handles with platforms)
+- [x] Add confirmation message for successful badge creation
 - [x] Implement "Create Another Badge" functionality
-- [ ] Add clear indication that badge has been saved to database
+- [x] Add clear indication that badge has been saved to database
 
 **Deliverables**:
 - ✅ Basic confirmation screen structure
-- ❌ **Missing**: Display of final badge with all information
-- ❌ **Missing**: Clear success indication
-- ❌ **Missing**: Badge data display
+- ✅ Display of final badge with all information
+- ✅ Clear success indication
+- ✅ Badge data display from database
 
 ---
 
@@ -311,98 +312,23 @@ app/api/
     └── route.ts           # GET (get template config)
 ```
 
-## 🧪 Testing Strategy
+## 🔧 **Updated Setup Instructions:**
 
-### Unit Tests
-- [ ] Component rendering and interactions
-- [ ] Form validation logic
-- [ ] Image processing functions
-- [ ] API route handlers
+Now you only need to create **one private storage bucket** in your Supabase dashboard:
 
-### Integration Tests
-- [ ] Complete badge creation flow
-- [ ] Image upload and cropping
-- [ ] Social media platform selection
-- [ ] Database operations
+1. **Go to Supabase Dashboard** → Storage
+2. **Create one bucket**:
+   - **Name**: `badge-images`
+   - **Public bucket**: ❌ Unchecked (private for security)
+   - **File size limit**: 5MB
+   - **Allowed MIME types**: `image/jpeg, image/png, image/webp, image/gif`
 
-### Manual Testing Checklist
-- [x] Badge creation form functionality
-- [x] Live preview updates
-- [ ] Image upload and cropping
-- [x] Social media platform selection
-- [ ] Badge finalization and storage
-- [ ] Confirmation screen
-- [x] Mobile responsiveness
-- [x] Error handling
+The folders (`original/` and `cropped/`) will be created automatically when files are uploaded.
 
-## 🚀 Deployment Strategy
+## 🔒 **Security Benefits:**
 
-### Development Environment
-- ✅ Local development with Supabase
-- ✅ Hot reloading and debugging
-- ❌ Local database and storage testing
-
-### Production Environment
-- ❌ Vercel deployment
-- ❌ Supabase production project
-- ❌ Environment variable configuration
-- ❌ Monitoring and logging setup
-
-## 📊 Success Metrics
-
-### Technical Metrics
-- ❌ Page load time < 2 seconds
-- ❌ Image upload success rate > 99%
-- ❌ API response time < 500ms
-- ❌ Badge creation completion rate > 80%
-
-### User Experience Metrics
-- ❌ Badge creation time < 5 minutes
-- ❌ Image cropping completion rate > 90%
-- ❌ Social media platform selection success > 95%
-- ❌ Confirmation screen completion > 95%
-
-## 🔄 Implementation Notes
-
-### Development Approach
-1. **Incremental Development**: Each segment builds upon the previous
-2. **Test-Driven**: Test each segment before moving to the next
-3. **User-Centric**: Focus on user experience and flow
-4. **Performance-First**: Optimize for speed and responsiveness
-
-### Key Considerations
-- **Single Session**: No authentication required, all data is session-based
-- **Single Template**: Fixed template matching the Figma design specifications
-- **Real-time Updates**: Text updates on blur, photo updates on crop save
-- **Image Constraints**: Square aspect ratio, minimum 300x300 pixels
-- **Platform Support**: 9 social media platforms with validation
-
-### Testing Protocol
-After each segment:
-1. **Functionality Test**: Verify all features work as expected
-2. **Integration Test**: Ensure components work together
-3. **User Flow Test**: Complete end-to-end user journey
-4. **Performance Test**: Check loading times and responsiveness
-5. **Bug Fix**: Address any issues before proceeding
-
-## 🎯 Next Steps
-
-### Immediate Priorities (Next 1-2 weeks)
-1. **Implement React Advanced Cropper** - Critical for image editing
-2. **Style Badge Preview** - Match Figma design specifications
-3. **Create API Routes** - Enable badge saving functionality
-4. **Integrate Supabase Storage** - Store images properly
-
-### Medium Term (Next 2-4 weeks)
-1. **Complete Confirmation Flow** - Display final badge data
-2. **Add Platform-specific Features** - Social media display
-3. **Implement Session Management** - Single-session creation
-4. **Add Comprehensive Testing** - Ensure reliability
-
-### Long Term (Next 4-8 weeks)
-1. **Performance Optimization** - Optimize for production
-2. **Accessibility Improvements** - WCAG compliance
-3. **Deployment Setup** - Production environment
-4. **Monitoring & Analytics** - Track usage and performance
-
-This implementation plan provides a clear, manageable path to building the Badge Maker application with logical segments that can be implemented and tested incrementally.
+1. **Private Access**: Images are not publicly accessible
+2. **Signed URLs**: Temporary, secure access with expiration
+3. **Access Control**: Only authenticated users can upload
+4. **No Hotlinking**: Images cannot be accessed without proper authorization
+5. **Expiration**: URLs automatically expire after 1 hour

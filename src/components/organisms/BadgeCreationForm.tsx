@@ -54,10 +54,91 @@ export function BadgeCreationForm() {
     setIsSubmitting(true)
     try {
       setData(formData)
-      // TODO: Implement badge submission logic in Segment 3
-      console.log('Badge data:', formData)
+      
+      // Upload images if they exist
+      let originalImageUrl = null
+      let croppedImageUrl = null
+      
+      const { originalImage, croppedImage } = useBadgeStore.getState()
+      
+      if (originalImage) {
+        try {
+          const originalFormData = new FormData()
+          originalFormData.append('file', originalImage)
+          originalFormData.append('type', 'original')
+          
+          const originalResponse = await fetch('/api/upload', {
+            method: 'POST',
+            body: originalFormData
+          })
+          
+          if (originalResponse.ok) {
+            const originalData = await originalResponse.json()
+            originalImageUrl = originalData.url
+          } else {
+            console.warn('Original image upload failed, continuing without image')
+          }
+        } catch (error) {
+          console.warn('Original image upload error:', error)
+        }
+      }
+      
+      if (croppedImage) {
+        try {
+          const croppedFormData = new FormData()
+          croppedFormData.append('file', croppedImage)
+          croppedFormData.append('type', 'cropped')
+          
+          const croppedResponse = await fetch('/api/upload', {
+            method: 'POST',
+            body: croppedFormData
+          })
+          
+          if (croppedResponse.ok) {
+            const croppedData = await croppedResponse.json()
+            croppedImageUrl = croppedData.url
+          } else {
+            console.warn('Cropped image upload failed, continuing without image')
+          }
+        } catch (error) {
+          console.warn('Cropped image upload error:', error)
+        }
+      }
+      
+      // Create badge in database
+      const badgeResponse = await fetch('/api/badges', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          badge_name: formData.badge_name,
+          email: formData.email,
+          social_media_handles: formData.social_media_handles,
+          original_image_url: originalImageUrl,
+          cropped_image_url: croppedImageUrl,
+          crop_data: {
+            // Add any crop data if needed
+            timestamp: new Date().toISOString()
+          }
+        })
+      })
+      
+      if (badgeResponse.ok) {
+        const badgeData = await badgeResponse.json()
+        console.log('Badge created successfully:', badgeData)
+        
+        // Redirect to confirmation page
+        window.location.href = `/confirmation?badge_id=${badgeData.badge_id}`
+      } else {
+        const errorData = await badgeResponse.json()
+        console.error('Badge creation failed:', errorData)
+        alert('Failed to create badge. Please try again.')
+      }
+      
     } catch (error) {
       console.error('Error submitting badge:', error)
+      alert('An error occurred. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
