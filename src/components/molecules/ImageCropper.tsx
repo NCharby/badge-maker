@@ -49,11 +49,19 @@ export function ImageCropper({ isOpen, onClose }: ImageCropperProps) {
   }
 
   const handleRotate = (direction: 'clockwise' | 'counterclockwise') => {
-    // TODO: Implement rotation when API is confirmed
+    if (!cropperRef.current) return
+    
+    const angle = direction === 'clockwise' ? 90 : -90
+    ;(cropperRef.current as any).rotateImage(angle)
   }
 
   const handleFlip = (direction: 'horizontal' | 'vertical') => {
-    // TODO: Implement flip when API is confirmed
+    if (!cropperRef.current) return
+    
+    const horizontal = direction === 'horizontal'
+    const vertical = direction === 'vertical'
+    
+    ;(cropperRef.current as any).flipImage(horizontal, vertical)
   }
 
   const imageUrl = URL.createObjectURL(originalImage)
@@ -84,6 +92,11 @@ export function ImageCropper({ isOpen, onClose }: ImageCropperProps) {
               src={imageUrl}
               style={{ width: '100%', height: '100%' }}
               className="cropper"
+              stencilProps={{
+                // @ts-ignore
+                aspectRatio: 1,
+                grid: true
+              }}
             />
           </div>
         </div>
