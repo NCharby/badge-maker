@@ -1,5 +1,5 @@
 export interface SocialMediaHandle {
-  platform: 'x' | 'bluesky' | 'telegram' | 'recon' | 'furaffinity' | 'fetlife' | 'discord' | 'instagram' | 'other';
+  platform: 'none' | 'x' | 'bluesky' | 'telegram' | 'recon' | 'furaffinity' | 'fetlife' | 'discord' | 'instagram' | 'other';
   handle: string;
 }
 

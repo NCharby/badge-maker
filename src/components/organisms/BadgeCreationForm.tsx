@@ -19,7 +19,7 @@ const badgeSchema = z.object({
   badge_name: z.string().min(1, 'Badge name is required'),
   email: z.string().email('Please enter a valid email'),
   social_media_handles: z.array(z.object({
-    platform: z.enum(['x', 'bluesky', 'telegram', 'recon', 'furaffinity', 'fetlife', 'discord', 'instagram', 'other']),
+    platform: z.enum(['none', 'x', 'bluesky', 'telegram', 'recon', 'furaffinity', 'fetlife', 'discord', 'instagram', 'other']),
     handle: z.string().min(1, 'Handle is required')
   })).max(3, 'Maximum 3 social media handles allowed')
 })
@@ -27,6 +27,7 @@ const badgeSchema = z.object({
 type BadgeFormData = z.infer<typeof badgeSchema>
 
 const socialMediaPlatforms = [
+  { value: 'none', label: 'None' },
   { value: 'x', label: 'X (Twitter)' },
   { value: 'bluesky', label: 'BlueSky' },
   { value: 'telegram', label: 'Telegram' },

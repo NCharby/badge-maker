@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/atoms/card'
 
 // Platform display mapping
 const platformDisplay = {
+  none: '',
   x: 'X',
   bluesky: 'BS',
   telegram: 'TG',
@@ -55,40 +56,46 @@ export function BadgePreview() {
         {/* Social Media Handles */}
         <div className="flex flex-col gap-[18px] items-center justify-center">
           {/* Social 1 */}
-          <div className="flex items-center justify-center gap-[18px]">
-            <div className="w-7 h-[25px] flex items-center justify-center">
-              <span className="text-black font-bold text-lg">
-                {data.social_media_handles[0]?.platform ? platformDisplay[data.social_media_handles[0].platform] : 'X'}
+          {data.social_media_handles[0]?.platform && data.social_media_handles[0].platform !== 'none' && (
+            <div className="flex items-center justify-center gap-[18px]">
+              <div className="w-7 h-[25px] flex items-center justify-center">
+                <span className="text-black font-bold text-lg">
+                  {platformDisplay[data.social_media_handles[0].platform]}
+                </span>
+              </div>
+              <span className="text-black text-[32px] font-normal leading-[normal] font-open-sans">
+                {data.social_media_handles[0]?.handle || '@SocialHandle1'}
               </span>
             </div>
-            <span className="text-black text-[32px] font-normal leading-[normal] font-open-sans">
-              {data.social_media_handles[0]?.handle || '@SocialHandle1'}
-            </span>
-          </div>
+          )}
 
           {/* Social 2 */}
-          <div className="flex items-center justify-center gap-[18px]">
-            <div className="w-7 h-[25px] flex items-center justify-center">
-              <span className="text-black font-bold text-lg">
-                {data.social_media_handles[1]?.platform ? platformDisplay[data.social_media_handles[1].platform] : 'X'}
+          {data.social_media_handles[1]?.platform && data.social_media_handles[1].platform !== 'none' && (
+            <div className="flex items-center justify-center gap-[18px]">
+              <div className="w-7 h-[25px] flex items-center justify-center">
+                <span className="text-black font-bold text-lg">
+                  {platformDisplay[data.social_media_handles[1].platform]}
+                </span>
+              </div>
+              <span className="text-black text-[32px] font-normal leading-[normal] font-open-sans">
+                {data.social_media_handles[1]?.handle || '@SocialHandle2'}
               </span>
             </div>
-            <span className="text-black text-[32px] font-normal leading-[normal] font-open-sans">
-              {data.social_media_handles[1]?.handle || '@SocialHandle2'}
-            </span>
-          </div>
+          )}
 
           {/* Social 3 */}
-          <div className="flex items-center justify-center gap-[18px]">
-            <div className="w-7 h-[25px] flex items-center justify-center">
-              <span className="text-black font-bold text-lg">
-                {data.social_media_handles[2]?.platform ? platformDisplay[data.social_media_handles[2].platform] : 'X'}
+          {data.social_media_handles[2]?.platform && data.social_media_handles[2].platform !== 'none' && (
+            <div className="flex items-center justify-center gap-[18px]">
+              <div className="w-7 h-[25px] flex items-center justify-center">
+                <span className="text-black font-bold text-lg">
+                  {platformDisplay[data.social_media_handles[2].platform]}
+                </span>
+              </div>
+              <span className="text-black text-[32px] font-normal leading-[normal] font-open-sans">
+                {data.social_media_handles[2]?.handle || '@SocialHandle3'}
               </span>
             </div>
-            <span className="text-black text-[32px] font-normal leading-[normal] font-open-sans">
-              {data.social_media_handles[2]?.handle || '@SocialHandle3'}
-            </span>
-          </div>
+          )}
         </div>
       </div>
     </div>

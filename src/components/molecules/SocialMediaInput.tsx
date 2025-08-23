@@ -17,7 +17,7 @@ interface SocialMediaInputProps {
 export function SocialMediaInput({ platforms, value, onChange, error }: SocialMediaInputProps) {
   const addHandle = () => {
     if (value.length < 3) {
-      onChange([...value, { platform: 'x', handle: '' }])
+      onChange([...value, { platform: 'none', handle: '' }])
     }
   }
 
@@ -33,9 +33,9 @@ export function SocialMediaInput({ platforms, value, onChange, error }: SocialMe
 
   return (
     <div className="space-y-3">
-      {[0, 1, 2].map((index) => {
-        const handle = value[index] || { platform: 'x', handle: '' }
-        const isActive = index < value.length
+             {[0, 1, 2].map((index) => {
+         const handle = value[index] || { platform: 'none', handle: '' }
+         const isActive = index < value.length
         
         return (
           <div key={index} className="space-y-[5px]">
@@ -54,22 +54,22 @@ export function SocialMediaInput({ platforms, value, onChange, error }: SocialMe
                 onChange={(e) => {
                   if (isActive) {
                     updateHandle(index, 'handle', e.target.value)
-                  } else {
-                    // Add new handle if this slot is empty
-                    const newHandles = [...value, { platform: 'x', handle: e.target.value }]
-                    onChange(newHandles)
-                  }
+                                     } else {
+                     // Add new handle if this slot is empty
+                     const newHandles = [...value, { platform: 'none', handle: e.target.value }]
+                     onChange(newHandles)
+                   }
                 }}
                 className="flex-1 h-[41px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] font-open-sans text-[16px]"
               />
               
-              {isActive && (
+              {isActive && handle.platform !== 'none' && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   onClick={() => removeHandle(index)}
-                  className="px-2 text-white hover:text-red-400"
+                  className="px-3 h-[41px] border border-[#5c5c5c] text-white hover:text-red-400 flex items-center justify-center"
                 >
                   <X className="h-4 w-4" />
                 </Button>
@@ -87,7 +87,7 @@ export function SocialMediaInput({ platforms, value, onChange, error }: SocialMe
                   }
                 }}
               >
-                <SelectTrigger className="w-[104px] h-[41px] bg-[#c0c0c0] border-[#c0c0c0] text-black rounded-[3px] font-open-sans text-[16px]">
+                <SelectTrigger className="w-[140px] h-[41px] bg-[#c0c0c0] border-[#c0c0c0] text-black rounded-[3px] font-open-sans text-[16px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-[#111111] border-[#5c5c5c] text-white">
