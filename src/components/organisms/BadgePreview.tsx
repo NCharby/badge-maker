@@ -3,6 +3,19 @@
 import { useBadgeStore } from '@/hooks/useBadgeStore'
 import { Card, CardContent } from '@/components/atoms/card'
 
+// Platform display mapping
+const platformDisplay = {
+  x: 'X',
+  bluesky: 'BS',
+  telegram: 'TG',
+  recon: 'RC',
+  furaffinity: 'FA',
+  fetlife: 'FL',
+  discord: 'DC',
+  instagram: 'IG',
+  other: 'OT'
+}
+
 export function BadgePreview() {
   const { data, croppedImage } = useBadgeStore()
 
@@ -41,7 +54,9 @@ export function BadgePreview() {
           {/* Social 1 */}
           <div className="flex items-center justify-center gap-[18px]">
             <div className="w-7 h-[25px] flex items-center justify-center">
-              <span className="text-black font-bold text-lg">X</span>
+              <span className="text-black font-bold text-lg">
+                {data.social_media_handles[0]?.platform ? platformDisplay[data.social_media_handles[0].platform] : 'X'}
+              </span>
             </div>
             <span className="text-black text-[32px] font-normal leading-[normal] font-open-sans">
               {data.social_media_handles[0]?.handle || '@SocialHandle1'}
@@ -51,7 +66,9 @@ export function BadgePreview() {
           {/* Social 2 */}
           <div className="flex items-center justify-center gap-[18px]">
             <div className="w-7 h-[25px] flex items-center justify-center">
-              <span className="text-black font-bold text-lg">X</span>
+              <span className="text-black font-bold text-lg">
+                {data.social_media_handles[1]?.platform ? platformDisplay[data.social_media_handles[1].platform] : 'X'}
+              </span>
             </div>
             <span className="text-black text-[32px] font-normal leading-[normal] font-open-sans">
               {data.social_media_handles[1]?.handle || '@SocialHandle2'}
@@ -61,7 +78,9 @@ export function BadgePreview() {
           {/* Social 3 */}
           <div className="flex items-center justify-center gap-[18px]">
             <div className="w-7 h-[25px] flex items-center justify-center">
-              <span className="text-black font-bold text-lg">X</span>
+              <span className="text-black font-bold text-lg">
+                {data.social_media_handles[2]?.platform ? platformDisplay[data.social_media_handles[2].platform] : 'X'}
+              </span>
             </div>
             <span className="text-black text-[32px] font-normal leading-[normal] font-open-sans">
               {data.social_media_handles[2]?.handle || '@SocialHandle3'}
