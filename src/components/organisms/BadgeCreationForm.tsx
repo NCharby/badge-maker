@@ -174,7 +174,7 @@ export function BadgeCreationForm() {
                 {...form.register('email')}
                 onBlur={(e) => handleFormChange('email', e.target.value)}
                 placeholder="hello@example.com"
-                className="h-[41px] bg-transparent border-[#5c5c5c] text-white placeholder:text-white rounded-[3px] font-open-sans text-[16px]"
+                className="h-[41px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] font-open-sans text-[16px]"
               />
               {form.formState.errors.email && (
                 <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>
