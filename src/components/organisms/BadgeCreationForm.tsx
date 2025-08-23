@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/atoms/card'
 import { Button } from '@/components/atoms/button'
 import { Input } from '@/components/atoms/input'
@@ -37,18 +38,48 @@ const socialMediaPlatforms = [
   { value: 'other', label: 'Other' }
 ]
 
+/**
+ * BadgeCreationForm component that supports pre-population via query parameters
+ * 
+ * Query Parameters:
+ * - email: Pre-populates the email field
+ * - name: Pre-populates the badge name field
+ * 
+ * Example URLs:
+ * - /test?email=user@example.com&name=John%20Doe
+ * - /?email=alice@company.com&name=Alice%20Smith
+ */
 export function BadgeCreationForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { data, setData } = useBadgeStore()
+  const searchParams = useSearchParams()
+  
+  // Get pre-populated values from query parameters
+  const prePopulatedEmail = searchParams.get('email') || data.email
+  const prePopulatedName = searchParams.get('name') || data.badge_name
   
   const form = useForm<BadgeFormData>({
     resolver: zodResolver(badgeSchema),
     defaultValues: {
-      badge_name: data.badge_name,
-      email: data.email,
+      badge_name: prePopulatedName,
+      email: prePopulatedEmail,
       social_media_handles: data.social_media_handles
     }
   })
+
+  // Update form and store when query parameters change
+  useEffect(() => {
+    if (prePopulatedEmail !== data.email || prePopulatedName !== data.badge_name) {
+      const updatedData = {
+        badge_name: prePopulatedName,
+        email: prePopulatedEmail,
+        social_media_handles: data.social_media_handles
+      }
+      
+      setData(updatedData)
+      form.reset(updatedData)
+    }
+  }, [prePopulatedEmail, prePopulatedName, data.social_media_handles, setData, form])
 
   const onSubmit = async (formData: BadgeFormData) => {
     setIsSubmitting(true)
