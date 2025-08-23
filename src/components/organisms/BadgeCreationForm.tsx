@@ -218,7 +218,7 @@ export function BadgeCreationForm() {
           <CardContent className="space-y-4">
             <ImageUpload />
             <div className="text-[13px] text-white font-open-sans">
-              Max size: 1MB Accepted Types: .jpg .png .gif
+              Max size: 5MB • Min size: 10KB • Accepted: PNG, JPG, JPEG, WebP, GIF
             </div>
           </CardContent>
         </Card>
@@ -246,7 +246,10 @@ export function BadgeCreationForm() {
             type="button" 
             variant="outline" 
             className="flex-1 h-[41px] bg-transparent border-[#767676] text-white font-open-sans text-[16px] rounded-[3px] hover:bg-[#767676] hover:text-black"
-            onClick={() => form.reset()}
+            onClick={() => {
+              form.reset()
+              useBadgeStore.getState().reset()
+            }}
           >
             Reset
           </Button>
