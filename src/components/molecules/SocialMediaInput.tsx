@@ -87,7 +87,7 @@ export function SocialMediaInput({ platforms, value, onChange, error }: SocialMe
                   }
                 }}
               >
-                <SelectTrigger className="w-[104px] h-[41px] bg-[#919191] border-[#919191] text-black rounded-[3px] font-open-sans text-[16px]">
+                <SelectTrigger className="w-[104px] h-[41px] bg-[#c0c0c0] border-[#c0c0c0] text-black rounded-[3px] font-open-sans text-[16px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-[#111111] border-[#5c5c5c] text-white">
