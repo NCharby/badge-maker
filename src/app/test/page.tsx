@@ -1,36 +1,16 @@
-import { Button } from '@/components/atoms/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/atoms/card'
-import { Input } from '@/components/atoms/input'
-import { Label } from '@/components/atoms/label'
-import { ThemeToggle } from '@/components/atoms/theme-toggle'
+import { BadgeCreationForm } from '@/components/organisms/BadgeCreationForm'
+import { BadgePreview } from '@/components/organisms/BadgePreview'
 
 export default function TestPage() {
   return (
-    <div className="min-h-screen bg-background p-8">
-      <div className="max-w-md mx-auto space-y-4">
-        <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-foreground">Dark Theme Test</h1>
-          <ThemeToggle />
-        </div>
+    <div className="min-h-screen bg-[#2d2d2d] p-8">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-4xl font-bold text-white mb-8 text-center">Test Page</h1>
         
-        <Card>
-          <CardHeader>
-            <CardTitle>Test Components</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="test-input">Test Input</Label>
-              <Input id="test-input" placeholder="Type something..." />
-            </div>
-            
-            <div className="space-y-2">
-              <Button variant="default">Default Button</Button>
-              <Button variant="secondary">Secondary Button</Button>
-              <Button variant="outline">Outline Button</Button>
-              <Button variant="destructive">Destructive Button</Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
+          <BadgeCreationForm />
+          <BadgePreview />
+        </div>
       </div>
     </div>
   )
