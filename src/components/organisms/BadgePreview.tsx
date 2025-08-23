@@ -8,55 +8,43 @@ export function BadgePreview() {
 
   return (
     <div className="flex justify-center">
-      <Card className="w-80 h-48 bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg">
-        <CardContent className="p-6 h-full flex flex-col justify-between">
-          {/* Header */}
-          <div className="text-center">
-            <h2 className="text-xl font-bold mb-1">Conference Badge</h2>
-            <p className="text-sm opacity-90">2024</p>
-          </div>
+      <div className="w-80 h-96 bg-yellow-400 rounded-lg shadow-lg p-6 flex flex-col items-center justify-center space-y-6">
+        {/* Badge Name */}
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-black">
+            {data.badge_name || '[Badge Name]'}
+          </h2>
+        </div>
 
-          {/* Main Content */}
-          <div className="flex items-center space-x-4">
-            {/* Photo */}
-            <div className="w-16 h-16 rounded-full bg-primary-foreground/20 flex items-center justify-center overflow-hidden">
-              {croppedImage ? (
-                <img
-                  src={URL.createObjectURL(croppedImage)}
-                  alt="Profile"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="text-2xl opacity-50">👤</div>
-              )}
-            </div>
-
-            {/* Info */}
-            <div className="flex-1">
-              <h3 className="font-semibold text-lg">
-                {data.badge_name || 'Your Name'}
-              </h3>
-              <p className="text-sm opacity-90">
-                {data.email || 'email@example.com'}
-              </p>
-            </div>
-          </div>
-
-          {/* Social Media */}
-          {data.social_media_handles.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {data.social_media_handles.map((handle, index) => (
-                <div
-                  key={index}
-                  className="text-xs bg-primary-foreground/20 px-2 py-1 rounded"
-                >
-                  {handle.platform}: {handle.handle}
-                </div>
-              ))}
-            </div>
+        {/* Photo Placeholder */}
+        <div className="w-32 h-32 rounded-full bg-gray-600 flex items-center justify-center">
+          {croppedImage ? (
+            <img
+              src={URL.createObjectURL(croppedImage)}
+              alt="Profile"
+              className="w-full h-full object-cover rounded-full"
+            />
+          ) : (
+            <span className="text-4xl text-white font-bold">?</span>
           )}
-        </CardContent>
-      </Card>
+        </div>
+
+        {/* Social Media Handles */}
+        <div className="space-y-2 text-center">
+          <div className="flex items-center justify-center space-x-2">
+            <span className="text-black font-bold">X</span>
+            <span className="text-black">@SocialHandle1</span>
+          </div>
+          <div className="flex items-center justify-center space-x-2">
+            <span className="text-black font-bold">X</span>
+            <span className="text-black">@SocialHandle2</span>
+          </div>
+          <div className="flex items-center justify-center space-x-2">
+            <span className="text-black font-bold">X</span>
+            <span className="text-black">@SocialHandle3</span>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

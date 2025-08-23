@@ -49,21 +49,18 @@ export function ImageUpload() {
       />
 
       {!originalImage ? (
-        <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
-          <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-          <p className="text-sm text-muted-foreground mb-2">
-            Click to upload your photo
-          </p>
-          <p className="text-xs text-muted-foreground mb-4">
-            PNG, JPG up to 5MB
+        <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
+          <p className="text-sm text-muted-foreground mb-4">
+            Drag & Drop file here or
           </p>
           <Button
             type="button"
             variant="outline"
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
+            className="mb-4"
           >
-            {isUploading ? 'Uploading...' : 'Choose File'}
+            {isUploading ? 'Uploading...' : 'Browse Files'}
           </Button>
         </div>
       ) : (

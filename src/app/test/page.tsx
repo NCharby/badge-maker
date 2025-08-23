@@ -2,12 +2,16 @@ import { Button } from '@/components/atoms/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/atoms/card'
 import { Input } from '@/components/atoms/input'
 import { Label } from '@/components/atoms/label'
+import { ThemeToggle } from '@/components/atoms/theme-toggle'
 
 export default function TestPage() {
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-md mx-auto space-y-4">
-        <h1 className="text-2xl font-bold text-foreground">shadcn/ui Test</h1>
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-foreground">Dark Theme Test</h1>
+          <ThemeToggle />
+        </div>
         
         <Card>
           <CardHeader>
