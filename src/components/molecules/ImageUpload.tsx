@@ -39,7 +39,7 @@ export function ImageUpload() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-[5px]">
       <input
         ref={fileInputRef}
         type="file"
@@ -49,19 +49,24 @@ export function ImageUpload() {
       />
 
       {!originalImage ? (
-        <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
-          <p className="text-sm text-muted-foreground mb-4">
-            Drag & Drop file here or
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-            className="mb-4"
-          >
-            {isUploading ? 'Uploading...' : 'Browse Files'}
-          </Button>
+        <div className="border-[#747474] border-dashed border rounded-lg p-10 text-center relative">
+          <div className="flex flex-col items-center justify-center gap-2.5">
+            <p className="text-[20px] text-white font-open-sans font-normal leading-[normal] mb-2.5">
+              Drag & Drop file here
+            </p>
+            <p className="text-[16px] text-white font-open-sans font-normal leading-[normal] mb-2.5">
+              or
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="px-5 py-2.5 bg-transparent border-[#767676] text-white font-open-sans text-[16px] rounded-[3px] hover:bg-[#767676] hover:text-black"
+            >
+              {isUploading ? 'Uploading...' : 'Browse Files'}
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="space-y-2">
@@ -73,8 +78,8 @@ export function ImageUpload() {
                 className="w-12 h-12 rounded object-cover"
               />
               <div>
-                <p className="text-sm font-medium">{originalImage.name}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm font-medium text-white">{originalImage.name}</p>
+                <p className="text-xs text-[#949494]">
                   {(originalImage.size / 1024 / 1024).toFixed(2)} MB
                 </p>
               </div>
@@ -84,6 +89,7 @@ export function ImageUpload() {
               variant="ghost"
               size="sm"
               onClick={handleRemoveImage}
+              className="text-white hover:text-red-400"
             >
               <X className="h-4 w-4" />
             </Button>
@@ -95,6 +101,7 @@ export function ImageUpload() {
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
+              className="bg-transparent border-[#767676] text-white font-open-sans text-[16px] rounded-[3px] hover:bg-[#767676] hover:text-black"
             >
               Change Photo
             </Button>

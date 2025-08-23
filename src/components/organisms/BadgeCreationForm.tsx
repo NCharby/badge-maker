@@ -73,15 +73,19 @@ export function BadgeCreationForm() {
       {/* Form Section */}
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {/* BASICS Section */}
-        <Card className="bg-card border border-border">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold">BASICS</CardTitle>
+        <Card className="bg-[#111111] border-[#111111] rounded-[10px]">
+          <CardHeader className="pb-5">
+            <CardTitle className="text-[32px] font-normal text-white font-montserrat leading-[normal]">
+              BASICS
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5">
             {/* Contact Email */}
-            <div className="space-y-2">
+            <div className="space-y-[5px]">
               <div className="flex justify-between items-center">
-                <Label htmlFor="email" className="text-sm font-medium">Contact Email*</Label>
+                <Label htmlFor="email" className="text-[16px] font-normal text-white font-montserrat">
+                  Contact Email*
+                </Label>
               </div>
               <Input
                 id="email"
@@ -89,7 +93,7 @@ export function BadgeCreationForm() {
                 {...form.register('email')}
                 onBlur={(e) => handleFormChange('email', e.target.value)}
                 placeholder="hello@example.com"
-                className="h-10"
+                className="h-[41px] bg-transparent border-[#5c5c5c] text-white placeholder:text-white rounded-[3px] font-open-sans text-[16px]"
               />
               {form.formState.errors.email && (
                 <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>
@@ -97,10 +101,12 @@ export function BadgeCreationForm() {
             </div>
 
             {/* Badge Name */}
-            <div className="space-y-2">
+            <div className="space-y-[5px]">
               <div className="flex justify-between items-center">
-                <Label htmlFor="badge_name" className="text-sm font-medium">Badge Name*</Label>
-                <span className="text-xs text-muted-foreground">
+                <Label htmlFor="badge_name" className="text-[16px] font-normal text-white font-montserrat">
+                  Badge Name*
+                </Label>
+                <span className="text-[14px] text-[#949494] font-montserrat">
                   {form.watch('badge_name')?.length || 0}/85
                 </span>
               </div>
@@ -109,7 +115,7 @@ export function BadgeCreationForm() {
                 {...form.register('badge_name')}
                 onBlur={(e) => handleFormChange('badge_name', e.target.value)}
                 placeholder="Sgt. Thunder Beef"
-                className="h-10"
+                className="h-[41px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] font-open-sans text-[16px]"
               />
               {form.formState.errors.badge_name && (
                 <p className="text-sm text-destructive">{form.formState.errors.badge_name.message}</p>
@@ -119,25 +125,29 @@ export function BadgeCreationForm() {
         </Card>
 
         {/* PHOTO Section */}
-        <Card className="bg-card border border-border">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold">PHOTO</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
+        <Card className="bg-[#111111] border-[#111111] rounded-[10px]">
+          <CardHeader className="pb-5">
+            <CardTitle className="text-[32px] font-normal text-white font-montserrat leading-[normal]">
+              PHOTO
+            </CardTitle>
+            <p className="text-[16px] font-normal text-white font-open-sans">
               Please refrain from using any pornography (e.g. genitals or sex acts)
             </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <ImageUpload />
-            <div className="text-xs text-muted-foreground">
+            <div className="text-[13px] text-white font-open-sans">
               Max size: 1MB Accepted Types: .jpg .png .gif
             </div>
           </CardContent>
         </Card>
 
         {/* SOCIALS Section */}
-        <Card className="bg-card border border-border">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold">SOCIALS</CardTitle>
+        <Card className="bg-[#111111] border-[#111111] rounded-[10px]">
+          <CardHeader className="pb-5">
+            <CardTitle className="text-[32px] font-normal text-white font-montserrat leading-[normal]">
+              SOCIALS
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <SocialMediaInput
@@ -150,18 +160,18 @@ export function BadgeCreationForm() {
         </Card>
 
         {/* Action Buttons */}
-        <div className="flex gap-4">
+        <div className="flex gap-2.5">
           <Button 
             type="button" 
             variant="outline" 
-            className="flex-1 h-10"
+            className="flex-1 h-[41px] bg-transparent border-[#767676] text-white font-open-sans text-[16px] rounded-[3px] hover:bg-[#767676] hover:text-black"
             onClick={() => form.reset()}
           >
             Reset
           </Button>
           <Button 
             type="submit" 
-            className="flex-1 h-10" 
+            className="flex-1 h-[41px] bg-[#707070] text-black font-open-sans text-[16px] rounded-[3px] hover:bg-[#808080]" 
             disabled={isSubmitting}
           >
             {isSubmitting ? 'Creating...' : 'Finished'}

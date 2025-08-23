@@ -38,12 +38,12 @@ export function SocialMediaInput({ platforms, value, onChange, error }: SocialMe
         const isActive = index < value.length
         
         return (
-          <div key={index} className="space-y-2">
+          <div key={index} className="space-y-[5px]">
             <div className="flex justify-between items-center">
-              <Label className="text-sm font-medium">
+              <Label className="text-[16px] font-normal text-white font-montserrat">
                 Social {index + 1} (Optional)
               </Label>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-[14px] text-[#949494] font-montserrat">
                 {handle.handle.length}/85
               </span>
             </div>
@@ -60,7 +60,7 @@ export function SocialMediaInput({ platforms, value, onChange, error }: SocialMe
                     onChange(newHandles)
                   }
                 }}
-                className="flex-1"
+                className="flex-1 h-[41px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] font-open-sans text-[16px]"
               />
               
               {isActive && (
@@ -69,7 +69,7 @@ export function SocialMediaInput({ platforms, value, onChange, error }: SocialMe
                   variant="ghost"
                   size="sm"
                   onClick={() => removeHandle(index)}
-                  className="px-2"
+                  className="px-2 text-white hover:text-red-400"
                 >
                   <X className="h-4 w-4" />
                 </Button>
@@ -87,12 +87,12 @@ export function SocialMediaInput({ platforms, value, onChange, error }: SocialMe
                   }
                 }}
               >
-                <SelectTrigger className="w-8">
+                <SelectTrigger className="w-[104px] h-[41px] bg-[#919191] border-[#919191] text-black rounded-[3px] font-open-sans text-[16px]">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-[#111111] border-[#5c5c5c] text-white">
                   {platforms.map((platform) => (
-                    <SelectItem key={platform.value} value={platform.value}>
+                    <SelectItem key={platform.value} value={platform.value} className="text-white hover:bg-[#2d2d2d]">
                       {platform.label}
                     </SelectItem>
                   ))}
