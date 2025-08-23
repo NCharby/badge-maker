@@ -61,22 +61,36 @@ npm run dev
 
 ```
 badge-maker/
-├── app/                    # Next.js app directory
-│   ├── page.tsx          # Badge creation interface
-│   ├── confirmation/     # Confirmation screen
-│   └── api/              # API routes
-├── components/            # Reusable components
-│   ├── ui/               # shadcn/ui components
-│   ├── badge/            # Badge-specific components
-│   └── forms/            # Form components
-├── lib/                  # Utility functions
-│   ├── supabase/         # Supabase client & helpers
-│   ├── utils/            # General utilities
-│   └── validations/      # Form validations
-├── types/                # TypeScript type definitions
-├── hooks/                # Custom React hooks
-└── styles/               # Global styles
+├── src/                   # Source code directory
+│   ├── app/              # Next.js app directory
+│   │   ├── page.tsx      # Badge creation interface
+│   │   ├── confirmation/ # Confirmation screen
+│   │   └── api/          # API routes
+│   ├── components/       # Atomic design components
+│   │   ├── atoms/        # Basic UI components (shadcn/ui)
+│   │   ├── molecules/    # Simple component combinations
+│   │   ├── organisms/    # Complex component combinations
+│   │   ├── templates/    # Page-level layouts
+│   │   └── pages/        # Specific page instances
+│   ├── lib/              # Utility functions
+│   │   ├── supabase.ts   # Supabase client
+│   │   └── utils.ts      # General utilities
+│   ├── hooks/            # Custom React hooks
+│   └── types/            # TypeScript type definitions
+├── docs/                 # Documentation
+├── supabase/             # Supabase configuration
+└── design/               # Design assets
 ```
+
+### Atomic Design Structure
+
+The application follows the Atomic Design methodology:
+
+- **Atoms**: Basic building blocks (Button, Input, Card, etc.)
+- **Molecules**: Simple combinations (ImageUpload, SocialMediaInput)
+- **Organisms**: Complex combinations (BadgeCreationForm, BadgePreview)
+- **Templates**: Page layouts (BadgeMakerTemplate)
+- **Pages**: Specific page instances (BadgeCreationPage, ConfirmationPage)
 
 ## 🎨 Design System
 

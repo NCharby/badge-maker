@@ -108,14 +108,8 @@ CREATE POLICY "Anyone can update sessions" ON public.sessions
 CREATE POLICY "Anyone can view active templates" ON public.templates
   FOR SELECT USING (is_active = true);
 
-CREATE POLICY "Admins can manage templates" ON public.templates
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM public.users 
-      WHERE users.id = auth.uid() 
-      AND users.email IN ('admin@example.com')
-    )
-  );
+CREATE POLICY "Anyone can view templates" ON public.templates
+  FOR SELECT USING (is_active = true);
 
 -- Badges policies
 CREATE POLICY "Anyone can view badges" ON public.badges
