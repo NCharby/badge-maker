@@ -3,7 +3,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Create custom types
 CREATE TYPE badge_status AS ENUM ('draft', 'published', 'archived');
-CREATE TYPE template_category AS ENUM ('business', 'conference', 'event', 'custom');
 CREATE TYPE social_media_platform AS ENUM ('x', 'bluesky', 'telegram', 'recon', 'furaffinity', 'fetlife', 'discord', 'instagram', 'other');
 
 -- Sessions table for single-session badge creation
@@ -19,12 +18,8 @@ CREATE TABLE public.templates (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
-  category template_category DEFAULT 'business',
-  preview_url TEXT,
   config JSONB NOT NULL,
   is_active BOOLEAN DEFAULT true,
-  is_featured BOOLEAN DEFAULT false,
-  usage_count INTEGER DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -37,35 +32,16 @@ CREATE TABLE public.badges (
   email TEXT NOT NULL,
   -- Image storage fields
   original_image_url TEXT,
-  original_image_filename TEXT,
   cropped_image_url TEXT,
-  cropped_image_filename TEXT,
   crop_data JSONB, -- Stores crop coordinates and settings
-     -- Social media handles (up to 3)
-   social_media_handles JSONB DEFAULT '[]', -- Array of objects with handle and platform
+  -- Social media handles (up to 3)
+  social_media_handles JSONB DEFAULT '[]', -- Array of objects with handle and platform
   -- Badge configuration
   badge_data JSONB NOT NULL DEFAULT '{}',
   status badge_status DEFAULT 'draft',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
--- Badge categories table (for template organization)
-CREATE TABLE public.badge_categories (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name TEXT NOT NULL,
-  color TEXT DEFAULT '#3b82f6',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Badge category assignments
-CREATE TABLE public.badge_category_assignments (
-  badge_id UUID REFERENCES public.badges(id) ON DELETE CASCADE,
-  category_id UUID REFERENCES public.badge_categories(id) ON DELETE CASCADE,
-  PRIMARY KEY (badge_id, category_id)
-);
-
-
 
 -- Analytics table
 CREATE TABLE public.analytics (
@@ -90,8 +66,6 @@ CREATE INDEX idx_analytics_created_at ON public.analytics(created_at);
 ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.badges ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.badge_categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.badge_category_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.analytics ENABLE ROW LEVEL SECURITY;
 
 -- Sessions policies
@@ -108,9 +82,6 @@ CREATE POLICY "Anyone can update sessions" ON public.sessions
 CREATE POLICY "Anyone can view active templates" ON public.templates
   FOR SELECT USING (is_active = true);
 
-CREATE POLICY "Anyone can view templates" ON public.templates
-  FOR SELECT USING (is_active = true);
-
 -- Badges policies
 CREATE POLICY "Anyone can view badges" ON public.badges
   FOR SELECT USING (true);
@@ -123,25 +94,6 @@ CREATE POLICY "Anyone can update badges" ON public.badges
 
 CREATE POLICY "Anyone can delete badges" ON public.badges
   FOR DELETE USING (true);
-
--- Badge categories policies
-CREATE POLICY "Anyone can view categories" ON public.badge_categories
-  FOR SELECT USING (true);
-
-CREATE POLICY "Anyone can insert categories" ON public.badge_categories
-  FOR INSERT WITH CHECK (true);
-
-CREATE POLICY "Anyone can update categories" ON public.badge_categories
-  FOR UPDATE USING (true);
-
-CREATE POLICY "Anyone can delete categories" ON public.badge_categories
-  FOR DELETE USING (true);
-
--- Badge category assignments policies
-CREATE POLICY "Anyone can manage badge categories" ON public.badge_category_assignments
-  FOR ALL USING (true);
-
-
 
 -- Analytics policies (more permissive for tracking)
 CREATE POLICY "Anyone can insert analytics" ON public.analytics
@@ -169,8 +121,6 @@ CREATE TRIGGER update_templates_updated_at BEFORE UPDATE ON public.templates
 CREATE TRIGGER update_badges_updated_at BEFORE UPDATE ON public.badges
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-
-
 -- Function to track badge creation
 CREATE OR REPLACE FUNCTION track_badge_creation()
 RETURNS TRIGGER AS $$
@@ -188,12 +138,11 @@ CREATE TRIGGER on_badge_created
   FOR EACH ROW EXECUTE FUNCTION track_badge_creation();
 
 -- Insert single template configuration
-INSERT INTO public.templates (id, name, description, category, config) VALUES
+INSERT INTO public.templates (id, name, description, config) VALUES
 (
   'badge-maker-default',
   'Badge Maker Default',
   'Single template matching Figma design',
-  'custom',
   '{
     "dimensions": {"width": 3.5, "height": 2.25},
     "layout": {

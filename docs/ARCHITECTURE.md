@@ -1,271 +1,501 @@
 # Badge Maker - Architecture Documentation
 
-## 🏗 System Architecture
+## 🏗️ **System Architecture Overview**
 
-### Overview
+The Badge Maker application follows a modern, scalable architecture built with Next.js 14, React 18, and Supabase. The system is designed for single-session badge creation with secure image storage and real-time preview functionality.
 
-The Badge Maker application follows a modern web architecture with Next.js 14 App Router, Supabase as the backend-as-a-service, and a component-driven frontend using shadcn/ui.
+---
 
-### Architecture Diagram
+## 🎯 **Architecture Principles**
 
+### **Design Principles**
+- **Single Responsibility**: Each component has a clear, focused purpose
+- **Atomic Design**: Component hierarchy from atoms to templates
+- **Type Safety**: Full TypeScript implementation throughout
+- **Security First**: Private storage, input validation, secure access
+- **Performance**: Optimized loading, efficient image processing
+- **Scalability**: Modular design for future enhancements
+
+### **Technology Choices**
+- **Next.js 14**: App Router for modern React development
+- **Supabase**: Backend-as-a-Service for database and storage
+- **TypeScript**: Type safety and better developer experience
+- **Tailwind CSS**: Utility-first styling for rapid development
+- **Zustand**: Lightweight state management
+- **React Advanced Cropper**: Professional image processing
+
+---
+
+## 🏛️ **System Architecture**
+
+### **High-Level Architecture**
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Next.js API   │    │   Supabase      │
-│   (Next.js)     │◄──►│   Routes        │◄──►│   Backend       │
+│   Frontend      │    │   Backend       │    │   External      │
+│   (Next.js)     │◄──►│   (API Routes)  │◄──►│   (Supabase)    │
 │                 │    │                 │    │                 │
-│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
-│ │   React     │ │    │ │   Auth      │ │    │ │   Database  │ │
-│ │ Components  │ │    │ │   Badge     │ │    │ │   (PostgreSQL)│ │
-│ └─────────────┘ │    │ │   Storage   │ │    │ └─────────────┘ │
-│ ┌─────────────┐ │    │ └─────────────┘ │    │ ┌─────────────┐ │
-│ │   shadcn/ui │ │    │                 │    │ │   Auth      │ │
-│ │ Components  │ │    │                 │    │ │   Service   │ │
-│ └─────────────┘ │    │                 │    │ └─────────────┘ │
-│ ┌─────────────┐ │    │                 │    │ ┌─────────────┐ │
-│ │   React     │ │    │                 │    │ │   Storage   │ │
-│ │ Advanced    │ │    │                 │    │ │   Service   │ │
-│ │ Cropper     │ │    │                 │    │ └─────────────┘ │
-│ └─────────────┘ │    │                 │    └─────────────────┘
-└─────────────────┘    └─────────────────┘
+│ • React 18      │    │ • Next.js API   │    │ • PostgreSQL    │
+│ • TypeScript    │    │ • Route Handlers│    │ • Storage       │
+│ • Tailwind CSS  │    │ • Middleware    │    │ • Auth          │
+│ • Zustand       │    │ • Validation    │    │ • RLS           │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
-## 📊 Data Flow
-
-### 1. Session Creation Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant F as Frontend
-    participant S as Supabase
-    
-    U->>F: Visit Badge Maker
-    F->>S: Create Session
-    S->>F: Return Session ID
-    F->>F: Store Session in Context
-    F->>U: Show Badge Creation Interface
+### **Data Flow Architecture**
+```
+User Input → Form Validation → Live Preview → Image Upload → 
+Cropping → Database Storage → Confirmation Display
 ```
 
-### 2. Badge Creation Flow
+---
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant F as Frontend
-    participant C as Cropper
-    participant S as Supabase Storage
-    participant D as Database
-    
-    U->>F: Upload Image
-    F->>C: Open Cropper Modal
-    U->>C: Crop Image
-    C->>F: Return Cropped Image
-    F->>S: Upload to Storage
-    S->>F: Return Image URL
-    F->>D: Save Badge Data
-    D->>F: Return Badge ID
-    F->>U: Show Preview
+## 🎨 **Frontend Architecture**
+
+### **Component Architecture (Atomic Design)**
+
+#### **Atoms** (Basic Building Blocks)
+```
+src/components/atoms/
+├── button.tsx          # Reusable button component
+├── input.tsx           # Form input component
+├── label.tsx           # Form label component
+├── select.tsx          # Dropdown select component
+├── card.tsx            # Card container component
+├── theme-toggle.tsx    # Theme switching (removed)
+└── index.ts            # Export barrel
 ```
 
-### 3. Badge Preview Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant F as Frontend
-    participant B as Badge Component
-    participant S as State Management
-    
-    U->>F: Input Badge Data
-    F->>S: Update Form State
-    S->>B: Trigger Re-render
-    B->>F: Update Preview
-    F->>U: Show Live Preview
+#### **Molecules** (Simple Combinations)
+```
+src/components/molecules/
+├── ImageUpload.tsx     # File upload with validation
+├── ImageCropper.tsx    # Advanced image cropping modal
+├── SocialMediaInput.tsx # Social media handle input
+└── index.ts            # Export barrel
 ```
 
-## 🗄 Database Schema
+#### **Organisms** (Complex Components)
+```
+src/components/organisms/
+├── BadgeCreationForm.tsx # Main form with all inputs
+├── BadgePreview.tsx      # Live badge preview
+└── index.ts              # Export barrel
+```
 
-### Tables
+#### **Templates** (Page Layouts)
+```
+src/components/templates/
+├── BadgeMakerTemplate.tsx # Main application layout
+├── ConfirmationTemplate.tsx # Confirmation page layout
+└── index.ts               # Export barrel
+```
 
-#### sessions
+#### **Pages** (Specific Instances)
+```
+src/components/pages/
+├── BadgeCreationPage.tsx # Badge creation page
+├── ConfirmationPage.tsx  # Confirmation page
+└── index.ts              # Export barrel
+```
+
+### **State Management Architecture**
+
+#### **Zustand Store Structure**
+```typescript
+interface BadgeStore {
+  // Form Data
+  badgeName: string
+  email: string
+  socialMediaHandles: SocialMediaHandle[]
+  
+  // Image Data
+  originalImage: File | null
+  croppedImage: Blob | null
+  
+  // Actions
+  setBadgeName: (name: string) => void
+  setEmail: (email: string) => void
+  setSocialMediaHandles: (handles: SocialMediaHandle[]) => void
+  setOriginalImage: (file: File | null) => void
+  setCroppedImage: (blob: Blob | null) => void
+  reset: () => void
+}
+```
+
+#### **State Flow**
+```
+Form Input → Zustand Store → Live Preview → API Submission → Database
+```
+
+### **Routing Architecture**
+
+#### **App Router Structure**
+```
+src/app/
+├── page.tsx              # Home page (badge creation)
+├── confirmation/
+│   └── page.tsx          # Confirmation page
+├── test/
+│   └── page.tsx          # Test page
+├── api/                  # API routes
+│   ├── badges/
+│   ├── upload/
+│   ├── sessions/
+│   ├── images/
+│   └── test/
+└── globals.css           # Global styles
+```
+
+---
+
+## 🔌 **Backend Architecture**
+
+### **API Routes Architecture**
+
+#### **Route Structure**
+```
+/api/
+├── badges/
+│   └── route.ts          # POST (create), GET (retrieve)
+├── upload/
+│   └── route.ts          # POST (image upload)
+├── sessions/
+│   └── route.ts          # POST (create), GET (retrieve)
+├── images/
+│   └── [filename]/
+│       └── route.ts      # GET (signed URL generation)
+└── test/
+    └── route.ts          # GET (diagnostic)
+```
+
+#### **API Response Pattern**
+```typescript
+interface ApiResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+  details?: string
+}
+```
+
+### **Middleware Architecture**
+
+#### **Request Processing Flow**
+```
+Request → Validation → Authentication → Business Logic → Response
+```
+
+#### **Error Handling Pattern**
+```typescript
+try {
+  // Business logic
+  return NextResponse.json({ success: true, data: result })
+} catch (error) {
+  console.error('API error:', error)
+  return NextResponse.json(
+    { 
+      success: false, 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    },
+    { status: 500 }
+  )
+}
+```
+
+---
+
+## 🗄️ **Database Architecture**
+
+### **Database Schema**
+
+#### **Core Tables**
 ```sql
-CREATE TABLE sessions (
+-- Sessions table for single-session badge creation
+CREATE TABLE public.sessions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   session_data JSONB DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   expires_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() + INTERVAL '2 hours')
 );
-```
 
-#### badges
-```sql
-CREATE TABLE badges (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  template_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  title TEXT,
-  company TEXT,
-  email TEXT,
-  phone TEXT,
-  image_url TEXT,
-  badge_data JSONB NOT NULL,
-  is_public BOOLEAN DEFAULT false,
+-- Badges table
+CREATE TABLE public.badges (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  session_id UUID REFERENCES public.sessions(id) ON DELETE CASCADE,
+  badge_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  original_image_url TEXT,
+  cropped_image_url TEXT,
+  crop_data JSONB,
+  social_media_handles JSONB DEFAULT '[]',
+  badge_data JSONB NOT NULL DEFAULT '{}',
+  status badge_status DEFAULT 'draft',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-```
 
-#### templates
-```sql
-CREATE TABLE templates (
+-- Templates table
+CREATE TABLE public.templates (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
-  preview_url TEXT,
+  category template_category DEFAULT 'custom',
   config JSONB NOT NULL,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Analytics table
+CREATE TABLE public.analytics (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  session_id UUID REFERENCES public.sessions(id) ON DELETE SET NULL,
+  event_type TEXT NOT NULL,
+  event_data JSONB DEFAULT '{}',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 ```
 
-## 🧩 Component Architecture
-
-### Component Hierarchy
-
+#### **Data Relationships**
 ```
-App
-├── Layout
-│   ├── Header
-│   ├── Sidebar
-│   └── Footer
-├── AuthProvider
-├── Routes
-│   ├── Dashboard
-│   │   ├── BadgeList
-│   │   └── BadgeCard
-│   ├── Create
-│   │   ├── BadgeForm
-│   │   ├── BadgePreview
-│   │   └── ImageCropper
-│   └── Profile
-└── Modals
-    ├── ImageCropperModal
-    └── ExportModal
+sessions (1) ←→ (many) badges
+sessions (1) ←→ (many) analytics
+badges (many) ←→ (1) templates
 ```
 
-### Key Components
+### **Storage Architecture**
 
-#### 1. BadgeForm
-- **Purpose**: Collects user input for badge information
-- **Props**: `onChange`, `initialData`, `template`
-- **State**: Form data, validation errors
-- **Dependencies**: React Hook Form, shadcn/ui components
+#### **Supabase Storage Structure**
+```
+badge-images/              # Private bucket
+├── original/              # Original uploaded images
+│   ├── 1703123456789.jpg
+│   └── 1703123456790.png
+└── cropped/               # Processed cropped images
+    ├── 1703123456789.jpg
+    └── 1703123456790.png
+```
 
-#### 2. BadgePreview
-- **Purpose**: Renders live preview of badge
-- **Props**: `badgeData`, `template`, `imageUrl`
-- **State**: Preview dimensions, zoom level
-- **Dependencies**: Canvas API, badge templates
+#### **Security Model**
+- **Private Bucket**: No public access
+- **Signed URLs**: Temporary access with expiration
+- **Row Level Security**: Database-level access control
+- **File Validation**: Type and size restrictions
 
-#### 3. ImageCropper
-- **Purpose**: Handles image upload and cropping
-- **Props**: `onCropComplete`, `aspectRatio`
-- **State**: Upload progress, crop coordinates
-- **Dependencies**: React Advanced Cropper
+---
 
-#### 4. BadgeTemplate
-- **Purpose**: Defines badge layout and styling
-- **Props**: `data`, `dimensions`
-- **State**: Template configuration
-- **Dependencies**: CSS-in-JS, responsive design
+## 🔒 **Security Architecture**
 
-## 🔐 Security Considerations
+### **Security Layers**
 
-### Authentication
-- Supabase Auth with JWT tokens
-- Session management with secure cookies
-- Role-based access control (RBAC)
+#### **1. Input Validation**
+```typescript
+// Client-side validation (Zod)
+const badgeSchema = z.object({
+  badgeName: z.string().min(1, "Badge name is required"),
+  email: z.string().email("Invalid email address"),
+  socialMediaHandles: z.array(socialMediaSchema).max(3)
+})
 
-### Data Protection
-- Input validation and sanitization
-- SQL injection prevention (Supabase handles this)
-- XSS protection with Content Security Policy
+// Server-side validation
+if (!file.type.startsWith('image/')) {
+  return NextResponse.json({ error: 'File must be an image' }, { status: 400 })
+}
+```
 
-### File Upload Security
-- File type validation
-- File size limits
-- Virus scanning (if required)
-- Secure file storage with signed URLs
+#### **2. Storage Security**
+- **Private Bucket**: No direct public access
+- **Signed URLs**: Temporary access with 1-hour expiration
+- **File Type Validation**: Only image files allowed
+- **Size Limits**: 5MB maximum file size
 
-## 🚀 Performance Optimization
+#### **3. Database Security**
+- **Row Level Security**: Policy-based access control
+- **Parameterized Queries**: SQL injection prevention
+- **Input Sanitization**: XSS protection
+- **Session Management**: Time-limited sessions
 
-### Frontend
-- Code splitting with Next.js dynamic imports
-- Image optimization with Next.js Image component
-- Lazy loading for non-critical components
-- Memoization for expensive computations
+#### **4. API Security**
+- **Environment Variables**: Secure configuration
+- **Error Handling**: No sensitive data exposure
+- **Rate Limiting**: Built into Supabase
+- **CORS**: Proper cross-origin configuration
 
-### Backend
-- Database indexing on frequently queried fields
-- Connection pooling with Supabase
-- Caching strategies for static data
-- CDN for static assets
+---
 
-## 📱 Responsive Design
+## 🚀 **Performance Architecture**
 
-### Breakpoints
-- Mobile: 320px - 768px
-- Tablet: 768px - 1024px
-- Desktop: 1024px+
+### **Performance Optimizations**
 
-### Mobile Considerations
-- Touch-friendly interface
-- Simplified navigation
-- Optimized image cropping for touch
-- Reduced feature set for mobile
+#### **1. Image Processing**
+- **Client-side Cropping**: Reduces server load
+- **Optimized Formats**: JPEG with 90% quality
+- **Size Constraints**: 300x300 to 800x800 pixels
+- **Lazy Loading**: Images loaded on demand
 
-## 🔧 Development Workflow
+#### **2. API Performance**
+- **Database Indexing**: Optimized query performance
+- **Connection Pooling**: Supabase handles connections
+- **Caching**: Browser-level caching for static assets
+- **Compression**: Gzip compression enabled
 
-### Code Organization
-- Feature-based folder structure
-- Shared components in `/components/ui`
-- Custom hooks in `/hooks`
-- Type definitions in `/types`
-- Utility functions in `/lib`
+#### **3. Frontend Performance**
+- **Code Splitting**: Automatic by Next.js
+- **Tree Shaking**: Unused code elimination
+- **Bundle Optimization**: Optimized build output
+- **Image Optimization**: Next.js image optimization
 
-### State Management
-- Local state with React hooks
-- Form state with React Hook Form
-- Global state with Zustand (if needed)
-- Server state with Supabase client
+---
 
-### Testing Strategy
-- Unit tests for utility functions
-- Component tests with React Testing Library
-- Integration tests for API routes
-- E2E tests with Playwright
+## 🔄 **Data Flow Architecture**
 
-## 🚀 Deployment
+### **Complete User Journey**
 
-### Environment Setup
-- Development: Local with Supabase local
-- Staging: Vercel + Supabase staging
-- Production: Vercel + Supabase production
+#### **1. Badge Creation Flow**
+```
+User Input → Form Validation → Live Preview → Image Upload → 
+Cropping → Database Storage → Confirmation Display
+```
 
-### CI/CD Pipeline
-- GitHub Actions for automated testing
-- Vercel for automatic deployments
-- Supabase migrations for database changes
+#### **2. Image Processing Flow**
+```
+File Selection → Validation → Upload to Storage → 
+Cropper Modal → Image Manipulation → Save Cropped Image → 
+Update Preview → Store in Database
+```
 
-## 📈 Monitoring & Analytics
+#### **3. Data Persistence Flow**
+```
+Form Data → API Validation → Database Insert → 
+Session Creation → Analytics Tracking → Success Response
+```
 
-### Error Tracking
-- Sentry for error monitoring
-- Supabase logs for backend errors
-- Vercel analytics for performance
+### **State Synchronization**
 
-### User Analytics
-- Google Analytics for user behavior
-- Custom events for feature usage
-- Performance monitoring with Core Web Vitals
+#### **Real-time Updates**
+```
+Form Input → Zustand Store → BadgePreview Component → 
+Visual Update → User Feedback
+```
+
+#### **API Integration**
+```
+Form Submission → API Route → Supabase Operations → 
+Success/Error Response → UI Update
+```
+
+---
+
+## 🧪 **Testing Architecture**
+
+### **Testing Strategy**
+
+#### **1. Manual Testing**
+- **User Flow Testing**: Complete badge creation process
+- **Cross-browser Testing**: Chrome, Firefox, Safari, Edge
+- **Responsive Testing**: Mobile, tablet, desktop
+- **Error Scenario Testing**: Network failures, invalid inputs
+
+#### **2. API Testing**
+- **Endpoint Testing**: All API routes functional
+- **Error Handling**: Proper error responses
+- **Data Validation**: Input validation working
+- **Security Testing**: Private storage access
+
+#### **3. Component Testing**
+- **Unit Testing**: Individual component functionality
+- **Integration Testing**: Component interactions
+- **State Testing**: Zustand store operations
+- **Form Testing**: Validation and submission
+
+---
+
+## 🔮 **Scalability Architecture**
+
+### **Current Scalability Features**
+
+#### **1. Database Scalability**
+- **Supabase**: Managed PostgreSQL with auto-scaling
+- **Connection Pooling**: Efficient connection management
+- **Indexing**: Optimized query performance
+- **Partitioning**: Ready for data growth
+
+#### **2. Storage Scalability**
+- **Supabase Storage**: Global CDN distribution
+- **Automatic Scaling**: Handles traffic spikes
+- **Cost Optimization**: Pay-per-use pricing
+- **Backup Management**: Automatic backups
+
+#### **3. Application Scalability**
+- **Stateless Design**: No server-side state
+- **API Routes**: Serverless functions
+- **CDN Ready**: Static asset optimization
+- **Caching Strategy**: Browser and CDN caching
+
+### **Future Scalability Considerations**
+
+#### **1. Horizontal Scaling**
+- **Load Balancing**: Multiple server instances
+- **Database Sharding**: Data distribution
+- **Microservices**: Service decomposition
+- **Containerization**: Docker deployment
+
+#### **2. Performance Optimization**
+- **Redis Caching**: Session and data caching
+- **Image CDN**: Global image delivery
+- **Database Optimization**: Query optimization
+- **Bundle Optimization**: Code splitting
+
+---
+
+## 📊 **Monitoring & Analytics**
+
+### **Current Monitoring**
+
+#### **1. Application Monitoring**
+- **Error Tracking**: Console error logging
+- **Performance Monitoring**: API response times
+- **User Analytics**: Badge creation tracking
+- **Storage Monitoring**: Upload success rates
+
+#### **2. Database Monitoring**
+- **Query Performance**: Supabase dashboard
+- **Storage Usage**: Bucket monitoring
+- **Connection Health**: Connection pool status
+- **Error Tracking**: Database error logging
+
+### **Future Monitoring Enhancements**
+
+#### **1. Advanced Analytics**
+- **User Behavior**: Badge creation patterns
+- **Performance Metrics**: Page load times
+- **Error Tracking**: Comprehensive error monitoring
+- **Business Metrics**: Usage statistics
+
+#### **2. Alerting System**
+- **Error Alerts**: Critical error notifications
+- **Performance Alerts**: Slow response times
+- **Storage Alerts**: Capacity warnings
+- **Security Alerts**: Suspicious activity
+
+---
+
+## 🎯 **Architecture Benefits**
+
+### **Technical Benefits**
+- **Type Safety**: Full TypeScript implementation
+- **Maintainability**: Atomic design methodology
+- **Performance**: Optimized for speed and efficiency
+- **Security**: Comprehensive security measures
+- **Scalability**: Designed for future growth
+
+### **Business Benefits**
+- **User Experience**: Intuitive and responsive design
+- **Reliability**: Robust error handling and recovery
+- **Cost Efficiency**: Pay-per-use infrastructure
+- **Time to Market**: Rapid development and deployment
+- **Future Proof**: Modern technology stack
+
+---
+
+**🎯 The Badge Maker architecture is production-ready, secure, and scalable!**
