@@ -3,15 +3,18 @@
 import { useState, useRef } from 'react'
 import { Button } from '@/components/atoms/button'
 import { useBadgeStore } from '@/hooks/useBadgeStore'
-import { Upload, X } from 'lucide-react'
+import { ImageCropper } from './ImageCropper'
+import { Upload, X, Crop } from 'lucide-react'
 
 export function ImageUpload() {
   const [isUploading, setIsUploading] = useState(false)
+  const [showCropper, setShowCropper] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { originalImage, setOriginalImage } = useBadgeStore()
+  const { originalImage, setOriginalImage, croppedImage } = useBadgeStore()
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
+    
     if (file) {
       // Validate file type
       if (!file.type.startsWith('image/')) {
@@ -28,6 +31,7 @@ export function ImageUpload() {
       setIsUploading(true)
       setOriginalImage(file)
       setIsUploading(false)
+      setShowCropper(true)
     }
   }
 
@@ -35,6 +39,12 @@ export function ImageUpload() {
     setOriginalImage(undefined)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
+    }
+  }
+
+  const handleCropClick = () => {
+    if (originalImage) {
+      setShowCropper(true)
     }
   }
 
@@ -73,7 +83,7 @@ export function ImageUpload() {
           <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
             <div className="flex items-center space-x-3">
               <img
-                src={URL.createObjectURL(originalImage)}
+                src={croppedImage ? URL.createObjectURL(croppedImage) : URL.createObjectURL(originalImage)}
                 alt="Preview"
                 className="w-12 h-12 rounded object-cover"
               />
@@ -95,7 +105,7 @@ export function ImageUpload() {
             </Button>
           </div>
           
-          <div className="text-center">
+          <div className="flex justify-center gap-2">
             <Button
               type="button"
               variant="outline"
@@ -105,9 +115,25 @@ export function ImageUpload() {
             >
               Change Photo
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleCropClick}
+              className="bg-transparent border-[#767676] text-white font-open-sans text-[16px] rounded-[3px] hover:bg-[#767676] hover:text-black"
+            >
+              <Crop className="h-4 w-4 mr-1" />
+              Crop Photo
+            </Button>
           </div>
         </div>
       )}
+
+      {/* Image Cropper Modal */}
+      <ImageCropper 
+        isOpen={showCropper} 
+        onClose={() => setShowCropper(false)} 
+      />
     </div>
   )
 }

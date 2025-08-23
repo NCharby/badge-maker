@@ -1,3 +1,4 @@
 // Export all molecule components
-export * from './ImageUpload'
-export * from './SocialMediaInput'
+export { ImageUpload } from './ImageUpload'
+export { SocialMediaInput } from './SocialMediaInput'
+export { ImageCropper } from './ImageCropper'
