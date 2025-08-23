@@ -69,7 +69,7 @@ export function BadgeCreationForm() {
   }
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-12 max-w-7xl mx-auto">
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-12 max-w-7xl">
       {/* Form Section */}
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {/* BASICS Section */}
