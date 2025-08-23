@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/atoms/button'
 import { useBadgeStore } from '@/hooks/useBadgeStore'
 import { ImageCropper } from './ImageCropper'
@@ -10,20 +10,44 @@ export function ImageUpload() {
   const [isUploading, setIsUploading] = useState(false)
   const [showCropper, setShowCropper] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { originalImage, setOriginalImage, croppedImage } = useBadgeStore()
 
+  // Get image dimensions when originalImage changes
+  useEffect(() => {
+    if (originalImage) {
+      const img = new Image()
+      img.onload = () => {
+        setImageDimensions({
+          width: img.naturalWidth,
+          height: img.naturalHeight
+        })
+      }
+      img.src = URL.createObjectURL(originalImage)
+    } else {
+      setImageDimensions(null)
+    }
+  }, [originalImage])
+
   const handleFileSelect = (file: File) => {
     if (file) {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        alert('Please select an image file')
+      // Validate file type - only allow specific image formats
+      const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']
+      if (!allowedTypes.includes(file.type)) {
+        alert('Please select a valid image file (PNG, JPG, JPEG, WebP, or GIF)')
         return
       }
 
       // Validate file size (5MB limit)
       if (file.size > 5 * 1024 * 1024) {
         alert('File size must be less than 5MB')
+        return
+      }
+
+      // Validate minimum file size (10KB to prevent very small files)
+      if (file.size < 10 * 1024) {
+        alert('File size must be at least 10KB')
         return
       }
 
@@ -116,14 +140,19 @@ export function ImageUpload() {
           <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
             <div className="flex items-center space-x-3">
               <img
-                src={croppedImage ? URL.createObjectURL(croppedImage) : URL.createObjectURL(originalImage)}
+                src={URL.createObjectURL(originalImage)}
                 alt="Preview"
-                className="w-12 h-12 rounded object-cover"
+                className="w-24 h-24 rounded object-cover"
               />
               <div>
-                <p className="text-sm font-medium text-white">{originalImage.name}</p>
+                <p className="text-sm font-medium text-[#949494]">{originalImage.name}</p>
                 <p className="text-xs text-[#949494]">
                   {(originalImage.size / 1024 / 1024).toFixed(2)} MB
+                  {imageDimensions && (
+                    <span className="ml-2">
+                      • {imageDimensions.width} × {imageDimensions.height}px
+                    </span>
+                  )}
                 </p>
               </div>
             </div>

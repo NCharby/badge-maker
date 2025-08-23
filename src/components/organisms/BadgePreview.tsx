@@ -17,7 +17,10 @@ const platformDisplay = {
 }
 
 export function BadgePreview() {
-  const { data, croppedImage } = useBadgeStore()
+  const { data, originalImage, croppedImage } = useBadgeStore()
+
+  // Use cropped image if available, otherwise fall back to original image
+  const displayImage = croppedImage || originalImage
 
   return (
     <div className="flex justify-center">
@@ -32,9 +35,9 @@ export function BadgePreview() {
 
         {/* Photo */}
         <div className="w-[400px] h-[400px] rounded-[200px] bg-cover bg-center bg-no-repeat flex items-center justify-center">
-          {croppedImage ? (
+          {displayImage ? (
             <img
-              src={URL.createObjectURL(croppedImage)}
+              src={URL.createObjectURL(displayImage)}
               alt="Profile"
               className="w-full h-full object-cover rounded-[200px]"
             />
