@@ -150,11 +150,11 @@ export function BadgeCreationForm() {
   }
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-12 max-w-7xl">
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
       {/* Form Section */}
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {/* BASICS Section */}
-        <Card className="bg-[#111111] border-[#111111] rounded-[10px]">
+        <Card className="bg-[#111111] border-[#111111] rounded-[10px] shadow-2xl">
           <CardHeader className="pb-5">
             <CardTitle className="text-[32px] font-normal text-white font-montserrat leading-[normal]">
               BASICS
@@ -206,7 +206,7 @@ export function BadgeCreationForm() {
         </Card>
 
         {/* PHOTO Section */}
-        <Card className="bg-[#111111] border-[#111111] rounded-[10px]">
+        <Card className="bg-[#111111] border-[#111111] rounded-[10px] shadow-2xl">
           <CardHeader className="pb-5">
             <CardTitle className="text-[32px] font-normal text-white font-montserrat leading-[normal]">
               PHOTO
@@ -224,7 +224,7 @@ export function BadgeCreationForm() {
         </Card>
 
         {/* SOCIALS Section */}
-        <Card className="bg-[#111111] border-[#111111] rounded-[10px]">
+        <Card className="bg-[#111111] border-[#111111] rounded-[10px] shadow-2xl">
           <CardHeader className="pb-5">
             <CardTitle className="text-[32px] font-normal text-white font-montserrat leading-[normal]">
               SOCIALS
@@ -255,7 +255,7 @@ export function BadgeCreationForm() {
           </Button>
           <Button 
             type="submit" 
-            className="flex-1 h-[41px] bg-[#707070] text-black font-open-sans text-[16px] rounded-[3px] hover:bg-[#808080]" 
+            className="flex-1 h-[41px] bg-[#c0c0c0] text-black font-open-sans text-[16px] rounded-[3px] hover:bg-white" 
             disabled={isSubmitting}
           >
             {isSubmitting ? 'Creating...' : 'Finished'}

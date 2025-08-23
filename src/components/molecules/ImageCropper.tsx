@@ -164,7 +164,7 @@ export function ImageCropper({ isOpen, onClose }: ImageCropperProps) {
               type="button"
               onClick={handleCrop}
               disabled={isProcessing}
-              className="bg-[#707070] text-black font-open-sans text-[16px] rounded-[3px] hover:bg-[#808080]"
+              className="bg-[#c0c0c0] text-black font-open-sans text-[16px] rounded-[3px] hover:bg-white"
             >
               {isProcessing ? (
                 'Processing...'
