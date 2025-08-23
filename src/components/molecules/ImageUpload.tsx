@@ -9,12 +9,11 @@ import { Upload, X, Crop } from 'lucide-react'
 export function ImageUpload() {
   const [isUploading, setIsUploading] = useState(false)
   const [showCropper, setShowCropper] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { originalImage, setOriginalImage, croppedImage } = useBadgeStore()
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    
+  const handleFileSelect = (file: File) => {
     if (file) {
       // Validate file type
       if (!file.type.startsWith('image/')) {
@@ -32,6 +31,33 @@ export function ImageUpload() {
       setOriginalImage(file)
       setIsUploading(false)
       setShowCropper(true)
+    }
+  }
+
+  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      handleFileSelect(file)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      handleFileSelect(files[0])
     }
   }
 
@@ -54,12 +80,19 @@ export function ImageUpload() {
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        onChange={handleFileSelect}
+        onChange={handleFileInputChange}
         className="hidden"
       />
 
       {!originalImage ? (
-        <div className="border-[#747474] border-dashed border rounded-lg p-10 text-center relative">
+        <div 
+          className={`border-[#747474] border-dashed border rounded-lg p-10 text-center relative transition-colors duration-200 ${
+            isDragOver ? 'border-white bg-[#1a1a1a]' : ''
+          }`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           <div className="flex flex-col items-center justify-center gap-2.5">
             <p className="text-[20px] text-white font-open-sans font-normal leading-[normal] mb-2.5">
               Drag & Drop file here
