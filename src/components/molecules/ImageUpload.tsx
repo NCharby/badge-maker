@@ -49,12 +49,12 @@ export function ImageUpload() {
       />
 
       {!originalImage ? (
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-          <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-          <p className="text-sm text-gray-600 mb-2">
+        <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+          <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+          <p className="text-sm text-muted-foreground mb-2">
             Click to upload your photo
           </p>
-          <p className="text-xs text-gray-500 mb-4">
+          <p className="text-xs text-muted-foreground mb-4">
             PNG, JPG up to 5MB
           </p>
           <Button
@@ -68,7 +68,7 @@ export function ImageUpload() {
         </div>
       ) : (
         <div className="space-y-2">
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
             <div className="flex items-center space-x-3">
               <img
                 src={URL.createObjectURL(originalImage)}
@@ -77,7 +77,7 @@ export function ImageUpload() {
               />
               <div>
                 <p className="text-sm font-medium">{originalImage.name}</p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   {(originalImage.size / 1024 / 1024).toFixed(2)} MB
                 </p>
               </div>

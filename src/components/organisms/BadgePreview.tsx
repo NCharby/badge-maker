@@ -8,7 +8,7 @@ export function BadgePreview() {
 
   return (
     <div className="flex justify-center">
-      <Card className="w-80 h-48 bg-gradient-to-br from-blue-600 to-purple-700 text-white shadow-lg">
+      <Card className="w-80 h-48 bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg">
         <CardContent className="p-6 h-full flex flex-col justify-between">
           {/* Header */}
           <div className="text-center">
@@ -19,7 +19,7 @@ export function BadgePreview() {
           {/* Main Content */}
           <div className="flex items-center space-x-4">
             {/* Photo */}
-            <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center overflow-hidden">
+            <div className="w-16 h-16 rounded-full bg-primary-foreground/20 flex items-center justify-center overflow-hidden">
               {croppedImage ? (
                 <img
                   src={URL.createObjectURL(croppedImage)}
@@ -48,7 +48,7 @@ export function BadgePreview() {
               {data.social_media_handles.map((handle, index) => (
                 <div
                   key={index}
-                  className="text-xs bg-white/20 px-2 py-1 rounded"
+                  className="text-xs bg-primary-foreground/20 px-2 py-1 rounded"
                 >
                   {handle.platform}: {handle.handle}
                 </div>
