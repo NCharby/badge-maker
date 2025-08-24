@@ -1,5 +1,5 @@
-import { BadgeCreationPage } from '@/components/pages/BadgeCreationPage'
+import { redirect } from 'next/navigation';
 
 export default function HomePage() {
-  return <BadgeCreationPage />
+  redirect('/landing');
 }
