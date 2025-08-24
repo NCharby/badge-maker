@@ -70,7 +70,7 @@ export function DateOfBirthInput() {
             </Button>
           </PopoverTrigger>
           <PopoverContent
-            className="w-auto overflow-hidden p-0"
+            className="w-auto overflow-hidden p-0 bg-[#2d2d2d] border-[#5c5c5c]"
             align="end"
             alignOffset={-8}
             sideOffset={10}
@@ -88,6 +88,7 @@ export function DateOfBirthInput() {
                   setDateOfBirthOpen(false)
                 }
               }}
+              className="bg-[#2d2d2d] text-white [&_.rdp-button]:text-white [&_.rdp-button]:hover:bg-[#5c5c5c] [&_.rdp-button]:focus:bg-[#5c5c5c] [&_.rdp-button_selected]:bg-blue-600 [&_.rdp-button_selected]:text-white [&_.rdp-button_selected]:hover:bg-blue-700 [&_.rdp-head_cell]:text-white [&_.rdp-caption]:text-white [&_.rdp-nav_button]:text-white [&_.rdp-nav_button]:hover:bg-[#5c5c5c] [&_.rdp-dropdown]:bg-[#2d2d2d] [&_.rdp-dropdown]:text-white [&_.rdp-dropdown]:border-[#5c5c5c]"
             />
           </PopoverContent>
         </Popover>
