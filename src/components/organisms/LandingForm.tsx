@@ -1,16 +1,41 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/atoms/button';
 import { Input } from '@/components/atoms/input';
 import { Label } from '@/components/atoms/label';
 import { DateOfBirthInput } from '@/components/molecules/DateOfBirthInput';
-import { PhoneInput } from '@/components/molecules/PhoneInput';
 
 export function LandingForm() {
-  const [emergencyPhone, setEmergencyPhone] = useState<string>();
+  const router = useRouter();
+  const [formData, setFormData] = useState({
+    email: '',
+    fullName: '',
+    dateOfBirth: new Date('2000-01-01'),
+  });
+
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.email || !formData.fullName) {
+      alert('Please fill in all required fields');
+      return;
+    }
+    
+    // Store form data in sessionStorage for the waiver form
+    sessionStorage.setItem('landingFormData', JSON.stringify(formData));
+    router.push('/waiver');
+  };
 
   return (
-    <div className="bg-[#111111] flex flex-col gap-5 items-start justify-center px-5 py-8 rounded-[10px] w-full">
+    <form onSubmit={handleSubmit} className="bg-[#111111] flex flex-col gap-5 items-start justify-center px-5 py-8 rounded-[10px] w-full">
       <h2 className="font-montserrat font-normal text-white text-3xl text-left w-full">
         HELLO
       </h2>
@@ -28,8 +53,11 @@ export function LandingForm() {
             </Label>
             <Input 
               type="email"
+              value={formData.email}
+              onChange={(e) => handleInputChange('email', e.target.value)}
               placeholder="hello@example.com"
               className="w-[434px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px]"
+              required
             />
           </div>
         </div>
@@ -42,34 +70,26 @@ export function LandingForm() {
             </Label>
             <Input 
               type="text"
+              value={formData.fullName}
+              onChange={(e) => handleInputChange('fullName', e.target.value)}
               placeholder="Your Name"
               className="w-[434px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px]"
+              required
             />
           </div>
           <DateOfBirthInput />
         </div>
-        
-        {/* Emergency Contact */}
-        <div className="flex gap-[120px] items-start justify-start w-full">
-          <div className="flex flex-col gap-1 h-[60px] items-start justify-start">
-            <Label className="font-montserrat font-normal text-white text-base">
-              Emergency Contact
-            </Label>
-            <Input 
-              type="text"
-              placeholder="Contact Name"
-              className="w-[434px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px]"
-            />
-          </div>
-          <PhoneInput
-            label="Emergency Phone"
-            placeholder="Enter emergency phone number"
-            value={emergencyPhone}
-            onChange={setEmergencyPhone}
-            defaultCountry="US"
-          />
-        </div>
       </div>
-    </div>
+
+      {/* Submit Button */}
+      <div className="flex justify-center w-full pt-4">
+        <Button
+          type="submit"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg font-semibold"
+        >
+          Continue to Waiver
+        </Button>
+      </div>
+    </form>
   );
 }
