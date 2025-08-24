@@ -12,12 +12,14 @@ interface UserFlowState {
   emergencyPhone: string;
   signature: string | null;
   hasReadTerms: boolean;
+  waiverId: string | null;
   
   // Actions
   setLandingData: (data: { email: string; fullName: string; dateOfBirth: Date }) => void;
   setWaiverData: (data: { emergencyContact: string; emergencyPhone: string; signature: string | null; hasReadTerms: boolean }) => void;
   setSignature: (signature: string | null) => void;
   setHasReadTerms: (hasReadTerms: boolean) => void;
+  setWaiverId: (waiverId: string) => void;
   clearAll: () => void;
 }
 
@@ -32,6 +34,7 @@ export const useUserFlowStore = create<UserFlowState>()(
       emergencyPhone: '',
       signature: null,
       hasReadTerms: false,
+      waiverId: null,
       
       // Actions
       setLandingData: (data) => set({
@@ -51,6 +54,8 @@ export const useUserFlowStore = create<UserFlowState>()(
       
       setHasReadTerms: (hasReadTerms) => set({ hasReadTerms }),
       
+      setWaiverId: (waiverId) => set({ waiverId }),
+      
       clearAll: () => set({
         email: '',
         fullName: '',
@@ -59,6 +64,7 @@ export const useUserFlowStore = create<UserFlowState>()(
         emergencyPhone: '',
         signature: null,
         hasReadTerms: false,
+        waiverId: null,
       }),
     }),
     {

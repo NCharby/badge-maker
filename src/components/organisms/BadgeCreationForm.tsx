@@ -11,6 +11,7 @@ import { Input } from '@/components/atoms/input'
 import { Label } from '@/components/atoms/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/atoms/select'
 import { useBadgeStore } from '@/hooks/useBadgeStore'
+import { useUserFlowStore } from '@/hooks/useUserFlowStore'
 import { BadgePreview } from '@/components/organisms/BadgePreview'
 import { ImageUpload } from '@/components/molecules/ImageUpload'
 import { SocialMediaInput } from '@/components/molecules/SocialMediaInput'
@@ -53,11 +54,12 @@ const socialMediaPlatforms = [
 export function BadgeCreationForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { data, setData } = useBadgeStore()
+  const { email: waiverEmail, fullName: waiverName, waiverId } = useUserFlowStore()
   const searchParams = useSearchParams()
   
-  // Get pre-populated values from query parameters
-  const prePopulatedEmail = searchParams.get('email') || data.email
-  const prePopulatedName = searchParams.get('name') || data.badge_name
+  // Get pre-populated values from waiver data first, then query parameters, then existing badge data
+  const prePopulatedEmail = waiverEmail || searchParams.get('email') || data.email
+  const prePopulatedName = waiverName || searchParams.get('name') || data.badge_name
   
   const form = useForm<BadgeFormData>({
     resolver: zodResolver(badgeSchema),
@@ -152,7 +154,8 @@ export function BadgeCreationForm() {
           crop_data: {
             // Add any crop data if needed
             timestamp: new Date().toISOString()
-          }
+          },
+          waiver_id: waiverId
         })
       })
       

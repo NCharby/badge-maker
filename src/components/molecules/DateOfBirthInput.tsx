@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/atoms/button';
 import { Input } from '@/components/atoms/input';
 import { Label } from '@/components/atoms/label';
@@ -27,12 +27,22 @@ function isValidDate(date: Date | undefined) {
   return !isNaN(date.getTime())
 }
 
-export function DateOfBirthInput() {
-  const defaultDate = new Date('2000-01-01');
-  const [dateOfBirth, setDateOfBirth] = useState<Date>(defaultDate);
+interface DateOfBirthInputProps {
+  value: Date;
+  onChange: (date: Date) => void;
+  error?: string;
+}
+
+export function DateOfBirthInput({ value, onChange, error }: DateOfBirthInputProps) {
   const [dateOfBirthOpen, setDateOfBirthOpen] = useState(false);
-  const [dateOfBirthMonth, setDateOfBirthMonth] = useState<Date>(defaultDate);
-  const [dateOfBirthValue, setDateOfBirthValue] = useState(formatDate(defaultDate));
+  const [dateOfBirthMonth, setDateOfBirthMonth] = useState<Date>(value);
+  const [dateOfBirthValue, setDateOfBirthValue] = useState(formatDate(value));
+
+  // Sync local state when value prop changes
+  useEffect(() => {
+    setDateOfBirthMonth(value);
+    setDateOfBirthValue(formatDate(value));
+  }, [value]);
 
   return (
     <div className="flex flex-col gap-1 h-[60px] items-start justify-start">
@@ -43,15 +53,17 @@ export function DateOfBirthInput() {
         <Input
           value={dateOfBirthValue}
           placeholder="Select your date of birth"
-          className="w-[434px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] pr-10"
-                      onChange={(e) => {
-              const date = new Date(e.target.value)
-              setDateOfBirthValue(e.target.value)
-              if (isValidDate(date)) {
-                setDateOfBirth(date)
-                setDateOfBirthMonth(date)
-              }
-            }}
+          className={`w-[434px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] pr-10 ${
+            error ? 'border-red-500' : ''
+          }`}
+          onChange={(e) => {
+            const date = new Date(e.target.value)
+            setDateOfBirthValue(e.target.value)
+            if (isValidDate(date)) {
+              onChange(date)
+              setDateOfBirthMonth(date)
+            }
+          }}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") {
               e.preventDefault()
@@ -77,13 +89,13 @@ export function DateOfBirthInput() {
           >
             <Calendar
               mode="single"
-              selected={dateOfBirth}
+              selected={value}
               captionLayout="dropdown"
               month={dateOfBirthMonth}
               onMonthChange={setDateOfBirthMonth}
               onSelect={(date) => {
                 if (date) {
-                  setDateOfBirth(date)
+                  onChange(date)
                   setDateOfBirthValue(formatDate(date))
                   setDateOfBirthOpen(false)
                 }
@@ -93,6 +105,9 @@ export function DateOfBirthInput() {
           </PopoverContent>
         </Popover>
       </div>
+      {error && (
+        <p className="text-red-400 text-xs mt-1">{error}</p>
+      )}
     </div>
   );
 }
