@@ -43,29 +43,62 @@ export function WaiverForm() {
     }));
   };
 
-       const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!hasReadTerms || !formData.signature || !formData.fullName || !formData.email || !formData.emergencyContact || !formData.emergencyPhone) {
-      alert('Please read the terms, provide your signature, and fill in all required fields');
-      return;
-    }
+               const handleSubmit = async (e: React.FormEvent) => {
+          e.preventDefault();
+          if (!hasReadTerms || !formData.signature || !formData.fullName || !formData.email || !formData.emergencyContact || !formData.emergencyPhone) {
+            alert('Please read the terms, provide your signature, and fill in all required fields');
+            return;
+          }
 
-    setIsSubmitting(true);
-    
-    // Update Zustand store with waiver data
-    setWaiverData({
-      emergencyContact: formData.emergencyContact,
-      emergencyPhone: formData.emergencyPhone,
-      signature: formData.signature,
-      hasReadTerms: hasReadTerms,
-    });
-    
-    // TODO: Implement waiver submission logic
-    console.log('Waiver data:', formData);
-    
-    // For now, just navigate to badge creation
-    router.push('/badge');
-  };
+          setIsSubmitting(true);
+          
+          try {
+            // Prepare waiver data for PDF generation
+            const waiverData = {
+              fullName: formData.fullName,
+              email: formData.email,
+              dateOfBirth: formData.dateOfBirth.toISOString().split('T')[0], // Format as YYYY-MM-DD
+              emergencyContact: formData.emergencyContact,
+              emergencyPhone: formData.emergencyPhone,
+              signatureImage: formData.signature,
+              sessionId: null // We'll implement session management later
+            };
+
+            // Call PDF generation API
+            const response = await fetch('/api/pdf', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(waiverData),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+              throw new Error(result.error || 'Failed to generate PDF');
+            }
+
+            // Update Zustand store with waiver data
+            setWaiverData({
+              emergencyContact: formData.emergencyContact,
+              emergencyPhone: formData.emergencyPhone,
+              signature: formData.signature,
+              hasReadTerms: hasReadTerms,
+            });
+
+            console.log('PDF generated successfully:', result);
+            
+            // Navigate to badge creation
+            router.push('/badge');
+            
+          } catch (error) {
+            console.error('Error generating PDF:', error);
+            alert('Failed to generate PDF. Please try again.');
+          } finally {
+            setIsSubmitting(false);
+          }
+        };
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
