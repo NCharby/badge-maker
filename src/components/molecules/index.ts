@@ -2,3 +2,6 @@
 export { ImageUpload } from './ImageUpload'
 export { SocialMediaInput } from './SocialMediaInput'
 export { ImageCropper } from './ImageCropper'
+export { DateOfBirthInput } from './DateOfBirthInput'
+export { PhoneInput } from './PhoneInput'
+export { ProgressSteps } from './ProgressSteps'

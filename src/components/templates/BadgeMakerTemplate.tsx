@@ -1,7 +1,10 @@
-import { BadgeCreationForm } from '@/components/organisms/BadgeCreationForm'
-import { BadgePreview } from '@/components/organisms/BadgePreview'
+import { ReactNode } from 'react'
 
-export function BadgeMakerTemplate() {
+interface BadgeMakerTemplateProps {
+  children: ReactNode
+}
+
+export function BadgeMakerTemplate({ children }: BadgeMakerTemplateProps) {
   return (
     <main className="min-h-screen bg-[#2d2d2d]">
       <div className="container mx-auto px-4 py-8">
@@ -15,7 +18,7 @@ export function BadgeMakerTemplate() {
         </div>
 
         {/* Main Content */}
-        <BadgeCreationForm />
+        {children}
       </div>
     </main>
   )
