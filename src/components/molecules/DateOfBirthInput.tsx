@@ -36,22 +36,22 @@ export function DateOfBirthInput() {
 
   return (
     <div className="flex flex-col gap-1 h-[60px] items-start justify-start">
-      <Label className="font-montserrat font-normal text-white text-base">
-        Date of birth
+      <Label className="text-white font-montserrat text-sm">
+        Date of birth*
       </Label>
       <div className="relative flex gap-2">
         <Input
           value={dateOfBirthValue}
           placeholder="Select your date of birth"
           className="w-[434px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] pr-10"
-          onChange={(e) => {
-            const date = new Date(e.target.value)
-            setDateOfBirthValue(e.target.value)
-            if (isValidDate(date)) {
-              setDateOfBirth(date)
-              setDateOfBirthMonth(date)
-            }
-          }}
+                      onChange={(e) => {
+              const date = new Date(e.target.value)
+              setDateOfBirthValue(e.target.value)
+              if (isValidDate(date)) {
+                setDateOfBirth(date)
+                setDateOfBirthMonth(date)
+              }
+            }}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") {
               e.preventDefault()

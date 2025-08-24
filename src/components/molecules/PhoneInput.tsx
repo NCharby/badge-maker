@@ -27,7 +27,7 @@ export function PhoneInput({
       <Label className="font-montserrat font-normal text-white text-base">
         {label}
       </Label>
-      <div className="relative w-[434px]">
+      <div className={`relative ${className}`}>
         <PhoneInputBase
           international
           defaultCountry={defaultCountry as any}
