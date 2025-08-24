@@ -9,38 +9,31 @@ import { DateOfBirthInput } from '@/components/molecules/DateOfBirthInput';
 import { PhoneInput } from '@/components/molecules/PhoneInput';
 import { SignatureCapture } from '@/components/molecules/SignatureCapture';
 import { useRouter } from 'next/navigation';
+import { useUserFlowStore } from '@/hooks/useUserFlowStore';
 
 export function WaiverForm() {
   const router = useRouter();
+  const { 
+    email, 
+    fullName, 
+    dateOfBirth, 
+    emergencyContact, 
+    emergencyPhone, 
+    signature, 
+    hasReadTerms,
+    setWaiverData,
+    setSignature,
+    setHasReadTerms
+  } = useUserFlowStore();
   
-  // Load landing form data from sessionStorage
-  const getInitialFormData = () => {
-    if (typeof window !== 'undefined') {
-      const landingData = sessionStorage.getItem('landingFormData');
-      if (landingData) {
-        const parsed = JSON.parse(landingData);
-        return {
-          fullName: parsed.fullName || '',
-          email: parsed.email || '',
-          dateOfBirth: parsed.dateOfBirth ? new Date(parsed.dateOfBirth) : new Date('2000-01-01'),
-          emergencyContact: '',
-          emergencyPhone: '',
-          signature: null as string | null,
-        };
-      }
-    }
-    return {
-      fullName: '',
-      email: '',
-      dateOfBirth: new Date('2000-01-01'),
-      emergencyContact: '',
-      emergencyPhone: '',
-      signature: null as string | null,
-    };
-  };
-
-  const [formData, setFormData] = useState(getInitialFormData);
-  const [hasReadTerms, setHasReadTerms] = useState(false);
+  const [formData, setFormData] = useState({
+    fullName: fullName || '',
+    email: email || '',
+    dateOfBirth: dateOfBirth || new Date('2000-01-01'),
+    emergencyContact: emergencyContact || '',
+    emergencyPhone: emergencyPhone || '',
+    signature: signature,
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleInputChange = (field: string, value: any) => {
@@ -50,14 +43,23 @@ export function WaiverForm() {
     }));
   };
 
-     const handleSubmit = async (e: React.FormEvent) => {
-     e.preventDefault();
-     if (!hasReadTerms || !formData.signature || !formData.fullName || !formData.email) {
-       alert('Please read the terms, provide your signature, and fill in all required fields');
-       return;
-     }
+       const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!hasReadTerms || !formData.signature || !formData.fullName || !formData.email || !formData.emergencyContact || !formData.emergencyPhone) {
+      alert('Please read the terms, provide your signature, and fill in all required fields');
+      return;
+    }
 
     setIsSubmitting(true);
+    
+    // Update Zustand store with waiver data
+    setWaiverData({
+      emergencyContact: formData.emergencyContact,
+      emergencyPhone: formData.emergencyPhone,
+      signature: formData.signature,
+      hasReadTerms: hasReadTerms,
+    });
+    
     // TODO: Implement waiver submission logic
     console.log('Waiver data:', formData);
     
@@ -129,56 +131,55 @@ export function WaiverForm() {
                </p>
                
                <div className="space-y-4 mt-4">
-                 <div className="flex flex-col space-y-2">
-                   <Label className="text-white font-montserrat text-sm">Full Legal Name *</Label>
-                   <Input
-                     type="text"
-                     value={formData.fullName}
-                     onChange={(e) => handleInputChange('fullName', e.target.value)}
-                     placeholder="Enter your full legal name"
-                     className="bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm"
-                     required
-                   />
-                 </div>
+                                                     <div className="flex flex-col space-y-2">
+                    <Label className="text-white font-montserrat text-sm">Full Legal Name *</Label>
+                    <Input
+                      type="text"
+                      value={formData.fullName}
+                      onChange={(e) => handleInputChange('fullName', e.target.value)}
+                      placeholder="Enter your full legal name"
+                      className="bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm"
+                      required
+                    />
+                  </div>
 
-                 <div className="flex flex-col space-y-2">
-                   <Label className="text-white font-montserrat text-sm">Email Address *</Label>
-                   <Input
-                     type="email"
-                     value={formData.email}
-                     onChange={(e) => handleInputChange('email', e.target.value)}
-                     placeholder="Enter your email address"
-                     className="bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm"
-                     required
-                   />
-                 </div>
+                  <div className="flex flex-col space-y-2">
+                    <Label className="text-white font-montserrat text-sm">Email Address *</Label>
+                    <Input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleInputChange('email', e.target.value)}
+                      placeholder="Enter your email address"
+                      className="bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm"
+                      required
+                    />
+                  </div>
 
-                 <div className="flex flex-col space-y-2">
-                   <Label className="text-white font-montserrat text-sm">Date of Birth *</Label>
-                   <DateOfBirthInput />
-                 </div>
+                  <div className="flex flex-col space-y-2">
+                    <DateOfBirthInput />
+                  </div>
 
-                 <div className="flex flex-col space-y-2">
-                   <Label className="text-white font-montserrat text-sm">Emergency Contact</Label>
-                   <Input
-                     type="text"
-                     value={formData.emergencyContact}
-                     onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
-                     placeholder="Emergency contact name"
-                     className="bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm"
-                   />
-                 </div>
+                  <div className="flex flex-col space-y-2">
+                    <Label className="text-white font-montserrat text-sm">Emergency Contact</Label>
+                    <Input
+                      type="text"
+                      value={formData.emergencyContact}
+                      onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
+                      placeholder="Emergency contact name"
+                      className="bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm"
+                    />
+                  </div>
 
-                 <div className="flex flex-col space-y-2">
-                   <Label className="text-white font-montserrat text-sm">Emergency Phone</Label>
-                   <PhoneInput
-                     label=""
-                     value={formData.emergencyPhone}
-                     onChange={(value) => handleInputChange('emergencyPhone', value)}
-                     placeholder="Emergency contact phone"
-                     defaultCountry="US"
-                   />
-                 </div>
+                  <div className="flex flex-col space-y-2">
+                    <Label className="text-white font-montserrat text-sm">Emergency Phone</Label>
+                    <PhoneInput
+                      label=""
+                      value={formData.emergencyPhone}
+                      onChange={(value) => handleInputChange('emergencyPhone', value)}
+                      placeholder="Emergency contact phone"
+                      defaultCountry="US"
+                    />
+                  </div>
                </div>
              </div>
            </div>
@@ -210,7 +211,10 @@ export function WaiverForm() {
             
             <SignatureCapture
               value={formData.signature}
-              onChange={(signature) => handleInputChange('signature', signature)}
+              onChange={(signature) => {
+                handleInputChange('signature', signature);
+                setSignature(signature);
+              }}
             />
           </div>
         </Card>
@@ -219,7 +223,7 @@ export function WaiverForm() {
         <div className="flex justify-center">
           <Button
             type="submit"
-            disabled={!hasReadTerms || !formData.signature || !formData.fullName || !formData.email || isSubmitting}
+            disabled={!hasReadTerms || !formData.signature || !formData.fullName || !formData.email || !formData.emergencyContact || !formData.emergencyPhone || isSubmitting}
             className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? 'Processing...' : 'Sign Waiver & Continue'}

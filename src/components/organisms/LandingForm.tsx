@@ -6,13 +6,16 @@ import { Button } from '@/components/atoms/button';
 import { Input } from '@/components/atoms/input';
 import { Label } from '@/components/atoms/label';
 import { DateOfBirthInput } from '@/components/molecules/DateOfBirthInput';
+import { useUserFlowStore } from '@/hooks/useUserFlowStore';
 
 export function LandingForm() {
   const router = useRouter();
+  const { email, fullName, dateOfBirth, setLandingData } = useUserFlowStore();
+  
   const [formData, setFormData] = useState({
-    email: '',
-    fullName: '',
-    dateOfBirth: new Date('2000-01-01'),
+    email: email || '',
+    fullName: fullName || '',
+    dateOfBirth: dateOfBirth || new Date('2000-01-01'),
   });
 
   const handleInputChange = (field: string, value: any) => {
@@ -29,8 +32,12 @@ export function LandingForm() {
       return;
     }
     
-    // Store form data in sessionStorage for the waiver form
-    sessionStorage.setItem('landingFormData', JSON.stringify(formData));
+    // Store form data in Zustand store
+    setLandingData({
+      email: formData.email,
+      fullName: formData.fullName,
+      dateOfBirth: formData.dateOfBirth,
+    });
     router.push('/waiver');
   };
 
@@ -77,7 +84,10 @@ export function LandingForm() {
               required
             />
           </div>
-          <DateOfBirthInput />
+                     <DateOfBirthInput 
+             value={formData.dateOfBirth}
+             onChange={(date) => handleInputChange('dateOfBirth', date)}
+           />
         </div>
       </div>
 
