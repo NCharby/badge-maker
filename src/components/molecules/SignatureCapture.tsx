@@ -8,9 +8,19 @@ interface SignatureCaptureProps {
   value?: string | null;
   onChange?: (signature: string | null) => void;
   className?: string;
+  isFormValid?: boolean;
+  onSubmit?: () => void;
+  isSubmitting?: boolean;
 }
 
-export function SignatureCapture({ value, onChange, className = '' }: SignatureCaptureProps) {
+export function SignatureCapture({ 
+  value, 
+  onChange, 
+  className = '', 
+  isFormValid = false, 
+  onSubmit, 
+  isSubmitting = false 
+}: SignatureCaptureProps) {
   const signatureRef = useRef<SignatureCanvas>(null);
 
   const clearSignature = () => {
@@ -57,18 +67,23 @@ export function SignatureCapture({ value, onChange, className = '' }: SignatureC
             type="button"
             variant="outline"
             onClick={clearSignature}
-            className="border-[#5c5c5c] text-white hover:bg-[#5c5c5c]"
+            className="border-[#5c5c5c] hover:bg-[#5c5c5c]"
           >
             Clear Signature
           </Button>
           
           <Button
             type="button"
-            variant="outline"
-            onClick={saveSignature}
-            className="border-[#5c5c5c] text-white hover:bg-[#5c5c5c]"
+            variant={isFormValid ? "default" : "outline"}
+            onClick={isFormValid ? onSubmit : saveSignature}
+            disabled={isSubmitting}
+            className={`${
+              isFormValid 
+                ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                : "border-[#5c5c5c] hover:bg-[#5c5c5c]"
+            } ${isSubmitting ? "opacity-50 cursor-not-allowed" : ""}`}
           >
-            Save Signature
+            {isSubmitting ? 'Processing...' : 'Sign Waiver & Continue'}
           </Button>
         </div>
         

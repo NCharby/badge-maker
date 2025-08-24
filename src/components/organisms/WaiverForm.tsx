@@ -23,7 +23,8 @@ export function WaiverForm() {
     hasReadTerms,
     setWaiverData,
     setSignature,
-    setHasReadTerms
+    setHasReadTerms,
+    setWaiverId
   } = useUserFlowStore();
   
   const [formData, setFormData] = useState({
@@ -35,18 +36,66 @@ export function WaiverForm() {
     signature: signature,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
+  const [showValidation, setShowValidation] = useState(false);
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
+    
+    // Clear validation error when user starts typing
+    if (validationErrors[field]) {
+      setValidationErrors(prev => ({
+        ...prev,
+        [field]: ''
+      }));
+    }
+  };
+
+  const validateForm = () => {
+    const errors: {[key: string]: string} = {};
+    
+    if (!formData.fullName.trim()) {
+      errors.fullName = 'Full name is required';
+    }
+    
+    if (!formData.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+    
+    if (!formData.dateOfBirth || isNaN(formData.dateOfBirth.getTime())) {
+      errors.dateOfBirth = 'Date of birth is required';
+    }
+    
+    if (!formData.emergencyContact.trim()) {
+      errors.emergencyContact = 'Emergency contact is required';
+    }
+    
+    if (!formData.emergencyPhone.trim()) {
+      errors.emergencyPhone = 'Emergency phone is required';
+    }
+    
+    if (!hasReadTerms) {
+      errors.terms = 'You must read and agree to the terms';
+    }
+    
+    if (!formData.signature) {
+      errors.signature = 'Digital signature is required';
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
                const handleSubmit = async (e: React.FormEvent) => {
           e.preventDefault();
-          if (!hasReadTerms || !formData.signature || !formData.fullName || !formData.email || !formData.emergencyContact || !formData.emergencyPhone) {
-            alert('Please read the terms, provide your signature, and fill in all required fields');
+          setShowValidation(true);
+          
+          if (!validateForm()) {
             return;
           }
 
@@ -87,6 +136,11 @@ export function WaiverForm() {
               hasReadTerms: hasReadTerms,
             });
 
+            // Set the waiver ID for badge linking
+            if (result.waiverId) {
+              setWaiverId(result.waiverId);
+            }
+
             console.log('PDF generated successfully:', result);
             
             // Navigate to badge creation
@@ -106,13 +160,16 @@ export function WaiverForm() {
         <h1 className="text-4xl font-bold text-white mb-4 font-montserrat">
           Event Waiver & Terms of Service
         </h1>
-        <p className="text-lg text-gray-300">
+        <p className="text-lg text-gray-300 mb-2">
           Please review and sign the waiver to continue to badge creation
+        </p>
+        <p className="text-sm text-gray-400">
+          Fields marked with <span className="text-red-400">*</span> are required
         </p>
       </div>
 
              <form onSubmit={handleSubmit} className="space-y-8">
-         {/* Terms of Service Section */}
+        {/* Terms of Service Section */}
         <Card className="p-6 bg-[#111111] border-[#5c5c5c]">
           <h2 className="text-2xl font-semibold text-white mb-6 font-montserrat">
             Terms of Service & Event Waiver
@@ -165,71 +222,126 @@ export function WaiverForm() {
                
                <div className="space-y-4 mt-4">
                                                      <div className="flex flex-col space-y-2">
-                    <Label className="text-white font-montserrat text-sm">Full Legal Name *</Label>
+                    <Label className="text-white font-montserrat text-sm">
+                      Full Legal Name <span className="text-red-400">*</span>
+                    </Label>
                     <Input
                       type="text"
                       value={formData.fullName}
                       onChange={(e) => handleInputChange('fullName', e.target.value)}
                       placeholder="Enter your full legal name"
-                      className="bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm"
+                      className={`bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm ${
+                        showValidation && validationErrors.fullName ? 'border-red-500' : ''
+                      }`}
                       required
                     />
+                    {showValidation && validationErrors.fullName && (
+                      <p className="text-red-400 text-xs mt-1">{validationErrors.fullName}</p>
+                    )}
                   </div>
 
                   <div className="flex flex-col space-y-2">
-                    <Label className="text-white font-montserrat text-sm">Email Address *</Label>
+                    <Label className="text-white font-montserrat text-sm">
+                      Email Address <span className="text-red-400">*</span>
+                    </Label>
                     <Input
                       type="email"
                       value={formData.email}
                       onChange={(e) => handleInputChange('email', e.target.value)}
                       placeholder="Enter your email address"
-                      className="bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm"
+                      className={`bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm ${
+                        showValidation && validationErrors.email ? 'border-red-500' : ''
+                      }`}
                       required
+                    />
+                    {showValidation && validationErrors.email && (
+                      <p className="text-red-400 text-xs mt-1">{validationErrors.email}</p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col space-y-2">
+                    <DateOfBirthInput 
+                      value={formData.dateOfBirth}
+                      onChange={(date) => handleInputChange('dateOfBirth', date)}
+                      error={showValidation && validationErrors.dateOfBirth ? validationErrors.dateOfBirth : undefined}
                     />
                   </div>
 
                   <div className="flex flex-col space-y-2">
-                    <DateOfBirthInput />
-                  </div>
-
-                  <div className="flex flex-col space-y-2">
-                    <Label className="text-white font-montserrat text-sm">Emergency Contact</Label>
+                    <Label className="text-white font-montserrat text-sm">
+                      Emergency Contact <span className="text-red-400">*</span>
+                    </Label>
                     <Input
                       type="text"
                       value={formData.emergencyContact}
                       onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
                       placeholder="Emergency contact name"
-                      className="bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm"
+                      className={`bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm ${
+                        showValidation && validationErrors.emergencyContact ? 'border-red-500' : ''
+                      }`}
                     />
+                    {showValidation && validationErrors.emergencyContact && (
+                      <p className="text-red-400 text-xs mt-1">{validationErrors.emergencyContact}</p>
+                    )}
                   </div>
 
                   <div className="flex flex-col space-y-2">
-                    <Label className="text-white font-montserrat text-sm">Emergency Phone</Label>
+                    <Label className="text-white font-montserrat text-sm">
+                      Emergency Phone <span className="text-red-400">*</span>
+                    </Label>
                     <PhoneInput
                       label=""
                       value={formData.emergencyPhone}
                       onChange={(value) => handleInputChange('emergencyPhone', value)}
                       placeholder="Emergency contact phone"
                       defaultCountry="US"
+                      className={showValidation && validationErrors.emergencyPhone ? 'border-red-500' : ''}
                     />
+                    {showValidation && validationErrors.emergencyPhone && (
+                      <p className="text-red-400 text-xs mt-1">{validationErrors.emergencyPhone}</p>
+                    )}
                   </div>
                </div>
              </div>
            </div>
 
-          <div className="flex items-center space-x-3">
-            <input
-              type="checkbox"
-              id="readTerms"
-              checked={hasReadTerms}
-              onChange={(e) => setHasReadTerms(e.target.checked)}
-              className="w-4 h-4 text-blue-600 bg-transparent border-[#5c5c5c] rounded focus:ring-blue-500"
-            />
-            <Label htmlFor="readTerms" className="text-white font-montserrat">
-              I have read, understood, and agree to the Terms of Service and Event Waiver
-            </Label>
+          <div className="flex flex-col space-y-2">
+            <div className="flex items-center space-x-3">
+              <input
+                type="checkbox"
+                id="readTerms"
+                checked={hasReadTerms}
+                onChange={(e) => {
+                  setHasReadTerms(e.target.checked);
+                  if (validationErrors.terms) {
+                    setValidationErrors(prev => ({ ...prev, terms: '' }));
+                  }
+                }}
+                className="w-4 h-4 text-blue-600 bg-transparent border-[#5c5c5c] rounded focus:ring-blue-500"
+              />
+              <Label htmlFor="readTerms" className="text-white font-montserrat">
+                I have read, understood, and agree to the Terms of Service and Event Waiver
+              </Label>
+            </div>
+            {showValidation && validationErrors.terms && (
+              <p className="text-red-400 text-xs ml-7">{validationErrors.terms}</p>
+            )}
           </div>
         </Card>
+
+        {/* Validation Summary */}
+        {showValidation && Object.keys(validationErrors).length > 0 && (
+          <Card className="p-4 bg-red-900/20 border-red-500">
+            <div className="text-red-300">
+              <h3 className="font-semibold mb-2">Please fix the following errors:</h3>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                {Object.values(validationErrors).map((error, index) => (
+                  <li key={index}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          </Card>
+        )}
 
         {/* Signature Section */}
         <Card className="p-6 bg-[#111111] border-[#5c5c5c]">
@@ -248,20 +360,21 @@ export function WaiverForm() {
                 handleInputChange('signature', signature);
                 setSignature(signature);
               }}
+              isFormValid={!isSubmitting && hasReadTerms && !!formData.signature && !!formData.fullName && !!formData.email && !!formData.emergencyContact && !!formData.emergencyPhone && formData.dateOfBirth && !isNaN(formData.dateOfBirth.getTime())}
+              onSubmit={() => {
+                const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                handleSubmit(fakeEvent);
+              }}
+              isSubmitting={isSubmitting}
             />
+            
+            {showValidation && validationErrors.signature && (
+              <p className="text-red-400 text-xs mt-1">{validationErrors.signature}</p>
+            )}
           </div>
         </Card>
 
-        {/* Submit Button */}
-        <div className="flex justify-center">
-          <Button
-            type="submit"
-            disabled={!hasReadTerms || !formData.signature || !formData.fullName || !formData.email || !formData.emergencyContact || !formData.emergencyPhone || isSubmitting}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? 'Processing...' : 'Sign Waiver & Continue'}
-          </Button>
-        </div>
+
 
        </form>
     </div>
