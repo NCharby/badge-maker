@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateWaiverPDF, WaiverPDFData } from '@/lib/pdf';
+import { sendWaiverConfirmationEmail } from '@/lib/email';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
@@ -106,11 +107,22 @@ export async function POST(request: NextRequest) {
         .eq('id', sessionId);
     }
 
+    // Send waiver confirmation email
+    const emailResult = await sendWaiverConfirmationEmail({
+      fullName,
+      email,
+      waiverId: waiverData.id,
+      pdfUrl: result.pdfUrl,
+      signedAt: pdfData.signedAt
+    });
+
     return NextResponse.json({
       success: true,
       pdfUrl: result.pdfUrl,
       waiverId: waiverData.id,
-      message: 'PDF generated and stored successfully'
+      emailSent: emailResult.success,
+      emailMessageId: emailResult.messageId,
+      message: 'PDF generated and stored successfully' + (emailResult.success ? ', email sent' : ', email failed')
     });
 
   } catch (error) {
