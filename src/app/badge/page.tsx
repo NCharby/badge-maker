@@ -5,13 +5,13 @@ import { useRouter } from 'next/navigation';
 import { BadgeCreationForm } from '@/components/organisms/BadgeCreationForm';
 import { BadgeMakerTemplate } from '@/components/templates/BadgeMakerTemplate';
 import { useUserFlowStore } from '@/hooks/useUserFlowStore';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/atoms/card';
+
 import { Button } from '@/components/atoms/button';
 
 export default function BadgePage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
-  const [waiverData, setWaiverData] = useState<any>(null);
+
   const [error, setError] = useState<string | null>(null);
   const { email, fullName, waiverId } = useUserFlowStore();
 
@@ -34,7 +34,6 @@ export default function BadgePage() {
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.waiver) {
-          setWaiverData(data.waiver);
           setIsLoading(false);
         } else {
           // No waiver found, redirect to landing
@@ -95,27 +94,6 @@ export default function BadgePage() {
 
   return (
     <BadgeMakerTemplate>
-      <div className="mb-8">
-        <Card className="bg-[#111111] border-[#5c5c5c]">
-          <CardHeader>
-            <CardTitle className="text-white text-xl">Waiver Completed ✅</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-gray-300 space-y-2">
-              <p><strong>Name:</strong> {waiverData?.fullName || fullName}</p>
-              <p><strong>Email:</strong> {waiverData?.email || email}</p>
-              <p><strong>Waiver ID:</strong> {waiverData?.id || waiverId}</p>
-              <p><strong>Signed:</strong> {new Date(waiverData?.signedAt || Date.now()).toLocaleDateString()}</p>
-            </div>
-            <div className="mt-4 p-3 bg-green-900/20 border border-green-500 rounded">
-              <p className="text-green-300 text-sm">
-                Your waiver has been successfully completed and is on file. You can now proceed to create your event badge.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      
       <BadgeCreationForm />
     </BadgeMakerTemplate>
   );
