@@ -18,7 +18,11 @@ export async function POST(request: NextRequest) {
       emergencyContact,
       emergencyPhone,
       signatureImage,
-      sessionId
+      sessionId,
+      dietaryRestrictions,
+      dietaryRestrictionsOther,
+      volunteeringInterests,
+      additionalNotes
     } = body;
 
     // Validate required fields
@@ -71,6 +75,10 @@ export async function POST(request: NextRequest) {
         date_of_birth: dateOfBirth,
         emergency_contact: emergencyContact,
         emergency_phone: emergencyPhone,
+        dietary_restrictions: dietaryRestrictions || [],
+        dietary_restrictions_other: dietaryRestrictionsOther || null,
+        volunteering_interests: volunteeringInterests || [],
+        additional_notes: additionalNotes || null,
         signature_data: {
           image: signatureImage,
           timestamp: pdfData.signedAt,
@@ -170,6 +178,10 @@ export async function GET(request: NextRequest) {
         dateOfBirth: waiver.date_of_birth,
         emergencyContact: waiver.emergency_contact,
         emergencyPhone: waiver.emergency_phone,
+        dietaryRestrictions: waiver.dietary_restrictions || [],
+        dietaryRestrictionsOther: waiver.dietary_restrictions_other || null,
+        volunteeringInterests: waiver.volunteering_interests || [],
+        additionalNotes: waiver.additional_notes || null,
         signedAt: waiver.signed_at,
         waiverVersion: waiver.waiver_version,
         pdfUrl: waiver.pdf_url

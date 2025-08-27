@@ -6,6 +6,10 @@ interface UserFlowState {
   email: string;
   fullName: string;
   dateOfBirth: Date;
+  dietaryRestrictions: string[];
+  dietaryRestrictionsOther: string;
+  volunteeringInterests: string[];
+  additionalNotes: string;
   
   // Waiver page data
   emergencyContact: string;
@@ -15,7 +19,15 @@ interface UserFlowState {
   waiverId: string | null;
   
   // Actions
-  setLandingData: (data: { email: string; fullName: string; dateOfBirth: Date }) => void;
+  setLandingData: (data: { 
+    email: string; 
+    fullName: string; 
+    dateOfBirth: Date;
+    dietaryRestrictions: string[];
+    dietaryRestrictionsOther: string;
+    volunteeringInterests: string[];
+    additionalNotes: string;
+  }) => void;
   setWaiverData: (data: { emergencyContact: string; emergencyPhone: string; signature: string | null; hasReadTerms: boolean }) => void;
   setSignature: (signature: string | null) => void;
   setHasReadTerms: (hasReadTerms: boolean) => void;
@@ -30,6 +42,10 @@ export const useUserFlowStore = create<UserFlowState>()(
       email: '',
       fullName: '',
       dateOfBirth: new Date('2000-01-01'),
+      dietaryRestrictions: [],
+      dietaryRestrictionsOther: '',
+      volunteeringInterests: [],
+      additionalNotes: '',
       emergencyContact: '',
       emergencyPhone: '',
       signature: null,
@@ -41,6 +57,10 @@ export const useUserFlowStore = create<UserFlowState>()(
         email: data.email,
         fullName: data.fullName,
         dateOfBirth: data.dateOfBirth,
+        dietaryRestrictions: data.dietaryRestrictions,
+        dietaryRestrictionsOther: data.dietaryRestrictionsOther,
+        volunteeringInterests: data.volunteeringInterests,
+        additionalNotes: data.additionalNotes,
       }),
       
       setWaiverData: (data) => set({
@@ -60,6 +80,10 @@ export const useUserFlowStore = create<UserFlowState>()(
         email: '',
         fullName: '',
         dateOfBirth: new Date('2000-01-01'),
+        dietaryRestrictions: [],
+        dietaryRestrictionsOther: '',
+        volunteeringInterests: [],
+        additionalNotes: '',
         emergencyContact: '',
         emergencyPhone: '',
         signature: null,

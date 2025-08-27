@@ -6,16 +6,30 @@ import { Button } from '@/components/atoms/button';
 import { Input } from '@/components/atoms/input';
 import { Label } from '@/components/atoms/label';
 import { DateOfBirthInput } from '@/components/molecules/DateOfBirthInput';
+import { DietaryAndVolunteeringForm } from '@/components/molecules/DietaryAndVolunteeringForm';
 import { useUserFlowStore } from '@/hooks/useUserFlowStore';
 
 export function LandingForm() {
   const router = useRouter();
-  const { email, fullName, dateOfBirth, setLandingData } = useUserFlowStore();
+  const { 
+    email, 
+    fullName, 
+    dateOfBirth, 
+    dietaryRestrictions,
+    dietaryRestrictionsOther,
+    volunteeringInterests,
+    additionalNotes,
+    setLandingData 
+  } = useUserFlowStore();
   
   const [formData, setFormData] = useState({
     email: email || '',
     fullName: fullName || '',
     dateOfBirth: dateOfBirth || new Date('2000-01-01'),
+    dietaryRestrictions: dietaryRestrictions || [],
+    dietaryRestrictionsOther: dietaryRestrictionsOther || '',
+    volunteeringInterests: volunteeringInterests || [],
+    additionalNotes: additionalNotes || '',
   });
 
   const handleInputChange = (field: string, value: any) => {
@@ -37,6 +51,10 @@ export function LandingForm() {
       email: formData.email,
       fullName: formData.fullName,
       dateOfBirth: formData.dateOfBirth,
+      dietaryRestrictions: formData.dietaryRestrictions,
+      dietaryRestrictionsOther: formData.dietaryRestrictionsOther,
+      volunteeringInterests: formData.volunteeringInterests,
+      additionalNotes: formData.additionalNotes,
     });
     router.push('/waiver');
   };
@@ -89,6 +107,20 @@ export function LandingForm() {
              onChange={(date) => handleInputChange('dateOfBirth', date)}
            />
         </div>
+      </div>
+
+      {/* Dietary and Volunteering Section */}
+      <div className="flex flex-col gap-5 w-full p-2.5">
+        <DietaryAndVolunteeringForm
+          dietaryRestrictions={formData.dietaryRestrictions}
+          dietaryRestrictionsOther={formData.dietaryRestrictionsOther}
+          volunteeringInterests={formData.volunteeringInterests}
+          additionalNotes={formData.additionalNotes}
+          onDietaryRestrictionsChange={(restrictions) => handleInputChange('dietaryRestrictions', restrictions)}
+          onDietaryRestrictionsOtherChange={(other) => handleInputChange('dietaryRestrictionsOther', other)}
+          onVolunteeringInterestsChange={(interests) => handleInputChange('volunteeringInterests', interests)}
+          onAdditionalNotesChange={(notes) => handleInputChange('additionalNotes', notes)}
+        />
       </div>
 
       {/* Submit Button */}
