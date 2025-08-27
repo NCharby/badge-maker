@@ -17,6 +17,10 @@ export function WaiverForm() {
     email, 
     fullName, 
     dateOfBirth, 
+    dietaryRestrictions,
+    dietaryRestrictionsOther,
+    volunteeringInterests,
+    additionalNotes,
     emergencyContact, 
     emergencyPhone, 
     signature, 
@@ -34,6 +38,10 @@ export function WaiverForm() {
     emergencyContact: emergencyContact || '',
     emergencyPhone: emergencyPhone || '',
     signature: signature,
+    dietaryRestrictions: dietaryRestrictions || [],
+    dietaryRestrictionsOther: dietaryRestrictionsOther || '',
+    volunteeringInterests: volunteeringInterests || [],
+    additionalNotes: additionalNotes || '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
@@ -110,7 +118,11 @@ export function WaiverForm() {
               emergencyContact: formData.emergencyContact,
               emergencyPhone: formData.emergencyPhone,
               signatureImage: formData.signature,
-              sessionId: null // We'll implement session management later
+              sessionId: null, // We'll implement session management later
+              dietaryRestrictions: formData.dietaryRestrictions || [],
+              dietaryRestrictionsOther: formData.dietaryRestrictionsOther || null,
+              volunteeringInterests: formData.volunteeringInterests || [],
+              additionalNotes: formData.additionalNotes || null
             };
 
             // Call PDF generation API
@@ -128,7 +140,7 @@ export function WaiverForm() {
               throw new Error(result.error || 'Failed to generate PDF');
             }
 
-            // Update Zustand store with waiver data
+            // Update Zustand store with waiver data (dietary/volunteering data comes from landing page)
             setWaiverData({
               emergencyContact: formData.emergencyContact,
               emergencyPhone: formData.emergencyPhone,
