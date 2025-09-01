@@ -25,7 +25,8 @@ export async function POST(request: NextRequest) {
       social_media_handles, 
       original_image_url, 
       cropped_image_url, 
-      crop_data 
+      crop_data,
+      waiver_id 
     } = body
 
     // Validate required fields
@@ -36,28 +37,50 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create a new session
-    const { data: session, error: sessionError } = await supabase
-      .from('sessions')
-      .insert({
-        session_data: { badge_name, email, social_media_handles }
-      })
-      .select()
-      .single()
+    // Check if waiver exists and is completed
+    let sessionId = null;
+    if (waiver_id) {
+      const { data: waiver, error: waiverError } = await supabase
+        .from('waivers')
+        .select('session_id')
+        .eq('id', waiver_id)
+        .single();
 
-    if (sessionError) {
-      console.error('Session creation error:', sessionError)
-      return NextResponse.json(
-        { error: 'Failed to create session' },
-        { status: 500 }
-      )
+      if (waiverError || !waiver) {
+        return NextResponse.json(
+          { error: 'Invalid or missing waiver' },
+          { status: 400 }
+        )
+      }
+      sessionId = waiver.session_id;
+    }
+
+    // Create a new session if no waiver session exists
+    if (!sessionId) {
+      const { data: session, error: sessionError } = await supabase
+        .from('sessions')
+        .insert({
+          session_data: { badge_name, email, social_media_handles }
+        })
+        .select()
+        .single()
+
+      if (sessionError) {
+        console.error('Session creation error:', sessionError)
+        return NextResponse.json(
+          { error: 'Failed to create session' },
+          { status: 500 }
+        )
+      }
+      sessionId = session.id;
     }
 
     // Create the badge
     const { data: badge, error: badgeError } = await supabase
       .from('badges')
       .insert({
-        session_id: session.id,
+        session_id: sessionId,
+        waiver_id: waiver_id || null,
         badge_name,
         email,
         original_image_url,
@@ -88,7 +111,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       badge_id: badge.id,
-      session_id: session.id,
+      session_id: sessionId,
       badge: {
         id: badge.id,
         badge_name: badge.badge_name,

@@ -124,17 +124,19 @@ module.exports = {
   			'slide-in-from-bottom': 'slide-in-from-bottom 0.3s ease-out',
   			'scale-in': 'scale-in 0.2s ease-out'
   		},
-  		fontFamily: {
-  			sans: [
-  				'Inter',
-  				'system-ui',
-  				'sans-serif'
-  			],
-  			mono: [
-  				'JetBrains Mono',
-  				'monospace'
-  			]
-  		},
+  				fontFamily: {
+			sans: [
+				'Inter',
+				'system-ui',
+				'sans-serif'
+			],
+			mono: [
+				'JetBrains Mono',
+				'monospace'
+			],
+			'montserrat': ['Montserrat', 'sans-serif'],
+			'open-sans': ['Open Sans', 'sans-serif']
+		},
   		spacing: {
   			'18': '4.5rem',
   			'88': '22rem',

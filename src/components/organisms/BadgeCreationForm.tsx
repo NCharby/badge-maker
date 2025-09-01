@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/atoms/card'
 import { Button } from '@/components/atoms/button'
 import { Input } from '@/components/atoms/input'
 import { Label } from '@/components/atoms/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/atoms/select'
 import { useBadgeStore } from '@/hooks/useBadgeStore'
+import { useUserFlowStore } from '@/hooks/useUserFlowStore'
 import { BadgePreview } from '@/components/organisms/BadgePreview'
 import { ImageUpload } from '@/components/molecules/ImageUpload'
 import { SocialMediaInput } from '@/components/molecules/SocialMediaInput'
@@ -40,24 +40,22 @@ const socialMediaPlatforms = [
 ]
 
 /**
- * BadgeCreationForm component that supports pre-population via query parameters
+ * BadgeCreationForm component that supports pre-population via waiver data
  * 
- * Query Parameters:
- * - email: Pre-populates the email field
- * - name: Pre-populates the badge name field
+ * Pre-population Sources:
+ * - Email and name from completed waiver (stored in Zustand)
+ * - Existing badge data from local storage
  * 
- * Example URLs:
- * - /test?email=user@example.com&name=John%20Doe
- * - /?email=alice@company.com&name=Alice%20Smith
+ * Note: Query parameters are now handled on the landing page for better UX
  */
 export function BadgeCreationForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { data, setData } = useBadgeStore()
-  const searchParams = useSearchParams()
+  const { email: waiverEmail, fullName: waiverName, waiverId } = useUserFlowStore()
   
-  // Get pre-populated values from query parameters
-  const prePopulatedEmail = searchParams.get('email') || data.email
-  const prePopulatedName = searchParams.get('name') || data.badge_name
+  // Get pre-populated values from waiver data first, then existing badge data
+  const prePopulatedEmail = waiverEmail || data.email
+  const prePopulatedName = waiverName || data.badge_name
   
   const form = useForm<BadgeFormData>({
     resolver: zodResolver(badgeSchema),
@@ -68,7 +66,7 @@ export function BadgeCreationForm() {
     }
   })
 
-  // Update form and store when query parameters change
+  // Update form and store when waiver data changes
   useEffect(() => {
     if (prePopulatedEmail !== data.email || prePopulatedName !== data.badge_name) {
       const updatedData = {
@@ -152,7 +150,8 @@ export function BadgeCreationForm() {
           crop_data: {
             // Add any crop data if needed
             timestamp: new Date().toISOString()
-          }
+          },
+          waiver_id: waiverId
         })
       })
       
