@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { BadgeCreationForm } from '@/components/organisms/BadgeCreationForm';
 import { BadgeMakerTemplate } from '@/components/templates/BadgeMakerTemplate';
 import { useUserFlowStore } from '@/hooks/useUserFlowStore';
-
 import { Button } from '@/components/atoms/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/atoms/card';
 
 export default function BadgePage() {
   const router = useRouter();

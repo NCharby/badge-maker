@@ -4,18 +4,19 @@ import { ServerClient } from 'postmark';
 const postmarkClient = new ServerClient(process.env.POSTMARK_API_KEY!);
 
 export interface EmailData {
-  to: string;
-  from: string;
-  subject: string;
-  htmlBody: string;
-  textBody: string;
-  attachments?: EmailAttachment[];
+  To: string;
+  From: string;
+  Subject: string;
+  HtmlBody: string;
+  TextBody: string;
+  Attachments?: EmailAttachment[];
 }
 
 export interface EmailAttachment {
-  name: string;
-  content: string; // Base64 encoded content
-  contentType: string;
+  Name: string;
+  Content: string; // Base64 encoded content
+  ContentType: string;
+  ContentID: string | null; // Content ID for attachments (null for regular attachments)
 }
 
 export interface WaiverEmailData {
@@ -44,9 +45,10 @@ export async function sendWaiverConfirmationEmail(data: WaiverEmailData): Promis
       const pdfContent = await downloadPDFContent(data.pdfUrl);
       attachments = [
         {
-          name: `waiver-${data.waiverId}.pdf`,
-          content: pdfContent,
-          contentType: 'application/pdf'
+          Name: `waiver-${data.waiverId}.pdf`,
+          Content: pdfContent,
+          ContentType: 'application/pdf',
+          ContentID: null
         }
       ];
     } catch (pdfError) {
@@ -55,12 +57,12 @@ export async function sendWaiverConfirmationEmail(data: WaiverEmailData): Promis
     }
     
     const emailData: EmailData = {
-      to: data.email,
-      from: process.env.POSTMARK_FROM_EMAIL || 'noreply@yourdomain.com',
-      subject: 'Your Event Waiver Confirmation',
-      htmlBody: createWaiverEmailHTML(data),
-      textBody: createWaiverEmailText(data),
-      attachments
+      To: data.email,
+      From: process.env.POSTMARK_FROM_EMAIL || 'noreply@yourdomain.com',
+      Subject: 'Your Event Waiver Confirmation',
+      HtmlBody: createWaiverEmailHTML(data),
+      TextBody: createWaiverEmailText(data),
+      Attachments: attachments
     };
 
     const result = await postmarkClient.sendEmail(emailData);

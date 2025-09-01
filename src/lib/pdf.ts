@@ -267,7 +267,7 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
  */
 async function generatePDFFromHTML(htmlContent: string): Promise<Buffer> {
   const browser = await puppeteer.launch({
-    headless: 'new',
+    headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
@@ -286,7 +286,7 @@ async function generatePDFFromHTML(htmlContent: string): Promise<Buffer> {
       }
     });
 
-    return pdfBuffer;
+    return Buffer.from(pdfBuffer);
   } finally {
     await browser.close();
   }
