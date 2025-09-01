@@ -50,12 +50,12 @@ export async function POST(request: NextRequest) {
       }
 
       const result = await sendEmail({
-        to,
-        from,
-        subject,
-        htmlBody,
-        textBody,
-        attachments
+        To: to,
+        From: from,
+        Subject: subject,
+        HtmlBody: htmlBody,
+        TextBody: textBody,
+        Attachments: attachments
       });
 
       if (!result.success) {

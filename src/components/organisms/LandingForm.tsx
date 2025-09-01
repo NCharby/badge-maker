@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/atoms/button';
 import { Input } from '@/components/atoms/input';
 import { Label } from '@/components/atoms/label';
@@ -9,8 +9,22 @@ import { DateOfBirthInput } from '@/components/molecules/DateOfBirthInput';
 import { DietaryAndVolunteeringForm } from '@/components/molecules/DietaryAndVolunteeringForm';
 import { useUserFlowStore } from '@/hooks/useUserFlowStore';
 
+/**
+ * LandingForm component that supports pre-population via query parameters
+ * 
+ * Query Parameters:
+ * - email: Pre-populates the email field
+ * - name: Pre-populates the full name field
+ * 
+ * Example URLs:
+ * - /landing?email=user@example.com&name=John%20Doe
+ * - /landing?email=alice@company.com&name=Alice%20Smith
+ * 
+ * This allows users to start the flow with pre-filled data for better UX
+ */
 export function LandingForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { 
     email, 
     fullName, 
@@ -22,15 +36,33 @@ export function LandingForm() {
     setLandingData 
   } = useUserFlowStore();
   
+  // Get pre-populated values from query parameters first, then store data, then defaults
+  const prePopulatedEmail = searchParams.get('email') || email || '';
+  const prePopulatedName = searchParams.get('name') || fullName || '';
+  
   const [formData, setFormData] = useState({
-    email: email || '',
-    fullName: fullName || '',
+    email: prePopulatedEmail,
+    fullName: prePopulatedName,
     dateOfBirth: dateOfBirth || new Date('2000-01-01'),
     dietaryRestrictions: dietaryRestrictions || [],
     dietaryRestrictionsOther: dietaryRestrictionsOther || '',
     volunteeringInterests: volunteeringInterests || [],
     additionalNotes: additionalNotes || '',
   });
+
+  // Update form when query parameters change
+  useEffect(() => {
+    const queryEmail = searchParams.get('email');
+    const queryName = searchParams.get('name');
+    
+    if (queryEmail || queryName) {
+      setFormData(prev => ({
+        ...prev,
+        email: queryEmail || prev.email,
+        fullName: queryName || prev.fullName,
+      }));
+    }
+  }, [searchParams]);
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({
