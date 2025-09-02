@@ -2,14 +2,22 @@
 
 ## PROJECT STATUS: PRODUCTION READY ✅
 
-The Badge Maker application is now **100% complete** and ready for production deployment. All core features have been implemented, tested, and optimized for both desktop and mobile use.
+The Badge Maker application with Waiver Signing is now **100% complete** and ready for production deployment. All core features have been implemented, tested, and optimized for both desktop and mobile use.
 
 ## 🎯 **Core Features Implemented**
+
+### ✅ **Event Waiver System**
+- **Complete waiver flow** from landing page to confirmation
+- **Digital signature capture** with react-signature-canvas
+- **PDF generation** server-side using Puppeteer
+- **Email confirmation** with PDF attachments via Postmark
+- **Data collection** for dietary restrictions and volunteering preferences
+- **Legal compliance** with audit trail and IP tracking
 
 ### ✅ **Form & Data Management**
 - **Complete form validation** with React Hook Form + Zod
 - **Real-time preview** with live badge updates
-- **Query parameter support** for pre-populating email and name fields
+- **Query parameter support** for pre-populating email and name fields on landing page
 - **Form reset functionality** that clears all fields including images
 - **Character counters** for badge name and social media handles
 
@@ -53,18 +61,22 @@ The Badge Maker application is now **100% complete** and ready for production de
 - **Tailwind CSS** for styling
 - **shadcn/ui** component library
 - **React Hook Form** + **Zod** for form management
-- **Zustand** for global state management
+- **Zustand** for global state management with persistence
 - **React Advanced Cropper** for image processing
+- **React Signature Canvas** for digital signature capture
 
 ### **Backend**
 - **Next.js API Routes** for server-side logic
 - **Supabase** for database and storage
 - **Row Level Security (RLS)** for data protection
-- **Signed URLs** for secure image access
+- **Signed URLs** for secure image and PDF access
+- **Puppeteer** for server-side PDF generation
+- **Postmark** for transactional email delivery
 
 ### **Database Schema**
-- **Sessions table** for badge creation flow
-- **Badges table** for storing badge data
+- **Sessions table** for badge creation flow with waiver tracking
+- **Badges table** for storing badge data linked to waivers
+- **Waivers table** for storing signed waiver data and preferences
 - **Templates table** for badge configurations
 - **Analytics table** for usage tracking
 
@@ -98,6 +110,31 @@ The Badge Maker application is now **100% complete** and ready for production de
 - **Email campaigns** with pre-filled user data
 - **Deep linking** with user information
 - **A/B testing** with different pre-populated data
+
+## 🔄 **Complete User Flow**
+
+### **1. Landing Page**
+- User enters email, name, date of birth
+- Selects dietary restrictions and volunteering preferences
+- Form data stored in Zustand with persistence
+
+### **2. Waiver Signing**
+- Pre-populated with landing page data
+- Emergency contact and phone number collection
+- Digital signature capture with validation
+- PDF generation and storage
+- Email confirmation with PDF attachment
+
+### **3. Badge Creation**
+- Pre-populated with waiver data
+- Photo upload and cropping
+- Social media handle configuration
+- Real-time preview updates
+
+### **4. Confirmation**
+- Complete badge and waiver summary
+- Download links for both documents
+- Success confirmation and next steps
 
 ## 🎨 **Design System**
 

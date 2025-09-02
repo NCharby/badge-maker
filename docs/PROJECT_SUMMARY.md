@@ -4,15 +4,22 @@
 
 **Last Updated**: December 2024  
 **Status**: 100% Complete - All features implemented and tested  
-**Version**: 1.0.0
+**Version**: 2.0.0
 
 ---
 
 ## 🎯 **Project Overview**
 
-The Badge Maker is a modern, responsive web application that allows users to create personalized badges with their photo, name, and social media handles. Built with Next.js 14, TypeScript, and Supabase, it provides a seamless user experience with advanced image processing capabilities.
+The Badge Maker is a modern, responsive web application that allows users to complete event waivers and create personalized badges with their photo, name, and social media handles. Built with Next.js 14, TypeScript, and Supabase, it provides a complete event management solution with digital waiver signing, PDF generation, and advanced image processing capabilities.
 
 ## ✨ **Key Features**
+
+### **📋 Event Waiver System**
+- **Digital Waiver Signing**: Complete event waivers with digital signatures
+- **PDF Generation**: Server-side PDF generation with Puppeteer
+- **Email Confirmation**: Automatic email delivery with PDF attachments
+- **Data Collection**: Dietary restrictions and volunteering preferences
+- **Legal Compliance**: Legally binding digital signatures with audit trail
 
 ### **🎨 Badge Creation**
 - **Real-time Preview**: Live badge updates as users type
@@ -53,6 +60,22 @@ The Badge Maker is a modern, responsive web application that allows users to cre
 - **Input Validation**: Comprehensive validation on all inputs
 - **Error Handling**: Graceful error recovery throughout
 
+## 🔄 **User Flow**
+
+### **Complete Event Experience**
+1. **Landing Page** → User enters personal information and preferences
+2. **Waiver Signing** → Digital signature and legal agreement
+3. **Badge Creation** → Design personalized event badge
+4. **Confirmation** → Complete with waiver and badge details
+
+### **Data Flow**
+- **Landing Form**: Email, name, date of birth, dietary restrictions, volunteering preferences
+- **Waiver Form**: Emergency contact, emergency phone, digital signature
+- **Badge Form**: Badge name, social media handles, photo upload
+- **Storage**: All data securely stored in Supabase with audit trails
+
+---
+
 ## 🛠 **Technical Stack**
 
 ### **Frontend**
@@ -62,14 +85,17 @@ The Badge Maker is a modern, responsive web application that allows users to cre
 - **Tailwind CSS**: Utility-first styling with custom design system
 - **shadcn/ui**: High-quality component library
 - **React Hook Form**: Form management with Zod validation
-- **Zustand**: Lightweight state management
+- **Zustand**: Lightweight state management with persistence
 - **React Advanced Cropper**: Professional image editing
+- **React Signature Canvas**: Digital signature capture
 
 ### **Backend**
 - **Next.js API Routes**: Server-side logic and endpoints
 - **Supabase**: Database, storage, and authentication
 - **PostgreSQL**: Relational database with RLS policies
-- **Signed URLs**: Secure, temporary image access
+- **Signed URLs**: Secure, temporary image and PDF access
+- **Puppeteer**: Server-side PDF generation
+- **Postmark**: Transactional email service
 
 ### **Development**
 - **ESLint**: Code quality and consistency

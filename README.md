@@ -1,16 +1,23 @@
-# Badge Maker - Conference Badge Generator
+# Badge Maker - Event Badge Generator with Waiver Signing
 
-A modern, production-ready Next.js application that allows users to create personalized conference badges with advanced image processing, live preview, and secure storage.
+A modern, production-ready Next.js application that allows users to complete event waivers and create personalized badges with advanced image processing, live preview, and secure storage.
 
 ## 🎉 PROJECT STATUS: PRODUCTION READY ✅
 
 **Last Updated**: December 2024  
 **Status**: 100% Complete - All features implemented and tested  
-**Version**: 1.0.0
+**Version**: 2.0.0
 
 ---
 
 ## ✨ Features
+
+### 📋 **Event Waiver System**
+- **Digital Waiver Signing**: Complete event waivers with digital signatures
+- **PDF Generation**: Server-side PDF generation with Puppeteer
+- **Email Confirmation**: Automatic email delivery with PDF attachments
+- **Data Collection**: Dietary restrictions and volunteering preferences
+- **Legal Compliance**: Legally binding digital signatures with audit trail
 
 ### 🎨 **Badge Creation**
 - **Real-time Preview**: Live badge updates as users type
@@ -34,10 +41,10 @@ A modern, production-ready Next.js application that allows users to create perso
 - **Up to 3 Handles**: Individual platform selection for each
 
 ### 🔗 **External Integration**
-- **Query Parameters**: Pre-populate email and name via URL
+- **Query Parameters**: Pre-populate email and name via URL on landing page
 - **Deep Linking**: Direct access with user information
 - **External Apps**: Easy integration with other applications
-- **Email Campaigns**: Personalized badge creation links
+- **Email Campaigns**: Personalized waiver and badge creation links
 
 ### 📱 **Mobile Responsiveness**
 - **Responsive Scaling**: Badge preview adapts to screen size
@@ -62,14 +69,17 @@ A modern, production-ready Next.js application that allows users to create perso
 - **Tailwind CSS**: Utility-first styling with custom design system
 - **shadcn/ui**: High-quality component library
 - **React Hook Form**: Form management with Zod validation
-- **Zustand**: Lightweight state management
+- **Zustand**: Lightweight state management with persistence
 - **React Advanced Cropper**: Professional image editing
+- **React Signature Canvas**: Digital signature capture
 
 ### **Backend**
 - **Next.js API Routes**: Server-side logic and endpoints
 - **Supabase**: Database, storage, and authentication
 - **PostgreSQL**: Relational database with RLS policies
-- **Signed URLs**: Secure, temporary image access
+- **Signed URLs**: Secure, temporary image and PDF access
+- **Puppeteer**: Server-side PDF generation
+- **Postmark**: Transactional email service
 
 ### **Development**
 - **ESLint**: Code quality and consistency
@@ -79,13 +89,30 @@ A modern, production-ready Next.js application that allows users to create perso
 
 ---
 
+## 🔄 User Flow
+
+### **Complete Event Experience**
+1. **Landing Page** → User enters personal information and preferences
+2. **Waiver Signing** → Digital signature and legal agreement
+3. **Badge Creation** → Design personalized event badge
+4. **Confirmation** → Complete with waiver and badge details
+
+### **Data Flow**
+- **Landing Form**: Email, name, date of birth, dietary restrictions, volunteering preferences
+- **Waiver Form**: Emergency contact, emergency phone, digital signature
+- **Badge Form**: Badge name, social media handles, photo upload
+- **Storage**: All data securely stored in Supabase with audit trails
+
+---
+
 ## 🚀 Quick Start Guide
 
 ### Prerequisites
 
 - **Node.js 18+** 
 - **npm or yarn**
-- **Supabase account** (for full functionality)
+- **Supabase account** (for database and storage)
+- **Postmark account** (for email delivery)
 
 ### 1. Clone and Install
 
@@ -105,12 +132,21 @@ npm install
 cp .env.example .env.local
 ```
 
-Edit `.env.local` and add your Supabase credentials:
+Edit `.env.local` and add your credentials:
 
 ```env
+# Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# Email Configuration (Postmark)
+POSTMARK_API_KEY=your_postmark_api_key
+POSTMARK_FROM_EMAIL=noreply@yourdomain.com
+
+# App Configuration
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+WAIVER_VERSION=1.0.0
 ```
 
 ### 3. Supabase Configuration
@@ -118,50 +154,34 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 #### Create Database Schema
 1. Go to your Supabase dashboard
 2. Navigate to SQL Editor
-3. Run the schema from `supabase/schema.sql`:
+3. Run the migrations in order:
 
+**First, run the main schema:**
 ```sql
--- Create sessions table
-CREATE TABLE sessions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  expires_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() + INTERVAL '24 hours')
-);
-
--- Create badges table
-CREATE TABLE badges (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id UUID REFERENCES sessions(id),
-  badge_name TEXT NOT NULL,
-  email TEXT NOT NULL,
-  social_media_handles JSONB NOT NULL,
-  original_image_url TEXT,
-  cropped_image_url TEXT,
-  crop_data JSONB,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create templates table
-CREATE TABLE templates (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  description TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create analytics table
-CREATE TABLE analytics (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  event_type TEXT NOT NULL,
-  event_data JSONB,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+-- From supabase/schema.sql
+-- Creates sessions, badges, templates, and analytics tables
 ```
+
+**Then, run the waiver migration:**
+```sql
+-- From supabase/waivers_migration.sql
+-- Creates waivers table and updates sessions table
+```
+
+**Finally, run the dietary/volunteering migration:**
+```sql
+-- From supabase/add_dietary_volunteering_columns.sql
+-- Adds dietary and volunteering preference columns
+```
+
+> 📚 **For detailed setup instructions, see [supabase/README_MIGRATIONS.md](supabase/README_MIGRATIONS.md)**
 
 #### Set Up Storage
 1. Go to Storage in your Supabase dashboard
-2. Create a new bucket called `badge-images`
-3. Set it as **private** (not public)
+2. Create two buckets:
+   - `badge-images` (for badge photos)
+   - `waiver-documents` (for signed waiver PDFs)
+3. Set both as **private** (not public)
 4. Run the storage policies from `supabase/storage.sql`:
 
 ```sql
@@ -180,6 +200,13 @@ CREATE POLICY "Users can view images for their session" ON storage.objects
     bucket_id = 'badge-images' AND
     (storage.foldername(name))[1] = current_setting('app.session_id', true)
   );
+
+-- Create policies for waiver-documents bucket
+CREATE POLICY "Users can upload waiver PDFs" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'waiver-documents');
+
+CREATE POLICY "Users can view waiver PDFs" ON storage.objects
+  FOR SELECT USING (bucket_id = 'waiver-documents');
 ```
 
 ### 4. Start Development Server
@@ -193,8 +220,10 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### 5. Test the Application
 
-1. **Basic Functionality**: Fill out the form and see live preview updates
-2. **Image Upload**: Try uploading an image and using the cropper
+1. **Landing Page**: Fill out personal information and preferences
+2. **Waiver Signing**: Complete the digital waiver with signature
+3. **Badge Creation**: Design your badge with photo and social media
+4. **Email Confirmation**: Check for waiver confirmation email with PDF
 3. **Social Media**: Add social media handles with different platforms
 4. **Query Parameters**: Test pre-population with `?email=test@example.com&name=Test User`
 5. **Mobile Responsiveness**: Test on different screen sizes
