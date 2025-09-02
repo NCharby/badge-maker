@@ -19,7 +19,8 @@ export function WaiverForm({ eventSlug }: WaiverFormProps) {
   const router = useRouter();
   const { 
     email, 
-    fullName, 
+    firstName, 
+    lastName, 
     dateOfBirth, 
     dietaryRestrictions,
     dietaryRestrictionsOther,
@@ -36,7 +37,8 @@ export function WaiverForm({ eventSlug }: WaiverFormProps) {
   } = useUserFlowStore();
   
   const [formData, setFormData] = useState({
-    fullName: fullName || '',
+    firstName: firstName || '',
+    lastName: lastName || '',
     email: email || '',
     dateOfBirth: dateOfBirth || new Date('2000-01-01'),
     emergencyContact: emergencyContact || '',
@@ -69,8 +71,12 @@ export function WaiverForm({ eventSlug }: WaiverFormProps) {
   const validateForm = () => {
     const errors: {[key: string]: string} = {};
     
-    if (!formData.fullName.trim()) {
-      errors.fullName = 'Full name is required';
+    if (!formData.firstName.trim()) {
+      errors.firstName = 'First name is required';
+    }
+    
+    if (!formData.lastName.trim()) {
+      errors.lastName = 'Last name is required';
     }
     
     if (!formData.email.trim()) {
@@ -116,7 +122,8 @@ export function WaiverForm({ eventSlug }: WaiverFormProps) {
           try {
             // Prepare waiver data for PDF generation
             const waiverData = {
-              fullName: formData.fullName,
+              firstName: formData.firstName,
+              lastName: formData.lastName,
               email: formData.email,
               dateOfBirth: formData.dateOfBirth.toISOString().split('T')[0], // Format as YYYY-MM-DD
               emergencyContact: formData.emergencyContact,
@@ -237,23 +244,44 @@ export function WaiverForm({ eventSlug }: WaiverFormProps) {
                </p>
                
                <div className="space-y-4 mt-4">
-                                                     <div className="flex flex-col space-y-2">
-                    <Label className="text-white font-montserrat text-sm">
-                      Full Legal Name <span className="text-red-400">*</span>
-                    </Label>
-                    <Input
-                      type="text"
-                      value={formData.fullName}
-                      onChange={(e) => handleInputChange('fullName', e.target.value)}
-                      placeholder="Enter your full legal name"
-                      className={`bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm ${
-                        showValidation && validationErrors.fullName ? 'border-red-500' : ''
-                      }`}
-                      required
-                    />
-                    {showValidation && validationErrors.fullName && (
-                      <p className="text-red-400 text-xs mt-1">{validationErrors.fullName}</p>
-                    )}
+                                                     <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col space-y-2">
+                      <Label className="text-white font-montserrat text-sm">
+                        First Name <span className="text-red-400">*</span>
+                      </Label>
+                      <Input
+                        type="text"
+                        value={formData.firstName}
+                        onChange={(e) => handleInputChange('firstName', e.target.value)}
+                        placeholder="Enter your first name"
+                        className={`bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm ${
+                          showValidation && validationErrors.firstName ? 'border-red-500' : ''
+                        }`}
+                        required
+                      />
+                      {showValidation && validationErrors.firstName && (
+                        <p className="text-red-400 text-xs mt-1">{validationErrors.firstName}</p>
+                      )}
+                    </div>
+                    
+                    <div className="flex flex-col space-y-2">
+                      <Label className="text-white font-montserrat text-sm">
+                        Last Name <span className="text-red-400">*</span>
+                      </Label>
+                      <Input
+                        type="text"
+                        value={formData.lastName}
+                        onChange={(e) => handleInputChange('lastName', e.target.value)}
+                        placeholder="Enter your last name"
+                        className={`bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] text-sm ${
+                          showValidation && validationErrors.lastName ? 'border-red-500' : ''
+                        }`}
+                        required
+                      />
+                      {showValidation && validationErrors.lastName && (
+                        <p className="text-red-400 text-xs mt-1">{validationErrors.lastName}</p>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex flex-col space-y-2">
@@ -376,7 +404,7 @@ export function WaiverForm({ eventSlug }: WaiverFormProps) {
                 handleInputChange('signature', signature);
                 setSignature(signature);
               }}
-              isFormValid={!isSubmitting && hasReadTerms && !!formData.signature && !!formData.fullName && !!formData.email && !!formData.emergencyContact && !!formData.emergencyPhone && formData.dateOfBirth && !isNaN(formData.dateOfBirth.getTime())}
+              isFormValid={!isSubmitting && hasReadTerms && !!formData.signature && !!formData.firstName && !!formData.lastName && !!formData.email && !!formData.emergencyContact && !!formData.emergencyPhone && formData.dateOfBirth && !isNaN(formData.dateOfBirth.getTime())}
               onSubmit={() => {
                 const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
                 handleSubmit(fakeEvent);

@@ -7,7 +7,8 @@ interface UserFlowState {
   
   // Landing page data
   email: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   dateOfBirth: Date;
   dietaryRestrictions: string[];
   dietaryRestrictionsOther: string;
@@ -25,7 +26,8 @@ interface UserFlowState {
   setEventSlug: (eventSlug: string) => void;
   setLandingData: (data: { 
     email: string; 
-    fullName: string; 
+    firstName: string;
+    lastName: string;
     dateOfBirth: Date;
     dietaryRestrictions: string[];
     dietaryRestrictionsOther: string;
@@ -45,7 +47,8 @@ export const useUserFlowStore = create<UserFlowState>()(
       // Initial state
       eventSlug: '',
       email: '',
-      fullName: '',
+      firstName: '',
+      lastName: '',
       dateOfBirth: new Date('2000-01-01'),
       dietaryRestrictions: [],
       dietaryRestrictionsOther: '',
@@ -61,7 +64,8 @@ export const useUserFlowStore = create<UserFlowState>()(
       setEventSlug: (eventSlug) => set({ eventSlug }),
       setLandingData: (data) => set({
         email: data.email,
-        fullName: data.fullName,
+        firstName: data.firstName,
+        lastName: data.lastName,
         dateOfBirth: data.dateOfBirth,
         dietaryRestrictions: data.dietaryRestrictions,
         dietaryRestrictionsOther: data.dietaryRestrictionsOther,
@@ -85,7 +89,8 @@ export const useUserFlowStore = create<UserFlowState>()(
       clearAll: () => set({
         eventSlug: '',
         email: '',
-        fullName: '',
+        firstName: '',
+        lastName: '',
         dateOfBirth: new Date('2000-01-01'),
         dietaryRestrictions: [],
         dietaryRestrictionsOther: '',

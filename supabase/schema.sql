@@ -8,9 +8,35 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TYPE badge_status AS ENUM ('draft', 'published', 'archived');
 CREATE TYPE social_media_platform AS ENUM ('x', 'bluesky', 'telegram', 'recon', 'furaffinity', 'fetlife', 'discord', 'instagram', 'other');
 
+-- Templates table (must be created first for events to reference)
+CREATE TABLE public.templates (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  config JSONB NOT NULL,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Events table for multi-event support
+CREATE TABLE public.events (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  start_date DATE,
+  end_date DATE,
+  is_active BOOLEAN DEFAULT true,
+  template_id TEXT REFERENCES public.templates(id), -- Single template per event
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Sessions table for single-session badge creation
 CREATE TABLE public.sessions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  event_id UUID REFERENCES public.events(id) ON DELETE SET NULL,
   session_data JSONB DEFAULT '{}',
   waiver_completed BOOLEAN DEFAULT false,
   waiver_id UUID,
@@ -22,7 +48,9 @@ CREATE TABLE public.sessions (
 CREATE TABLE public.waivers (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   session_id UUID REFERENCES public.sessions(id) ON DELETE CASCADE,
-  full_name TEXT NOT NULL,
+  event_id UUID REFERENCES public.events(id) ON DELETE CASCADE,
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
   email TEXT NOT NULL,
   date_of_birth DATE NOT NULL,
   emergency_contact TEXT NOT NULL,
@@ -54,21 +82,11 @@ ALTER TABLE public.sessions
 ADD CONSTRAINT fk_sessions_waiver_id 
 FOREIGN KEY (waiver_id) REFERENCES public.waivers(id) ON DELETE SET NULL;
 
--- Templates table
-CREATE TABLE public.templates (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  description TEXT,
-  config JSONB NOT NULL,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
 -- Badges table
 CREATE TABLE public.badges (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   session_id UUID REFERENCES public.sessions(id) ON DELETE CASCADE,
+  event_id UUID REFERENCES public.events(id) ON DELETE CASCADE,
   badge_name TEXT NOT NULL, -- Display name for the badge
   email TEXT NOT NULL,
   -- Image storage fields
@@ -96,24 +114,35 @@ CREATE TABLE public.analytics (
 );
 
 -- Create indexes for better performance
+CREATE INDEX idx_events_slug ON public.events(slug);
+CREATE INDEX idx_events_active ON public.events(is_active);
+CREATE INDEX idx_sessions_event_id ON public.sessions(event_id);
 CREATE INDEX idx_badges_session_id ON public.badges(session_id);
+CREATE INDEX idx_badges_event_id ON public.badges(event_id);
 CREATE INDEX idx_badges_status ON public.badges(status);
 CREATE INDEX idx_badges_created_at ON public.badges(created_at);
 CREATE INDEX idx_templates_active ON public.templates(is_active);
 CREATE INDEX idx_analytics_event_type ON public.analytics(event_type);
 CREATE INDEX idx_analytics_created_at ON public.analytics(created_at);
 CREATE INDEX idx_waivers_session_id ON public.waivers(session_id);
+CREATE INDEX idx_waivers_event_id ON public.waivers(event_id);
 CREATE INDEX idx_waivers_email ON public.waivers(email);
 CREATE INDEX idx_waivers_signed_at ON public.waivers(signed_at);
+CREATE INDEX idx_waivers_names ON public.waivers(first_name, last_name);
 CREATE INDEX idx_waivers_dietary_restrictions ON public.waivers USING GIN(dietary_restrictions);
 CREATE INDEX idx_waivers_volunteering_interests ON public.waivers USING GIN(volunteering_interests);
 
 -- Enable Row Level Security
+ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.waivers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.badges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.analytics ENABLE ROW LEVEL SECURITY;
+
+-- Events policies
+CREATE POLICY "Anyone can view active events" ON public.events
+  FOR SELECT USING (is_active = true);
 
 -- Sessions policies
 CREATE POLICY "Anyone can create sessions" ON public.sessions
@@ -247,6 +276,11 @@ INSERT INTO public.templates (id, name, description, config) VALUES
     }
   }'
 );
+
+-- Insert default event for multi-event support
+INSERT INTO public.events (slug, name, description, start_date, end_date, template_id) VALUES
+('default', 'Default Event', 'Default event for legacy support', NULL, NULL, 'badge-maker-default')
+ON CONFLICT (slug) DO NOTHING;
 
 -- Create storage buckets for images and waiver documents
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

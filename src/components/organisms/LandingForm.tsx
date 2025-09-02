@@ -31,7 +31,8 @@ export function LandingForm({ eventSlug }: LandingFormProps) {
   const searchParams = useSearchParams();
   const { 
     email, 
-    fullName, 
+    firstName, 
+    lastName, 
     dateOfBirth, 
     dietaryRestrictions,
     dietaryRestrictionsOther,
@@ -43,11 +44,13 @@ export function LandingForm({ eventSlug }: LandingFormProps) {
   
   // Get pre-populated values from query parameters first, then store data, then defaults
   const prePopulatedEmail = searchParams.get('email') || email || '';
-  const prePopulatedName = searchParams.get('name') || fullName || '';
+  const prePopulatedFirstName = searchParams.get('firstName') || firstName || '';
+  const prePopulatedLastName = searchParams.get('lastName') || lastName || '';
   
   const [formData, setFormData] = useState({
     email: prePopulatedEmail,
-    fullName: prePopulatedName,
+    firstName: prePopulatedFirstName,
+    lastName: prePopulatedLastName,
     dateOfBirth: dateOfBirth || new Date('2000-01-01'),
     dietaryRestrictions: dietaryRestrictions || [],
     dietaryRestrictionsOther: dietaryRestrictionsOther || '',
@@ -61,13 +64,15 @@ export function LandingForm({ eventSlug }: LandingFormProps) {
     setEventSlug(eventSlug);
     
     const queryEmail = searchParams.get('email');
-    const queryName = searchParams.get('name');
+    const queryFirstName = searchParams.get('firstName');
+    const queryLastName = searchParams.get('lastName');
     
-    if (queryEmail || queryName) {
+    if (queryEmail || queryFirstName || queryLastName) {
       setFormData(prev => ({
         ...prev,
         email: queryEmail || prev.email,
-        fullName: queryName || prev.fullName,
+        firstName: queryFirstName || prev.firstName,
+        lastName: queryLastName || prev.lastName,
       }));
     }
   }, [eventSlug, searchParams, setEventSlug]);
@@ -81,7 +86,7 @@ export function LandingForm({ eventSlug }: LandingFormProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.email || !formData.fullName) {
+    if (!formData.email || !formData.firstName || !formData.lastName) {
       alert('Please fill in all required fields');
       return;
     }
@@ -89,7 +94,8 @@ export function LandingForm({ eventSlug }: LandingFormProps) {
     // Store form data in Zustand store
     setLandingData({
       email: formData.email,
-      fullName: formData.fullName,
+      firstName: formData.firstName,
+      lastName: formData.lastName,
       dateOfBirth: formData.dateOfBirth,
       dietaryRestrictions: formData.dietaryRestrictions,
       dietaryRestrictionsOther: formData.dietaryRestrictionsOther,
@@ -129,23 +135,38 @@ export function LandingForm({ eventSlug }: LandingFormProps) {
         <div className="flex gap-6 items-start justify-start w-full">
           <div className="flex flex-col gap-2 flex-1">
             <Label className="font-montserrat font-normal text-white text-base">
-              Legal Name*
+              First Name*
             </Label>
             <Input 
               type="text"
-              value={formData.fullName}
-              onChange={(e) => handleInputChange('fullName', e.target.value)}
-              placeholder="Your Name"
+              value={formData.firstName}
+              onChange={(e) => handleInputChange('firstName', e.target.value)}
+              placeholder="First Name"
               className="w-full bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] h-12"
               required
             />
           </div>
           <div className="flex flex-col gap-2 flex-1">
-            <DateOfBirthInput 
-              value={formData.dateOfBirth}
-              onChange={(date) => handleInputChange('dateOfBirth', date)}
+            <Label className="font-montserrat font-normal text-white text-base">
+              Last Name*
+            </Label>
+            <Input 
+              type="text"
+              value={formData.lastName}
+              onChange={(e) => handleInputChange('lastName', e.target.value)}
+              placeholder="Last Name"
+              className="w-full bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] h-12"
+              required
             />
           </div>
+        </div>
+        
+        {/* Date of Birth */}
+        <div className="flex flex-col gap-2 w-full">
+          <DateOfBirthInput 
+            value={formData.dateOfBirth}
+            onChange={(date) => handleInputChange('dateOfBirth', date)}
+          />
         </div>
       </div>
 
