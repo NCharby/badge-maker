@@ -12,7 +12,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
-      fullName,
+      firstName,
+      lastName,
       email,
       dateOfBirth,
       emergencyContact,
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!fullName || !email || !dateOfBirth || !emergencyContact || !emergencyPhone || !signatureImage) {
+    if (!firstName || !lastName || !email || !dateOfBirth || !emergencyContact || !emergencyPhone || !signatureImage) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     // Prepare PDF data
     const pdfData: WaiverPDFData = {
-      fullName,
+      fullName: `${firstName} ${lastName}`,
       email,
       dateOfBirth,
       emergencyContact,
@@ -70,7 +71,9 @@ export async function POST(request: NextRequest) {
       .from('waivers')
       .insert({
         session_id: sessionId,
-        full_name: fullName,
+        event_id: (await supabase.from('events').select('id').eq('slug', 'default').single()).data?.id,
+        first_name: firstName,
+        last_name: lastName,
         email: email,
         date_of_birth: dateOfBirth,
         emergency_contact: emergencyContact,
@@ -119,7 +122,7 @@ export async function POST(request: NextRequest) {
     let emailResult: EmailResult = { success: false, messageId: undefined };
     if (result.pdfUrl) {
       emailResult = await sendWaiverConfirmationEmail({
-        fullName,
+        fullName: `${firstName} ${lastName}`,
         email,
         waiverId: waiverData.id,
         pdfUrl: result.pdfUrl,
@@ -176,7 +179,8 @@ export async function GET(request: NextRequest) {
       success: true,
       waiver: {
         id: waiver.id,
-        fullName: waiver.full_name,
+        firstName: waiver.first_name,
+        lastName: waiver.last_name,
         email: waiver.email,
         dateOfBirth: waiver.date_of_birth,
         emergencyContact: waiver.emergency_contact,

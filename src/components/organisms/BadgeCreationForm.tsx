@@ -55,11 +55,11 @@ interface BadgeCreationFormProps {
 export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { data, setData } = useBadgeStore()
-  const { email: waiverEmail, fullName: waiverName, waiverId } = useUserFlowStore()
+  const { email: waiverEmail, firstName, lastName, waiverId } = useUserFlowStore()
   
   // Get pre-populated values from waiver data first, then existing badge data
   const prePopulatedEmail = waiverEmail || data.email
-  const prePopulatedName = waiverName || data.badge_name
+  const prePopulatedName = `${firstName} ${lastName}`.trim() || data.badge_name
   
   const form = useForm<BadgeFormData>({
     resolver: zodResolver(badgeSchema),
