@@ -87,6 +87,7 @@ CREATE TABLE public.badges (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   session_id UUID REFERENCES public.sessions(id) ON DELETE CASCADE,
   event_id UUID REFERENCES public.events(id) ON DELETE CASCADE,
+  waiver_id UUID REFERENCES public.waivers(id) ON DELETE SET NULL,
   badge_name TEXT NOT NULL, -- Display name for the badge
   email TEXT NOT NULL,
   -- Image storage fields
@@ -119,6 +120,7 @@ CREATE INDEX idx_events_active ON public.events(is_active);
 CREATE INDEX idx_sessions_event_id ON public.sessions(event_id);
 CREATE INDEX idx_badges_session_id ON public.badges(session_id);
 CREATE INDEX idx_badges_event_id ON public.badges(event_id);
+CREATE INDEX idx_badges_waiver_id ON public.badges(waiver_id);
 CREATE INDEX idx_badges_status ON public.badges(status);
 CREATE INDEX idx_badges_created_at ON public.badges(created_at);
 CREATE INDEX idx_templates_active ON public.templates(is_active);
