@@ -86,15 +86,15 @@ export function DietaryAndVolunteeringForm({
         <Label className="font-montserrat font-normal text-white text-base">
           Dietary Restrictions
         </Label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-4">
           {dietaryOptions.map((option) => (
-            <div key={option} className="flex items-center space-x-2">
+            <div key={option} className="flex items-center space-x-3">
               <input
                 type="checkbox"
                 id={`dietary-${option}`}
                 checked={dietaryRestrictions.includes(option)}
                 onChange={(e) => handleDietaryRestrictionChange(option, e.target.checked)}
-                className="w-4 h-4 text-blue-600 bg-transparent border-[#5c5c5c] rounded focus:ring-blue-500"
+                className="w-4 h-4 text-white bg-transparent border-[#5c5c5c] rounded focus:ring-white focus:ring-2"
               />
               <Label 
                 htmlFor={`dietary-${option}`} 
@@ -114,7 +114,7 @@ export function DietaryAndVolunteeringForm({
               value={dietaryRestrictionsOther}
               onChange={(e) => onDietaryRestrictionsOtherChange(e.target.value)}
               placeholder="Please specify your dietary restrictions..."
-              className="w-full bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px]"
+              className="w-full bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] h-12"
             />
           </div>
         )}
@@ -125,15 +125,15 @@ export function DietaryAndVolunteeringForm({
         <Label className="font-montserrat font-normal text-white text-base">
           Are you interested in volunteering?
         </Label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-4">
           {volunteeringOptions.map((option) => (
-            <div key={option} className="flex items-center space-x-2">
+            <div key={option} className="flex items-center space-x-3">
               <input
                 type="checkbox"
                 id={`volunteering-${option}`}
                 checked={volunteeringInterests.includes(option)}
                 onChange={(e) => handleVolunteeringInterestChange(option, e.target.checked)}
-                className="w-4 h-4 text-blue-600 bg-transparent border-[#5c5c5c] rounded focus:ring-blue-500"
+                className="w-4 h-4 text-white bg-transparent border-[#5c5c5c] rounded focus:ring-white focus:ring-2"
               />
               <Label 
                 htmlFor={`volunteering-${option}`} 

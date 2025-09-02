@@ -22,7 +22,11 @@ import { useUserFlowStore } from '@/hooks/useUserFlowStore';
  * 
  * This allows users to start the flow with pre-filled data for better UX
  */
-export function LandingForm() {
+interface LandingFormProps {
+  eventSlug: string;
+}
+
+export function LandingForm({ eventSlug }: LandingFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { 
@@ -33,7 +37,8 @@ export function LandingForm() {
     dietaryRestrictionsOther,
     volunteeringInterests,
     additionalNotes,
-    setLandingData 
+    setLandingData,
+    setEventSlug
   } = useUserFlowStore();
   
   // Get pre-populated values from query parameters first, then store data, then defaults
@@ -50,8 +55,11 @@ export function LandingForm() {
     additionalNotes: additionalNotes || '',
   });
 
-  // Update form when query parameters change
+  // Set event context and update form when query parameters change
   useEffect(() => {
+    // Set event context
+    setEventSlug(eventSlug);
+    
     const queryEmail = searchParams.get('email');
     const queryName = searchParams.get('name');
     
@@ -62,7 +70,7 @@ export function LandingForm() {
         fullName: queryName || prev.fullName,
       }));
     }
-  }, [searchParams]);
+  }, [eventSlug, searchParams, setEventSlug]);
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({
@@ -88,40 +96,38 @@ export function LandingForm() {
       volunteeringInterests: formData.volunteeringInterests,
       additionalNotes: formData.additionalNotes,
     });
-    router.push('/waiver');
+    router.push(`/${eventSlug}/waiver`);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-[#111111] flex flex-col gap-5 items-start justify-center px-5 py-8 rounded-[10px] w-full">
-      <h2 className="font-montserrat font-normal text-white text-3xl text-left w-full">
+    <form onSubmit={handleSubmit} className="bg-[#1a1a1a] flex flex-col gap-6 items-start justify-center px-8 py-10 rounded-[10px] w-full border border-[#333333]">
+      <h2 className="font-montserrat font-normal text-white text-3xl text-left w-full mb-2">
         HELLO
       </h2>
-      <p className="font-open-sans font-normal text-white text-base">
+      <p className="font-open-sans font-normal text-white text-base mb-6">
         Thank you for being here! We need a few details from you.
       </p>
       
       {/* Form Fields */}
-      <div className="flex flex-col gap-5 w-full p-2.5">
+      <div className="flex flex-col gap-6 w-full">
         {/* Email Input */}
-        <div className="flex gap-2.5 items-start justify-start w-full">
-          <div className="flex flex-col gap-1 h-[60px] items-start justify-start">
-            <Label className="font-montserrat font-normal text-white text-base text-center">
-              Contact Email*
-            </Label>
-            <Input 
-              type="email"
-              value={formData.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
-              placeholder="hello@example.com"
-              className="w-[434px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px]"
-              required
-            />
-          </div>
+        <div className="flex flex-col gap-2 w-full">
+          <Label className="font-montserrat font-normal text-white text-base">
+            Contact Email*
+          </Label>
+          <Input 
+            type="email"
+            value={formData.email}
+            onChange={(e) => handleInputChange('email', e.target.value)}
+            placeholder="hello@example.com"
+            className="w-full bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] h-12"
+            required
+          />
         </div>
         
         {/* Name and Date of Birth */}
-        <div className="flex gap-[120px] items-start justify-start w-full">
-          <div className="flex flex-col gap-1 h-[60px] items-start justify-start">
+        <div className="flex gap-6 items-start justify-start w-full">
+          <div className="flex flex-col gap-2 flex-1">
             <Label className="font-montserrat font-normal text-white text-base">
               Legal Name*
             </Label>
@@ -130,14 +136,16 @@ export function LandingForm() {
               value={formData.fullName}
               onChange={(e) => handleInputChange('fullName', e.target.value)}
               placeholder="Your Name"
-              className="w-[434px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px]"
+              className="w-full bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] h-12"
               required
             />
           </div>
-                     <DateOfBirthInput 
-             value={formData.dateOfBirth}
-             onChange={(date) => handleInputChange('dateOfBirth', date)}
-           />
+          <div className="flex flex-col gap-2 flex-1">
+            <DateOfBirthInput 
+              value={formData.dateOfBirth}
+              onChange={(date) => handleInputChange('dateOfBirth', date)}
+            />
+          </div>
         </div>
       </div>
 
@@ -156,10 +164,10 @@ export function LandingForm() {
       </div>
 
       {/* Submit Button */}
-      <div className="flex justify-center w-full pt-4">
+      <div className="flex justify-center w-full pt-6">
         <Button
           type="submit"
-          className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg font-semibold"
+          className="bg-white hover:bg-gray-100 text-[#111111] px-8 py-3 text-lg font-semibold font-montserrat rounded-[3px]"
         >
           Continue to Waiver
         </Button>
