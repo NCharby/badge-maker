@@ -11,7 +11,11 @@ import { SignatureCapture } from '@/components/molecules/SignatureCapture';
 import { useRouter } from 'next/navigation';
 import { useUserFlowStore } from '@/hooks/useUserFlowStore';
 
-export function WaiverForm() {
+interface WaiverFormProps {
+  eventSlug: string;
+}
+
+export function WaiverForm({ eventSlug }: WaiverFormProps) {
   const router = useRouter();
   const { 
     email, 
@@ -156,7 +160,7 @@ export function WaiverForm() {
             console.log('PDF generated successfully:', result);
             
             // Navigate to badge creation
-            router.push('/badge');
+            router.push(`/${eventSlug}/badge-creator`);
             
           } catch (error) {
             console.error('Error generating PDF:', error);
