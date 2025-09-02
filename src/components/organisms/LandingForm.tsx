@@ -7,7 +7,9 @@ import { Input } from '@/components/atoms/input';
 import { Label } from '@/components/atoms/label';
 import { DateOfBirthInput } from '@/components/molecules/DateOfBirthInput';
 import { DietaryAndVolunteeringForm } from '@/components/molecules/DietaryAndVolunteeringForm';
+import { FormErrorHandler } from '@/components/molecules/FormErrorHandler';
 import { useUserFlowStore } from '@/hooks/useUserFlowStore';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 /**
  * LandingForm component that supports pre-population via query parameters
@@ -41,6 +43,8 @@ export function LandingForm({ eventSlug }: LandingFormProps) {
     setLandingData,
     setEventSlug
   } = useUserFlowStore();
+  
+  const { setError, clearError } = useErrorHandler();
   
   // Get pre-populated values from query parameters first, then store data, then defaults
   const prePopulatedEmail = searchParams.get('email') || email || '';
@@ -84,25 +88,44 @@ export function LandingForm({ eventSlug }: LandingFormProps) {
     }));
   };
 
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.email || !formData.firstName || !formData.lastName) {
-      alert('Please fill in all required fields');
+    clearError();
+    
+    // Validate form
+    const errors: Record<string, string> = {};
+    if (!formData.email) errors.email = 'Email is required';
+    if (!formData.firstName) errors.firstName = 'First name is required';
+    if (!formData.lastName) errors.lastName = 'Last name is required';
+    
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
       return;
     }
     
-    // Store form data in Zustand store
-    setLandingData({
-      email: formData.email,
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      dateOfBirth: formData.dateOfBirth,
-      dietaryRestrictions: formData.dietaryRestrictions,
-      dietaryRestrictionsOther: formData.dietaryRestrictionsOther,
-      volunteeringInterests: formData.volunteeringInterests,
-      additionalNotes: formData.additionalNotes,
-    });
-    router.push(`/${eventSlug}/waiver`);
+    try {
+      // Store form data in Zustand store
+      setLandingData({
+        email: formData.email,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        dateOfBirth: formData.dateOfBirth,
+        dietaryRestrictions: formData.dietaryRestrictions,
+        dietaryRestrictionsOther: formData.dietaryRestrictionsOther,
+        volunteeringInterests: formData.volunteeringInterests,
+        additionalNotes: formData.additionalNotes,
+      });
+      
+      // Clear any previous errors
+      setFormErrors({});
+      
+      // Navigate to waiver page
+      router.push(`/${eventSlug}/waiver`);
+    } catch (error) {
+      setError(error instanceof Error ? error : String(error));
+    }
   };
 
   return (
@@ -184,6 +207,9 @@ export function LandingForm({ eventSlug }: LandingFormProps) {
         />
       </div>
 
+      {/* Error Display */}
+      <FormErrorHandler errors={formErrors} className="w-full" />
+      
       {/* Submit Button */}
       <div className="flex justify-center w-full pt-6">
         <Button

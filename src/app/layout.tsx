@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter, Montserrat, Open_Sans } from 'next/font/google'
 import './globals.css'
+import { ErrorBoundary } from '@/components/molecules/ErrorBoundary'
 
 const inter = Inter({ subsets: ['latin'] })
 const montserrat = Montserrat({ 
@@ -25,7 +26,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.className} ${montserrat.variable} ${openSans.variable}`}>
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </body>
     </html>
   )
