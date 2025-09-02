@@ -4,13 +4,13 @@
 
 **Last Updated**: December 2024  
 **Status**: 100% Complete - All architectural components implemented and tested  
-**Version**: 1.0.0
+**Version**: 2.0.0
 
 ---
 
 ## 🏗 **System Overview**
 
-The Badge Maker is built on a modern, scalable architecture using Next.js 14 with App Router, TypeScript, and Supabase. The system follows atomic design principles and implements a secure, responsive web application for badge creation.
+The Badge Maker is built on a modern, scalable architecture using Next.js 14 with App Router, TypeScript, and Supabase. The system follows atomic design principles and implements a secure, responsive web application for complete event management including digital waiver signing, PDF generation, and personalized badge creation.
 
 ## 🎯 **Architecture Principles**
 
@@ -43,10 +43,11 @@ The Badge Maker is built on a modern, scalable architecture using Next.js 14 wit
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
 │  │   Pages     │  │ Components  │  │    Hooks    │         │
 │  │             │  │             │  │             │         │
-│  │ • Test      │  │ • Atoms     │  │ • useBadge  │         │
-│  │ • Confirma- │  │ • Molecules │  │   Store     │         │
-│  │   tion      │  │ • Organisms │  │             │         │
-│  │             │  │ • Templates │  │             │         │
+│  │ • Landing   │  │ • Atoms     │  │ • useBadge  │         │
+│  │ • Waiver    │  │ • Molecules │  │   Store     │         │
+│  │ • Badge     │  │ • Organisms │  │ • useUser   │         │
+│  │ • Confirma- │  │ • Templates │  │   Flow      │         │
+│  │   tion      │  │             │  │   Store     │         │
 │  └─────────────┘  └─────────────┘  └─────────────┘         │
 ├─────────────────────────────────────────────────────────────┤
 │                    API Routes (Next.js)                     │
@@ -56,9 +57,13 @@ The Badge Maker is built on a modern, scalable architecture using Next.js 14 wit
 │  └─────────────┘  └─────────────┘  └─────────────┘         │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
 │  │   /api/     │  │   /api/     │  │   /api/     │         │
-│  │  images/    │  │    test     │  │             │         │
+│  │  images/    │  │    test     │  │    pdf      │         │
 │  │ [filename]  │  │             │  │             │         │
 │  └─────────────┘  └─────────────┘  └─────────────┘         │
+│  ┌─────────────┐  ┌─────────────┐                          │
+│  │   /api/     │  │   /api/     │                          │
+│  │   email     │  │             │                          │
+│  └─────────────┘  └─────────────┘                          │
 ├─────────────────────────────────────────────────────────────┤
 │                    Backend (Supabase)                       │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
@@ -66,9 +71,17 @@ The Badge Maker is built on a modern, scalable architecture using Next.js 14 wit
 │  │             │  │             │  │             │         │
 │  │ • sessions  │  │ • badge-    │  │ • Policies  │         │
 │  │ • badges    │  │   images    │  │ • Access    │         │
-│  │ • templates │  │ • original/ │  │   Control   │         │
-│  │ • analytics │  │ • cropped/  │  │             │         │
+│  │ • waivers   │  │ • waiver-   │  │   Control   │         │
+│  │ • templates │  │   documents │  │             │         │
+│  │ • analytics │  │ • original/ │  │             │         │
+│  │             │  │ • cropped/  │  │             │         │
 │  └─────────────┘  └─────────────┘  └─────────────┘         │
+├─────────────────────────────────────────────────────────────┤
+│                  External Services                          │
+│  ┌─────────────┐  ┌─────────────┐                          │
+│  │  Puppeteer  │  │  Postmark   │                          │
+│  │   PDF Gen   │  │   Email     │                          │
+│  └─────────────┘  └─────────────┘                          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -81,7 +94,10 @@ The Badge Maker is built on a modern, scalable architecture using Next.js 14 wit
 ```
 src/
 ├── app/                          # Next.js App Router
-│   ├── api/                     # API Routes (7 endpoints)
+│   ├── api/                     # API Routes (8 endpoints)
+│   ├── landing/                 # Landing page
+│   ├── waiver/                  # Waiver signing page
+│   ├── badge/                   # Badge creation page
 │   ├── confirmation/            # Confirmation page
 │   ├── test/                    # Test page
 │   ├── globals.css              # Global styles
@@ -98,6 +114,9 @@ src/
 │   ├── molecules/               # Composite components
 │   │   ├── ImageUpload.tsx     # Image upload with cropper
 │   │   ├── SocialMediaInput.tsx # Social media handles
+│   │   ├── DateOfBirthInput.tsx # Date picker component
+│   │   ├── DietaryAndVolunteeringForm.tsx # Preferences form
+│   │   └── SignatureCapture.tsx # Digital signature capture
 │   │   └── index.ts            # Export barrel
 │   ├── organisms/               # Complex components
 │   │   ├── BadgeCreationForm.tsx # Main form component
@@ -443,6 +462,13 @@ const validateFile = (file: File) => {
 - **File Validation**: Type, size, and content validation
 - **Secure Upload**: Server-side file processing
 
+### **Waiver System Security**
+- **Digital Signatures**: Legally binding signature capture with validation
+- **Audit Trail**: IP address, user agent, and timestamp tracking
+- **PDF Generation**: Server-side generation for consistency and security
+- **Email Verification**: Secure email delivery with PDF attachments
+- **Data Privacy**: Sensitive information protected with RLS policies
+
 ---
 
 ## 🚀 **Performance Architecture**
@@ -475,6 +501,10 @@ const validateFile = (file: File) => {
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+POSTMARK_API_KEY=your_postmark_api_key
+POSTMARK_FROM_EMAIL=noreply@yourdomain.com
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+WAIVER_VERSION=1.0.0
 ```
 
 ---
@@ -504,6 +534,8 @@ The Badge Maker architecture successfully demonstrates:
 - **Performance**: Optimized for speed and efficiency
 - **Maintainability**: Clean, documented codebase
 - **User Experience**: Responsive and intuitive design
+- **Complete Workflow**: End-to-end event management solution
+- **Legal Compliance**: Digital waiver system with audit trails
 
-**Status**: ✅ **100% COMPLETE** - Production-ready architecture  
+**Status**: ✅ **100% COMPLETE** - Production-ready architecture with waiver system  
 **Ready for**: Production deployment and future enhancements
