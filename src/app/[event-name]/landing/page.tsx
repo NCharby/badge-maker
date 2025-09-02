@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { LandingForm } from '@/components/organisms/LandingForm';
+import { ProgressSteps } from '@/components/molecules/ProgressSteps';
 
 interface EventLandingPageProps {
   params: {
@@ -79,37 +80,9 @@ export default async function EventLandingPage({ params }: EventLandingPageProps
           )}
         </div>
 
-        {/* Step Explainer */}
-        <div className="max-w-4xl mx-auto mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center">
-              <div className="w-12 h-12 bg-white text-[#111111] rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-3">
-                1
-              </div>
-              <h3 className="font-semibold text-white mb-2 font-montserrat">Sign Waiver</h3>
-              <p className="text-gray-400 text-sm font-open-sans">
-                Complete the event waiver and provide your information
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="w-12 h-12 bg-white text-[#111111] rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-3">
-                2
-              </div>
-              <h3 className="font-semibold text-white mb-2 font-montserrat">Create Badge</h3>
-              <p className="text-gray-400 text-sm font-open-sans">
-                Upload your photo and customize your badge
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="w-12 h-12 bg-white text-[#111111] rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-3">
-                3
-              </div>
-              <h3 className="font-semibold text-white mb-2 font-montserrat">Download</h3>
-              <p className="text-gray-400 text-sm font-open-sans">
-                Get your personalized badge ready to print
-              </p>
-            </div>
-          </div>
+        {/* Progress Steps */}
+        <div className="mb-8">
+          <ProgressSteps />
         </div>
 
         {/* Landing Form */}
