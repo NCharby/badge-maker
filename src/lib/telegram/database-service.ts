@@ -165,4 +165,52 @@ export class TelegramDatabaseService {
       return 0;
     }
   }
+
+  /**
+   * Get or create a test session for testing purposes
+   */
+  async getOrCreateTestSession(eventSlug: string, sessionId: string): Promise<string> {
+    try {
+      // First try to get the existing session
+      const { data: existingSession, error: sessionError } = await this.supabase
+        .from('sessions')
+        .select('id')
+        .eq('id', sessionId)
+        .single();
+
+      if (existingSession) {
+        console.log(`Using existing session: ${sessionId}`);
+        return existingSession.id;
+      }
+
+      // If session doesn't exist, create a test session
+      console.log(`Creating test session: ${sessionId}`);
+      const eventId = await this.getEventId(eventSlug);
+      if (!eventId) {
+        throw new Error('Event not found');
+      }
+
+      const { data: newSession, error: createError } = await this.supabase
+        .from('sessions')
+        .insert({
+          id: sessionId,
+          event_id: eventId,
+          session_data: { test: true, created_for: 'telegram_testing' },
+          expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000) // 2 hours from now
+        })
+        .select('id')
+        .single();
+
+      if (createError) {
+        console.error('Error creating test session:', createError);
+        throw new Error('Failed to create test session');
+      }
+
+      console.log(`Created test session: ${newSession.id}`);
+      return newSession.id;
+    } catch (error) {
+      console.error('Error in getOrCreateTestSession:', error);
+      throw error;
+    }
+  }
 }

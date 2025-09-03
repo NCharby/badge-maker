@@ -24,16 +24,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateI
     const telegramService = createTelegramService();
     
     // Check if Telegram integration is available
-    if (!telegramService.isAvailable()) {
+    const isAvailable = await telegramService.isAvailable(eventSlug);
+    if (!isAvailable) {
       return NextResponse.json({
         success: false,
-        error: 'Telegram integration not configured'
+        error: 'Telegram integration not configured for this event'
       }, { status: 503 });
     }
 
+    console.log(`Generating invite for event: ${eventSlug}, session: ${sessionId}`);
     const invite = await telegramService.generatePrivateInvite(eventSlug, sessionId);
     
     if (!invite) {
+      console.error('Failed to generate invite - service returned null');
       return NextResponse.json({
         success: false,
         error: 'Failed to generate invite link'

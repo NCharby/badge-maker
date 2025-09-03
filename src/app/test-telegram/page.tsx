@@ -7,20 +7,34 @@ import { Input } from '@/components/atoms/input';
 import { Label } from '@/components/atoms/label';
 import { TelegramLinks } from '@/components/molecules/TelegramLinks';
 
+// Generate a UUID for testing
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 export default function TestTelegramPage() {
-  const [eventSlug, setEventSlug] = useState('test-event');
-  const [sessionId, setSessionId] = useState('test-session-123');
+  const [eventSlug, setEventSlug] = useState('default');
+  const [sessionId, setSessionId] = useState(generateUUID());
   const [testResults, setTestResults] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+
+  const generateNewSessionId = () => {
+    setSessionId(generateUUID());
+  };
 
   const testBotConnection = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/telegram/test-connection');
+      const response = await fetch(`/api/telegram/test-connection?eventSlug=${encodeURIComponent(eventSlug)}`);
       const data = await response.json();
       setTestResults({ type: 'Bot Connection', data });
     } catch (error) {
-      setTestResults({ type: 'Bot Connection', error: error.message });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setTestResults({ type: 'Bot Connection', error: errorMessage });
     } finally {
       setLoading(false);
     }
@@ -35,7 +49,8 @@ export default function TestTelegramPage() {
       const data = await response.json();
       setTestResults({ type: 'Group Info', data });
     } catch (error) {
-      setTestResults({ type: 'Group Info', error: error.message });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setTestResults({ type: 'Group Info', error: errorMessage });
     } finally {
       setLoading(false);
     }
@@ -54,7 +69,8 @@ export default function TestTelegramPage() {
       const data = await response.json();
       setTestResults({ type: 'Generate Invite', data });
     } catch (error) {
-      setTestResults({ type: 'Generate Invite', error: error.message });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setTestResults({ type: 'Generate Invite', error: errorMessage });
     } finally {
       setLoading(false);
     }
@@ -93,12 +109,22 @@ export default function TestTelegramPage() {
               </div>
               <div>
                 <Label htmlFor="sessionId">Session ID</Label>
-                <Input
-                  id="sessionId"
-                  value={sessionId}
-                  onChange={(e) => setSessionId(e.target.value)}
-                  placeholder="test-session-123"
-                />
+                <div className="flex space-x-2">
+                  <Input
+                    id="sessionId"
+                    value={sessionId}
+                    onChange={(e) => setSessionId(e.target.value)}
+                    placeholder="UUID will be auto-generated"
+                  />
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={generateNewSessionId}
+                    size="sm"
+                  >
+                    Generate
+                  </Button>
+                </div>
               </div>
             </div>
 

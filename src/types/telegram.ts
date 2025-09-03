@@ -2,12 +2,12 @@
 
 export interface TelegramConfig {
   enabled: boolean;
-  botToken?: string;           // Bot token for private group invites
-  privateGroupId?: string;     // Telegram group ID for private groups
-  publicChannel?: string;      // https://t.me/channelname
-  groupName?: string;          // Display name for the group
-  channelName?: string;        // Display name for the channel
-  description?: string;        // Optional description
+  botToken?: string;            // Bot token from environment variable
+  privateGroupId: string;       // Telegram group ID for private groups
+  publicChannel?: string;       // https://t.me/channelname
+  groupName?: string;           // Display name for the group
+  channelName?: string;         // Display name for the channel
+  description?: string;         // Optional description
 }
 
 export interface TelegramInvite {

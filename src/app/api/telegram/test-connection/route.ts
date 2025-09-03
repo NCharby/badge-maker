@@ -1,19 +1,27 @@
 import { NextResponse } from 'next/server';
 import { createTelegramService } from '@/lib/telegram/telegram-service';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const eventSlug = searchParams.get('eventSlug') || 'default';
+    
+    console.log(`Testing Telegram connection for event: ${eventSlug}`);
+    
     const telegramService = createTelegramService();
     
-    if (!telegramService.isAvailable()) {
+    const isAvailable = await telegramService.isAvailable(eventSlug);
+    console.log(`Telegram availability check result:`, isAvailable);
+    
+    if (!isAvailable) {
       return NextResponse.json({
         success: false,
         error: 'Telegram integration not configured',
-        details: 'TELEGRAM_BOT_TOKEN environment variable is not set'
+        details: `Telegram not configured for event: ${eventSlug}`
       }, { status: 503 });
     }
 
-    const connectionTest = await telegramService.testBotConnection();
+    const connectionTest = await telegramService.testBotConnection(eventSlug);
     
     if (connectionTest) {
       return NextResponse.json({
