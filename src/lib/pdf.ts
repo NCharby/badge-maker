@@ -339,7 +339,7 @@ async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData): Promi
 
   if (signedUrlError) {
     console.error('Signed URL generation error:', signedUrlError);
-    throw new Error(`Failed to generate signed URL for PDF: ${signedUrlError.error}`);
+    throw new Error(`Failed to generate signed URL for PDF: ${signedUrlError.message}`);
   }
 
   if (!signedUrlData?.signedUrl) {

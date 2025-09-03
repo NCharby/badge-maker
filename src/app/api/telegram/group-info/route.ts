@@ -25,7 +25,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<GroupInfoR
     const telegramService = createTelegramService();
     
     // Check if Telegram integration is available
-    if (!telegramService.isAvailable()) {
+    if (!await telegramService.isAvailable(eventSlug)) {
       return NextResponse.json({
         success: false,
         error: 'Telegram integration not configured'

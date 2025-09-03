@@ -271,6 +271,14 @@ If you have any questions, please contact the event organizers
  */
 export async function sendEmail(emailData: EmailData): Promise<EmailResult> {
   try {
+    // Check if Postmark is configured
+    if (!postmarkClient) {
+      return {
+        success: false,
+        error: 'Email service not configured'
+      };
+    }
+
     const result = await postmarkClient.sendEmail(emailData);
     
     return {
@@ -291,6 +299,11 @@ export async function sendEmail(emailData: EmailData): Promise<EmailResult> {
  */
 export async function verifyEmailConfiguration(): Promise<boolean> {
   try {
+    // Check if Postmark is configured
+    if (!postmarkClient) {
+      return false;
+    }
+
     // Test the Postmark configuration
     const result = await postmarkClient.getServer();
     return !!result;
