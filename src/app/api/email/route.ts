@@ -8,9 +8,9 @@ export async function POST(request: NextRequest) {
 
     if (type === 'waiver-confirmation') {
       // Send waiver confirmation email
-      const { fullName, email, waiverId, pdfUrl, signedAt } = data;
+      const { firstName, lastName, email, waiverId, pdfUrl, signedAt } = data;
       
-      if (!fullName || !email || !waiverId || !pdfUrl || !signedAt) {
+      if (!firstName || !lastName || !email || !waiverId || !pdfUrl || !signedAt) {
         return NextResponse.json(
           { error: 'Missing required fields for waiver confirmation email' },
           { status: 400 }
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       }
 
       const result = await sendWaiverConfirmationEmail({
-        fullName,
+        fullName: `${firstName} ${lastName}`,
         email,
         waiverId,
         pdfUrl,

@@ -48,14 +48,18 @@ const socialMediaPlatforms = [
  * 
  * Note: Query parameters are now handled on the landing page for better UX
  */
-export function BadgeCreationForm() {
+interface BadgeCreationFormProps {
+  eventSlug: string;
+}
+
+export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { data, setData } = useBadgeStore()
-  const { email: waiverEmail, fullName: waiverName, waiverId } = useUserFlowStore()
+  const { email: waiverEmail, firstName, lastName, waiverId } = useUserFlowStore()
   
   // Get pre-populated values from waiver data first, then existing badge data
   const prePopulatedEmail = waiverEmail || data.email
-  const prePopulatedName = waiverName || data.badge_name
+  const prePopulatedName = `${firstName} ${lastName}`.trim() || data.badge_name
   
   const form = useForm<BadgeFormData>({
     resolver: zodResolver(badgeSchema),
@@ -160,7 +164,7 @@ export function BadgeCreationForm() {
         console.log('Badge created successfully:', badgeData)
         
         // Redirect to confirmation page
-        window.location.href = `/confirmation?badge_id=${badgeData.badge_id}`
+        window.location.href = `/${eventSlug}/confirmation?badge_id=${badgeData.badge_id}`
       } else {
         const errorData = await badgeResponse.json()
         console.error('Badge creation failed:', errorData)

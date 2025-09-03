@@ -45,15 +45,15 @@ export function DateOfBirthInput({ value, onChange, error }: DateOfBirthInputPro
   }, [value]);
 
   return (
-    <div className="flex flex-col gap-1 h-[60px] items-start justify-start">
-      <Label className="text-white font-montserrat text-sm">
+    <div className="flex flex-col gap-2 w-full">
+      <Label className="font-montserrat font-normal text-white text-base">
         Date of birth*
       </Label>
-      <div className="relative flex gap-2">
+      <div className="relative w-full">
         <Input
           value={dateOfBirthValue}
           placeholder="Select your date of birth"
-          className={`w-[434px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] pr-10 ${
+          className={`w-full bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] pr-10 h-12 ${
             error ? 'border-red-500' : ''
           }`}
           onChange={(e) => {
@@ -75,9 +75,9 @@ export function DateOfBirthInput({ value, onChange, error }: DateOfBirthInputPro
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
-              className="absolute top-1/2 right-2 size-6 -translate-y-1/2 bg-transparent hover:bg-transparent p-0"
+              className="absolute top-1/2 right-3 size-6 -translate-y-1/2 bg-transparent hover:bg-transparent p-0"
             >
-              <CalendarIcon className="size-3.5 text-[#949494]" />
+              <CalendarIcon className="size-4 text-[#949494]" />
               <span className="sr-only">Select date</span>
             </Button>
           </PopoverTrigger>

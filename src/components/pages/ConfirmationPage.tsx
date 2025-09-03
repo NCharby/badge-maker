@@ -35,7 +35,11 @@ const platformDisplay = {
   other: 'OT'
 }
 
-export function ConfirmationPage() {
+interface ConfirmationPageProps {
+  eventSlug: string;
+}
+
+export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
   const searchParams = useSearchParams()
   const badgeId = searchParams.get('badge_id')
   const [badgeData, setBadgeData] = useState<BadgeData | null>(null)
