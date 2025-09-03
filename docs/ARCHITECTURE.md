@@ -126,6 +126,7 @@ Supabase Storage
 - **Supabase**: Database, storage, and authentication
 - **Postmark**: Transactional email delivery
 - **Puppeteer**: Server-side PDF generation
+- **Telegram Bot API**: Automatic invite link generation
 - **Next.js**: Framework and deployment platform
 
 ### **API Design**
