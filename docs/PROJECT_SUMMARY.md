@@ -40,7 +40,6 @@ Badge Maker is a comprehensive web application built with Next.js 14 that enable
 - **Error Handling**: User-friendly error messages with retry options
 - **Multi-Event Support**: Event-specific Telegram configurations
 - **Security**: Bot tokens stored in environment variables
-
 ## 🛠 **Technical Architecture**
 
 ### **Frontend Stack**

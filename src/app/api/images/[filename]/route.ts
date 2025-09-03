@@ -45,7 +45,6 @@ export async function GET(
     } else {
       console.log('Files in bucket:', listData)
     }
-    
     const { data: signedUrlData, error } = await supabase.storage
       .from('badge-images')
       .createSignedUrl(filename, 3600) // 1 hour expiry
@@ -64,7 +63,6 @@ export async function GET(
     }
 
     console.log('Signed URL generated successfully for:', filename)
-
     return NextResponse.json({
       success: true,
       url: signedUrlData.signedUrl,

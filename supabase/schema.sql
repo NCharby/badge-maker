@@ -164,6 +164,10 @@ ALTER TABLE public.telegram_invites ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Anyone can view active events" ON public.events
   FOR SELECT USING (is_active = true);
 
+-- Events policies
+CREATE POLICY "Anyone can view active events" ON public.events
+  FOR SELECT USING (is_active = true);
+
 -- Sessions policies
 CREATE POLICY "Anyone can create sessions" ON public.sessions
   FOR INSERT WITH CHECK (true);

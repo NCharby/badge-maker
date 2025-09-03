@@ -48,7 +48,6 @@ export async function sendWaiverConfirmationEmail(data: WaiverEmailData): Promis
         error: 'Email service not configured'
       };
     }
-
     let attachments: EmailAttachment[] = [];
     
     // Try to download PDF content for attachment

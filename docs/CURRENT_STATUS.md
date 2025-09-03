@@ -59,7 +59,6 @@ Badge Maker is a Next.js 14 application that allows users to create conference b
 - ✅ User-friendly error messages and retry options
 - ✅ Seamless integration in confirmation page
 - ✅ Multi-event support with event-specific configurations
-
 ## 🗄️ **Database Schema**
 
 ### **Core Tables**
