@@ -52,6 +52,14 @@ Badge Maker is a Next.js 14 application that allows users to create conference b
 - ✅ shadcn/ui components
 - ✅ Comprehensive testing and validation
 
+### **Telegram Integration**
+- ✅ Automatic invite link generation
+- ✅ Bot API integration with error handling
+- ✅ Database integration with proper constraints
+- ✅ User-friendly error messages and retry options
+- ✅ Seamless integration in confirmation page
+- ✅ Multi-event support with event-specific configurations
+
 ## 🗄️ **Database Schema**
 
 ### **Core Tables**
@@ -61,12 +69,14 @@ Badge Maker is a Next.js 14 application that allows users to create conference b
 - `waivers` - Signed waiver documents
 - `badges` - Created badge records
 - `analytics` - Usage and performance metrics
+- `telegram_invites` - Telegram group invite links
 
 ### **Key Relationships**
 - Events have one template each
 - Sessions are linked to events
 - Waivers are linked to events and sessions
 - Badges are linked to events, sessions, and waivers
+- Telegram invites are linked to events and sessions
 
 ## 🚀 **Current Status: PRODUCTION READY**
 

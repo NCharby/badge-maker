@@ -10,6 +10,7 @@ A modern, production-ready web application for creating professional conference 
 - 📱 **Mobile Responsive** - Optimized for all devices
 - 🔒 **Secure & Compliant** - Row Level Security and audit trails
 - 📧 **Email Integration** - Automated PDF delivery via Postmark
+- 🤖 **Telegram Integration** - Automatic invite links for community groups
 - 🖼️ **Advanced Image Processing** - Upload, crop, and optimize photos
 - 🌐 **Social Media Integration** - Support for multiple platforms
 
@@ -46,6 +47,7 @@ A modern, production-ready web application for creating professional conference 
    SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
    POSTMARK_API_KEY=your_postmark_api_key
    POSTMARK_FROM_EMAIL=noreply@yourdomain.com
+   TELEGRAM_BOT_TOKEN=your_telegram_bot_token
    ```
 
 4. **Set up Supabase**
@@ -53,12 +55,27 @@ A modern, production-ready web application for creating professional conference 
    - Run the schema from `supabase/schema.sql`
    - Configure storage buckets and RLS policies
 
-5. **Start development server**
+5. **Configure Telegram (Optional)**
+   - Create a Telegram bot via @BotFather
+   - Add your bot token to `.env.local`
+   - Configure event-specific Telegram settings in the database:
+   ```sql
+   UPDATE public.events 
+   SET telegram_config = '{
+     "enabled": true,
+     "privateGroupId": "your_group_id",
+     "groupName": "Your Event Group",
+     "description": "Join our community for updates"
+   }'
+   WHERE slug = 'default';
+   ```
+
+6. **Start development server**
    ```bash
    npm run dev
    ```
 
-6. **Open your browser**
+7. **Open your browser**
    ```
    http://localhost:3000/default/landing
    ```
@@ -72,6 +89,7 @@ A modern, production-ready web application for creating professional conference 
 - **Forms**: React Hook Form + Zod validation
 - **PDF Generation**: Puppeteer
 - **Email**: Postmark
+- **Telegram**: Bot API with automatic invite generation
 - **Storage**: Supabase Storage with RLS
 
 ### **Component Structure**
@@ -100,6 +118,7 @@ The application uses a relational database with the following core tables:
 - **`waivers`** - Signed waiver documents
 - **`badges`** - Created badge records
 - **`analytics`** - Usage and performance metrics
+- **`telegram_invites`** - Telegram group invite links
 
 ## 🔄 **User Flow**
 
@@ -157,5 +176,5 @@ For technical support or questions:
 ---
 
 **Status**: ✅ Production Ready  
-**Version**: 2.0.0  
+**Version**: 2.1.0 (With Telegram Integration)  
 **Last Updated**: December 2024
