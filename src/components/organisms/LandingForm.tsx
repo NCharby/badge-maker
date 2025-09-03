@@ -7,7 +7,9 @@ import { Input } from '@/components/atoms/input';
 import { Label } from '@/components/atoms/label';
 import { DateOfBirthInput } from '@/components/molecules/DateOfBirthInput';
 import { DietaryAndVolunteeringForm } from '@/components/molecules/DietaryAndVolunteeringForm';
+import { FormErrorHandler } from '@/components/molecules/FormErrorHandler';
 import { useUserFlowStore } from '@/hooks/useUserFlowStore';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 /**
  * LandingForm component that supports pre-population via query parameters
@@ -22,27 +24,37 @@ import { useUserFlowStore } from '@/hooks/useUserFlowStore';
  * 
  * This allows users to start the flow with pre-filled data for better UX
  */
-export function LandingForm() {
+interface LandingFormProps {
+  eventSlug: string;
+}
+
+export function LandingForm({ eventSlug }: LandingFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { 
     email, 
-    fullName, 
+    firstName, 
+    lastName, 
     dateOfBirth, 
     dietaryRestrictions,
     dietaryRestrictionsOther,
     volunteeringInterests,
     additionalNotes,
-    setLandingData 
+    setLandingData,
+    setEventSlug
   } = useUserFlowStore();
+  
+  const { setError, clearError } = useErrorHandler();
   
   // Get pre-populated values from query parameters first, then store data, then defaults
   const prePopulatedEmail = searchParams.get('email') || email || '';
-  const prePopulatedName = searchParams.get('name') || fullName || '';
+  const prePopulatedFirstName = searchParams.get('firstName') || firstName || '';
+  const prePopulatedLastName = searchParams.get('lastName') || lastName || '';
   
   const [formData, setFormData] = useState({
     email: prePopulatedEmail,
-    fullName: prePopulatedName,
+    firstName: prePopulatedFirstName,
+    lastName: prePopulatedLastName,
     dateOfBirth: dateOfBirth || new Date('2000-01-01'),
     dietaryRestrictions: dietaryRestrictions || [],
     dietaryRestrictionsOther: dietaryRestrictionsOther || '',
@@ -50,19 +62,24 @@ export function LandingForm() {
     additionalNotes: additionalNotes || '',
   });
 
-  // Update form when query parameters change
+  // Set event context and update form when query parameters change
   useEffect(() => {
-    const queryEmail = searchParams.get('email');
-    const queryName = searchParams.get('name');
+    // Set event context
+    setEventSlug(eventSlug);
     
-    if (queryEmail || queryName) {
+    const queryEmail = searchParams.get('email');
+    const queryFirstName = searchParams.get('firstName');
+    const queryLastName = searchParams.get('lastName');
+    
+    if (queryEmail || queryFirstName || queryLastName) {
       setFormData(prev => ({
         ...prev,
         email: queryEmail || prev.email,
-        fullName: queryName || prev.fullName,
+        firstName: queryFirstName || prev.firstName,
+        lastName: queryLastName || prev.lastName,
       }));
     }
-  }, [searchParams]);
+  }, [eventSlug, searchParams, setEventSlug]);
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({
@@ -71,73 +88,108 @@ export function LandingForm() {
     }));
   };
 
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.email || !formData.fullName) {
-      alert('Please fill in all required fields');
+    clearError();
+    
+    // Validate form
+    const errors: Record<string, string> = {};
+    if (!formData.email) errors.email = 'Email is required';
+    if (!formData.firstName) errors.firstName = 'First name is required';
+    if (!formData.lastName) errors.lastName = 'Last name is required';
+    
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
       return;
     }
     
-    // Store form data in Zustand store
-    setLandingData({
-      email: formData.email,
-      fullName: formData.fullName,
-      dateOfBirth: formData.dateOfBirth,
-      dietaryRestrictions: formData.dietaryRestrictions,
-      dietaryRestrictionsOther: formData.dietaryRestrictionsOther,
-      volunteeringInterests: formData.volunteeringInterests,
-      additionalNotes: formData.additionalNotes,
-    });
-    router.push('/waiver');
+    try {
+      // Store form data in Zustand store
+      setLandingData({
+        email: formData.email,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        dateOfBirth: formData.dateOfBirth,
+        dietaryRestrictions: formData.dietaryRestrictions,
+        dietaryRestrictionsOther: formData.dietaryRestrictionsOther,
+        volunteeringInterests: formData.volunteeringInterests,
+        additionalNotes: formData.additionalNotes,
+      });
+      
+      // Clear any previous errors
+      setFormErrors({});
+      
+      // Navigate to waiver page
+      router.push(`/${eventSlug}/waiver`);
+    } catch (error) {
+      setError(error instanceof Error ? error : String(error));
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-[#111111] flex flex-col gap-5 items-start justify-center px-5 py-8 rounded-[10px] w-full">
-      <h2 className="font-montserrat font-normal text-white text-3xl text-left w-full">
+    <form onSubmit={handleSubmit} className="bg-[#1a1a1a] flex flex-col gap-6 items-start justify-center px-8 py-10 rounded-[10px] w-full border border-[#333333]">
+      <h2 className="font-montserrat font-normal text-white text-3xl text-left w-full mb-2">
         HELLO
       </h2>
-      <p className="font-open-sans font-normal text-white text-base">
+      <p className="font-open-sans font-normal text-white text-base mb-6">
         Thank you for being here! We need a few details from you.
       </p>
       
       {/* Form Fields */}
-      <div className="flex flex-col gap-5 w-full p-2.5">
+      <div className="flex flex-col gap-6 w-full">
         {/* Email Input */}
-        <div className="flex gap-2.5 items-start justify-start w-full">
-          <div className="flex flex-col gap-1 h-[60px] items-start justify-start">
-            <Label className="font-montserrat font-normal text-white text-base text-center">
-              Contact Email*
+        <div className="flex flex-col gap-2 w-full">
+          <Label className="font-montserrat font-normal text-white text-base">
+            Contact Email*
+          </Label>
+          <Input 
+            type="email"
+            value={formData.email}
+            onChange={(e) => handleInputChange('email', e.target.value)}
+            placeholder="hello@example.com"
+            className="w-full bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] h-12"
+            required
+          />
+        </div>
+        
+        {/* Name and Date of Birth */}
+        <div className="flex gap-6 items-start justify-start w-full">
+          <div className="flex flex-col gap-2 flex-1">
+            <Label className="font-montserrat font-normal text-white text-base">
+              First Name*
             </Label>
             <Input 
-              type="email"
-              value={formData.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
-              placeholder="hello@example.com"
-              className="w-[434px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px]"
+              type="text"
+              value={formData.firstName}
+              onChange={(e) => handleInputChange('firstName', e.target.value)}
+              placeholder="First Name"
+              className="w-full bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] h-12"
+              required
+            />
+          </div>
+          <div className="flex flex-col gap-2 flex-1">
+            <Label className="font-montserrat font-normal text-white text-base">
+              Last Name*
+            </Label>
+            <Input 
+              type="text"
+              value={formData.lastName}
+              onChange={(e) => handleInputChange('lastName', e.target.value)}
+              placeholder="Last Name"
+              className="w-full bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] h-12"
               required
             />
           </div>
         </div>
         
-        {/* Name and Date of Birth */}
-        <div className="flex gap-[120px] items-start justify-start w-full">
-          <div className="flex flex-col gap-1 h-[60px] items-start justify-start">
-            <Label className="font-montserrat font-normal text-white text-base">
-              Legal Name*
-            </Label>
-            <Input 
-              type="text"
-              value={formData.fullName}
-              onChange={(e) => handleInputChange('fullName', e.target.value)}
-              placeholder="Your Name"
-              className="w-[434px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px]"
-              required
-            />
-          </div>
-                     <DateOfBirthInput 
-             value={formData.dateOfBirth}
-             onChange={(date) => handleInputChange('dateOfBirth', date)}
-           />
+        {/* Date of Birth */}
+        <div className="flex flex-col gap-2 w-full">
+          <DateOfBirthInput 
+            value={formData.dateOfBirth}
+            onChange={(date) => handleInputChange('dateOfBirth', date)}
+          />
         </div>
       </div>
 
@@ -155,11 +207,14 @@ export function LandingForm() {
         />
       </div>
 
+      {/* Error Display */}
+      <FormErrorHandler errors={formErrors} className="w-full" />
+      
       {/* Submit Button */}
-      <div className="flex justify-center w-full pt-4">
+      <div className="flex justify-center w-full pt-6">
         <Button
           type="submit"
-          className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg font-semibold"
+          className="bg-white hover:bg-gray-100 text-[#111111] px-8 py-3 text-lg font-semibold font-montserrat rounded-[3px]"
         >
           Continue to Waiver
         </Button>

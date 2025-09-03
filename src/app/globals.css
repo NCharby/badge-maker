@@ -67,6 +67,15 @@
     font-family: 'Open Sans', sans-serif;
   }
 
+  /* Custom Font Classes */
+  .font-montserrat {
+    font-family: 'Montserrat', sans-serif;
+  }
+
+  .font-open-sans {
+    font-family: 'Open Sans', sans-serif;
+  }
+
   /* React Advanced Cropper Styles */
   .cropper {
     width: 100% !important;

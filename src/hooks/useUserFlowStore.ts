@@ -2,9 +2,13 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 interface UserFlowState {
+  // Event context
+  eventSlug: string;
+  
   // Landing page data
   email: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   dateOfBirth: Date;
   dietaryRestrictions: string[];
   dietaryRestrictionsOther: string;
@@ -19,9 +23,11 @@ interface UserFlowState {
   waiverId: string | null;
   
   // Actions
+  setEventSlug: (eventSlug: string) => void;
   setLandingData: (data: { 
     email: string; 
-    fullName: string; 
+    firstName: string;
+    lastName: string;
     dateOfBirth: Date;
     dietaryRestrictions: string[];
     dietaryRestrictionsOther: string;
@@ -39,8 +45,10 @@ export const useUserFlowStore = create<UserFlowState>()(
   persist(
     (set) => ({
       // Initial state
+      eventSlug: '',
       email: '',
-      fullName: '',
+      firstName: '',
+      lastName: '',
       dateOfBirth: new Date('2000-01-01'),
       dietaryRestrictions: [],
       dietaryRestrictionsOther: '',
@@ -53,9 +61,11 @@ export const useUserFlowStore = create<UserFlowState>()(
       waiverId: null,
       
       // Actions
+      setEventSlug: (eventSlug) => set({ eventSlug }),
       setLandingData: (data) => set({
         email: data.email,
-        fullName: data.fullName,
+        firstName: data.firstName,
+        lastName: data.lastName,
         dateOfBirth: data.dateOfBirth,
         dietaryRestrictions: data.dietaryRestrictions,
         dietaryRestrictionsOther: data.dietaryRestrictionsOther,
@@ -77,8 +87,10 @@ export const useUserFlowStore = create<UserFlowState>()(
       setWaiverId: (waiverId) => set({ waiverId }),
       
       clearAll: () => set({
+        eventSlug: '',
         email: '',
-        fullName: '',
+        firstName: '',
+        lastName: '',
         dateOfBirth: new Date('2000-01-01'),
         dietaryRestrictions: [],
         dietaryRestrictionsOther: '',
