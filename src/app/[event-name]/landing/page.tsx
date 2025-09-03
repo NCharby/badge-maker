@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: EventLandingPageProps): Promi
   // Fetch event data for metadata
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
   const { data: event } = await supabase
     .from('events')
@@ -44,7 +44,7 @@ export default async function EventLandingPage({ params }: EventLandingPageProps
   // Validate event exists and is active
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
   const { data: event, error } = await supabase
     .from('events')

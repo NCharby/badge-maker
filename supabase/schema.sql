@@ -29,6 +29,7 @@ CREATE TABLE public.events (
   end_date DATE,
   is_active BOOLEAN DEFAULT true,
   template_id TEXT REFERENCES public.templates(id), -- Single template per event
+  telegram_config JSONB DEFAULT NULL, -- Telegram group/channel configuration
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -114,6 +115,18 @@ CREATE TABLE public.analytics (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Telegram invites table for tracking unique invite links
+CREATE TABLE public.telegram_invites (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  event_id UUID REFERENCES public.events(id) ON DELETE CASCADE,
+  user_id UUID, -- Can be null for anonymous users
+  session_id UUID REFERENCES public.sessions(id) ON DELETE CASCADE,
+  invite_link TEXT NOT NULL,
+  used_at TIMESTAMP WITH TIME ZONE,
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Create indexes for better performance
 CREATE INDEX idx_events_slug ON public.events(slug);
 CREATE INDEX idx_events_active ON public.events(is_active);
@@ -133,6 +146,10 @@ CREATE INDEX idx_waivers_signed_at ON public.waivers(signed_at);
 CREATE INDEX idx_waivers_names ON public.waivers(first_name, last_name);
 CREATE INDEX idx_waivers_dietary_restrictions ON public.waivers USING GIN(dietary_restrictions);
 CREATE INDEX idx_waivers_volunteering_interests ON public.waivers USING GIN(volunteering_interests);
+CREATE INDEX idx_telegram_invites_event_id ON public.telegram_invites(event_id);
+CREATE INDEX idx_telegram_invites_session_id ON public.telegram_invites(session_id);
+CREATE INDEX idx_telegram_invites_expires_at ON public.telegram_invites(expires_at);
+CREATE INDEX idx_telegram_invites_used_at ON public.telegram_invites(used_at);
 
 -- Enable Row Level Security
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
@@ -141,6 +158,7 @@ ALTER TABLE public.waivers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.badges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.analytics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.telegram_invites ENABLE ROW LEVEL SECURITY;
 
 -- Events policies
 CREATE POLICY "Anyone can view active events" ON public.events
@@ -189,6 +207,16 @@ CREATE POLICY "Anyone can insert analytics" ON public.analytics
 
 CREATE POLICY "Anyone can view analytics" ON public.analytics
   FOR SELECT USING (true);
+
+-- Telegram invites policies
+CREATE POLICY "Anyone can create telegram invites" ON public.telegram_invites
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Anyone can view telegram invites" ON public.telegram_invites
+  FOR SELECT USING (true);
+
+CREATE POLICY "Anyone can update telegram invites" ON public.telegram_invites
+  FOR UPDATE USING (true);
 
 -- Create functions for automatic updates
 CREATE OR REPLACE FUNCTION update_updated_at_column()

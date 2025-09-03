@@ -1,7 +1,9 @@
 import { ServerClient } from 'postmark';
 
 // Initialize Postmark client
-const postmarkClient = new ServerClient(process.env.POSTMARK_API_KEY!);
+const postmarkClient = process.env.POSTMARK_API_KEY 
+  ? new ServerClient(process.env.POSTMARK_API_KEY)
+  : null;
 
 export interface EmailData {
   To: string;
@@ -38,6 +40,15 @@ export interface EmailResult {
  */
 export async function sendWaiverConfirmationEmail(data: WaiverEmailData): Promise<EmailResult> {
   try {
+    // Check if Postmark is configured
+    if (!postmarkClient) {
+      console.warn('Postmark not configured, skipping email');
+      return {
+        success: false,
+        error: 'Email service not configured'
+      };
+    }
+
     let attachments: EmailAttachment[] = [];
     
     // Try to download PDF content for attachment
