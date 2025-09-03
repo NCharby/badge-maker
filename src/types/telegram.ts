@@ -13,9 +13,9 @@ export interface TelegramConfig {
 export interface TelegramInvite {
   id: string;
   inviteLink: string;
-  expiresAt: Date;
-  usedAt?: Date;
-  createdAt: Date;
+  expiresAt: Date | string;  // Can be Date object or ISO string from API
+  usedAt?: Date | string;    // Can be Date object or ISO string from API
+  createdAt: Date | string;  // Can be Date object or ISO string from API
 }
 
 export interface TelegramGroupInfo {

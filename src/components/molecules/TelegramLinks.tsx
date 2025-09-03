@@ -18,6 +18,19 @@ export function TelegramLinks({ eventSlug, sessionId, className }: TelegramLinks
   const [error, setError] = useState<string | null>(null);
   const [generatingInvite, setGeneratingInvite] = useState(false);
 
+  // Helper function to safely convert date strings to Date objects
+  const safeDate = (dateValue: Date | string): Date => {
+    return dateValue instanceof Date ? dateValue : new Date(dateValue);
+  };
+
+  // Helper function to calculate hours until expiration
+  const getHoursUntilExpiry = (expiresAt: Date | string): number => {
+    const expiryDate = safeDate(expiresAt);
+    const now = new Date();
+    const diffMs = expiryDate.getTime() - now.getTime();
+    return Math.ceil(diffMs / (1000 * 60 * 60));
+  };
+
   useEffect(() => {
     fetchGroupInfo();
   }, [eventSlug, sessionId]);
@@ -119,7 +132,7 @@ export function TelegramLinks({ eventSlug, sessionId, className }: TelegramLinks
             {privateInvite ? (
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  Your personal invite link (expires in {Math.ceil((privateInvite.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60))} hours)
+                  Your personal invite link (expires in {getHoursUntilExpiry(privateInvite.expiresAt)} hours)
                 </p>
                 <Button
                   variant="outline"
