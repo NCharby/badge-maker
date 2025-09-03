@@ -240,17 +240,17 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
                 </Button>
               </Link>
             </div>
+
+            {/* Telegram Integration */}
+            <div className="border-t border-[#5c5c5c] pt-4">
+              <TelegramLinks 
+                eventSlug={eventSlug} 
+                sessionId={badgeData?.id || ''} 
+                className="bg-transparent border-none shadow-none"
+              />
+            </div>
           </CardContent>
         </Card>
-
-        {/* Telegram Integration */}
-        <div className="col-span-1 xl:col-span-2">
-          <TelegramLinks 
-            eventSlug={eventSlug} 
-            sessionId={badgeData?.id || ''} 
-            className="bg-[#111111] border-[#111111]"
-          />
-        </div>
       </div>
     </ConfirmationTemplate>
   )
