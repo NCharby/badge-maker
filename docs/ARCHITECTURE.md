@@ -58,18 +58,21 @@ Badge Maker follows a modern, scalable architecture built on Next.js 14 with a f
 ### **Database Schema**
 ```sql
 -- Core entities
-events (id, slug, name, description, dates, template_id)
+events (id, slug, name, description, dates, template_id, telegram_config)
 templates (id, name, config, is_active)
 sessions (id, event_id, created_at, expires_at)
 waivers (id, session_id, event_id, first_name, last_name, ...)
 badges (id, session_id, event_id, waiver_id, badge_name, ...)
+telegram_invites (id, event_id, session_id, invite_link, expires_at, created_at)
 
 -- Relationships
 events → templates (1:1)
 events → sessions (1:many)
 events → waivers (1:many)
 events → badges (1:many)
+events → telegram_invites (1:many)
 sessions → waivers (1:1)
+sessions → telegram_invites (1:1)
 waivers → badges (1:1)
 ```
 
@@ -123,6 +126,7 @@ Supabase Storage
 - **Supabase**: Database, storage, and authentication
 - **Postmark**: Transactional email delivery
 - **Puppeteer**: Server-side PDF generation
+- **Telegram Bot API**: Automatic invite link generation
 - **Next.js**: Framework and deployment platform
 
 ### **API Design**
@@ -130,6 +134,41 @@ Supabase Storage
 - **TypeScript**: Full type safety across the stack
 - **Error Handling**: Consistent error response format
 - **Validation**: Request and response validation
+
+## 🤖 **Telegram Integration Architecture**
+
+### **Service Architecture**
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  TelegramLinks  │───▶│ TelegramService │───▶│ TelegramBotAPI  │
+│   Component     │    │  (Orchestrator) │    │   (External)    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   API Routes    │    │ DatabaseService │    │   Supabase      │
+│  (/api/telegram)│    │  (Invite Mgmt)  │    │   Database      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+### **Integration Features**
+- **Automatic Invite Generation**: Creates unique, one-time-use invite links
+- **Multi-Event Support**: Event-specific Telegram configurations
+- **Error Handling**: Comprehensive error handling with user-friendly messages
+- **Security**: Bot tokens stored in environment variables
+- **Database Integration**: Proper foreign key relationships and constraints
+
+### **API Endpoints**
+- `GET /api/telegram/test-connection` - Test bot connectivity
+- `GET /api/telegram/group-info` - Get event Telegram configuration
+- `POST /api/telegram/generate-invite` - Create new invite link
+
+### **Data Flow**
+1. **Component Load** → Auto-generate invite if none exists
+2. **API Call** → Telegram service orchestration
+3. **Bot API** → Create invite link via Telegram
+4. **Database** → Store invite with session relationship
+5. **UI Update** → Display invite link to user
 
 ## 📱 **Responsive Architecture**
 
@@ -220,6 +259,6 @@ interface UserFlowState {
 ---
 
 **Last Updated**: December 2024  
-**Architecture Version**: 2.0.0  
+**Architecture Version**: 2.1.0 (With Telegram Integration)  
 **Status**: Production Ready  
 **Next Review**: As needed for new features

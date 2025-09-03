@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export interface WaiverPDFData {
   // Participant Information
@@ -299,6 +299,7 @@ async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData): Promi
   const fileName = `waiver-${Date.now()}-${data.fullName.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
   const filePath = `pdfs/${fileName}`;
 
+  console.log('Attempting to upload PDF to storage...');
   const { data: uploadData, error } = await supabase.storage
     .from('waiver-documents')
     .upload(filePath, pdfBuffer, {
@@ -307,18 +308,46 @@ async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData): Promi
     });
 
   if (error) {
+    console.error('PDF upload error:', error);
     throw new Error(`Failed to upload PDF: ${error.message}`);
   }
 
-  // Generate signed URL for the uploaded PDF
-  const { data: signedUrlData } = await supabase.storage
-    .from('waiver-documents')
-    .createSignedUrl(filePath, 24 * 60 * 60); // 24 hours expiry
+  console.log('PDF uploaded successfully:', uploadData);
 
-  if (!signedUrlData?.signedUrl) {
-    throw new Error('Failed to generate signed URL for PDF');
+  // Try to get a public URL first, then fall back to signed URL
+  console.log('Attempting to get public URL...');
+  
+  try {
+    // Get the public URL (this should work immediately after upload)
+    const { data: publicUrlData } = supabase.storage
+      .from('waiver-documents')
+      .getPublicUrl(uploadData.path);
+    
+    if (publicUrlData?.publicUrl) {
+      console.log('Public URL generated successfully:', publicUrlData.publicUrl);
+      return publicUrlData.publicUrl;
+    }
+  } catch (publicUrlError) {
+    console.warn('Public URL generation failed, trying signed URL:', publicUrlError);
   }
 
+  // Fall back to signed URL if public URL fails
+  console.log('Falling back to signed URL generation...');
+  const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+    .from('waiver-documents')
+    .createSignedUrl(uploadData.path, 24 * 60 * 60); // 24 hours expiry
+
+  if (signedUrlError) {
+    console.error('Signed URL generation error:', signedUrlError);
+    throw new Error(`Failed to generate signed URL for PDF: ${signedUrlError.message}`);
+  }
+
+  if (!signedUrlData?.signedUrl) {
+    console.error('No signed URL data returned:', signedUrlData);
+    throw new Error('Failed to generate signed URL for PDF: No data returned');
+  }
+
+  console.log('Signed URL generated successfully:', signedUrlData.signedUrl);
   return signedUrlData.signedUrl;
 }
 

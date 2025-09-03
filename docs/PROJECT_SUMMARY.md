@@ -34,6 +34,12 @@ Badge Maker is a comprehensive web application built with Next.js 14 that enable
 - **Responsive Design**: Mobile-optimized interface
 - **Progress Tracking**: Visual step indicators
 
+### **Telegram Integration**
+- **Automatic Invite Generation**: Creates unique invite links for private groups
+- **Seamless Integration**: Appears in badge confirmation page
+- **Error Handling**: User-friendly error messages with retry options
+- **Multi-Event Support**: Event-specific Telegram configurations
+- **Security**: Bot tokens stored in environment variables
 ## 🛠 **Technical Architecture**
 
 ### **Frontend Stack**
@@ -50,6 +56,7 @@ Badge Maker is a comprehensive web application built with Next.js 14 that enable
 - **Authentication**: Row Level Security (RLS)
 - **PDF Generation**: Puppeteer for server-side rendering
 - **Email Service**: Postmark for transactional emails
+- **Telegram Integration**: Bot API with automatic invite generation
 - **API**: Next.js API routes with TypeScript
 
 ### **Infrastructure**
@@ -69,6 +76,7 @@ sessions        -- User session tracking
 waivers         -- Signed waiver documents
 badges          -- Created badge records
 analytics       -- Usage and performance metrics
+telegram_invites -- Telegram group invite links
 ```
 
 ### **Key Relationships**
@@ -76,7 +84,9 @@ analytics       -- Usage and performance metrics
 - Events → Sessions (1:many)
 - Events → Waivers (1:many)
 - Events → Badges (1:many)
+- Events → Telegram Invites (1:many)
 - Sessions → Waivers (1:1)
+- Sessions → Telegram Invites (1:1)
 - Waivers → Badges (1:1)
 
 ## 🎨 **Design System**

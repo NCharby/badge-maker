@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     // Check environment variables first
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       console.error('Missing environment variables')
       return NextResponse.json(
         { error: 'Server configuration error' },
@@ -18,7 +18,7 @@ export async function GET(
     // Create Supabase client inside the function
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     )
 
     const filename = decodeURIComponent(params.filename)
@@ -31,18 +31,38 @@ export async function GET(
     }
 
     // Generate signed URL for secure access (expires in 1 hour)
+    console.log('Attempting to generate signed URL for:', filename)
+    console.log('Using bucket: badge-images')
+    console.log('Full path being requested:', filename)
+    
+    // First, let's try to list files to see what's actually there
+    const { data: listData, error: listError } = await supabase.storage
+      .from('badge-images')
+      .list('', { limit: 10 })
+    
+    if (listError) {
+      console.error('List error:', listError)
+    } else {
+      console.log('Files in bucket:', listData)
+    }
     const { data: signedUrlData, error } = await supabase.storage
       .from('badge-images')
       .createSignedUrl(filename, 3600) // 1 hour expiry
 
     if (error) {
       console.error('Signed URL generation error:', error)
+      console.error('Error details:', {
+        message: error.message,
+        name: error.name,
+        filename: filename
+      })
       return NextResponse.json(
-        { error: 'Failed to generate access URL' },
+        { error: 'Failed to generate access URL', details: error.message },
         { status: 500 }
       )
     }
 
+    console.log('Signed URL generated successfully for:', filename)
     return NextResponse.json({
       success: true,
       url: signedUrlData.signedUrl,

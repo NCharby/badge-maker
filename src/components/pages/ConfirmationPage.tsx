@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { ConfirmationTemplate } from '@/components/templates/ConfirmationTemplate'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/atoms/card'
 import { Button } from '@/components/atoms/button'
+import { TelegramLinks } from '@/components/molecules/TelegramLinks'
 import Link from 'next/link'
 import { getSignedImageUrl } from '@/lib/utils/imageUtils'
 
@@ -238,6 +239,15 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
                   Create Another Badge
                 </Button>
               </Link>
+            </div>
+
+            {/* Telegram Integration */}
+            <div className="border-t border-[#5c5c5c] pt-4">
+              <TelegramLinks 
+                eventSlug={eventSlug} 
+                sessionId={badgeData?.id || ''} 
+                className="bg-transparent border-none shadow-none"
+              />
             </div>
           </CardContent>
         </Card>

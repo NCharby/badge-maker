@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 export async function POST(request: NextRequest) {
   try {
     // Check environment variables first
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       console.error('Missing environment variables')
       return NextResponse.json(
         { error: 'Server configuration error' },
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     // Create Supabase client inside the function
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     )
 
     const formData = await request.formData()
@@ -85,17 +85,17 @@ export async function POST(request: NextRequest) {
 
     console.log('Upload successful:', data)
 
-    // Generate signed URL for secure access (expires in 1 hour)
-    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+    // Generate public URL for immediate access
+    const { data: publicUrlData } = supabase.storage
       .from('badge-images')
-      .createSignedUrl(filename, 3600) // 1 hour expiry
+      .getPublicUrl(filename)
 
-    if (signedUrlError) {
-      console.error('Signed URL generation error:', signedUrlError)
+    if (!publicUrlData?.publicUrl) {
+      console.error('Failed to generate public URL')
       return NextResponse.json(
         { 
           error: 'Failed to generate access URL',
-          details: signedUrlError.message
+          details: 'Public URL generation failed'
         },
         { status: 500 }
       )
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       filename,
-      url: signedUrlData.signedUrl,
+      url: publicUrlData.publicUrl,
       size: file.size,
       type: file.type
     })
