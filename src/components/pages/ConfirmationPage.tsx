@@ -88,20 +88,43 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
   // Send confirmation email when badge data is loaded
   useEffect(() => {
     const sendConfirmationEmail = async () => {
-      if (!badgeData?.id || !eventSlug || emailStatus !== 'idle') return;
+      console.log('Confirmation email useEffect triggered:', {
+        badgeId: badgeData?.id,
+        eventSlug,
+        emailStatus
+      });
+      
+      if (!badgeData?.id || !eventSlug || emailStatus !== 'idle') {
+        console.log('Email sending skipped:', {
+          hasBadgeId: !!badgeData?.id,
+          hasEventSlug: !!eventSlug,
+          emailStatus
+        });
+        return;
+      }
       
       try {
+        console.log('Starting email sending process...');
         setEmailStatus('sending');
+        
+        const requestData = {
+          type: 'badge-confirmation',
+          data: { badgeId: badgeData.id, eventSlug }
+        };
+        
+        console.log('Sending email request:', requestData);
+        
         const response = await fetch('/api/email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'badge-confirmation',
-            data: { badgeId: badgeData.id, eventSlug }
-          })
+          body: JSON.stringify(requestData)
         });
         
+        console.log('Email API response status:', response.status);
+        
         if (response.ok) {
+          const responseData = await response.json();
+          console.log('Email sent successfully:', responseData);
           setEmailStatus('sent');
         } else {
           const errorData = await response.json();

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateWaiverPDF, WaiverPDFData } from '@/lib/pdf';
-import { sendWaiverConfirmationEmail, EmailResult } from '@/lib/email';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
@@ -118,25 +117,14 @@ export async function POST(request: NextRequest) {
         .eq('id', sessionId);
     }
 
-    // Send waiver confirmation email (only if PDF URL exists)
-    let emailResult: EmailResult = { success: false, messageId: undefined };
-    if (result.pdfUrl) {
-      emailResult = await sendWaiverConfirmationEmail({
-        fullName: `${firstName} ${lastName}`,
-        email,
-        waiverId: waiverData.id,
-        pdfUrl: result.pdfUrl,
-        signedAt: pdfData.signedAt
-      });
-    }
+    // Note: Email will be sent later at the end of the flow (confirmation page)
+    // No longer sending waiver confirmation email immediately after signing
 
     return NextResponse.json({
       success: true,
       pdfUrl: result.pdfUrl,
       waiverId: waiverData.id,
-      emailSent: emailResult.success,
-      emailMessageId: emailResult.messageId,
-      message: 'PDF generated and stored successfully' + (emailResult.success ? ', email sent' : ', email failed')
+      message: 'PDF generated and stored successfully'
     });
 
   } catch (error) {

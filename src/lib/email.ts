@@ -74,9 +74,24 @@ export async function sendWaiverConfirmationEmail(data: WaiverEmailData): Promis
     }
     let attachments: EmailAttachment[] = [];
     
-    // Try to download PDF content for attachment
+    // Try to get PDF content for attachment
     try {
-      const pdfContent = await downloadPDFContent(data.pdfUrl);
+      let pdfContent: string;
+      
+      // Try to get PDF directly from Supabase storage first
+      if (data.pdfUrl.includes('/storage/v1/object/public/')) {
+        try {
+          console.log('Attempting to get PDF from Supabase storage...');
+          pdfContent = await getPDFFromStorage(data.pdfUrl);
+        } catch (storageError) {
+          console.warn('Storage method failed, trying URL download:', storageError);
+          pdfContent = await downloadPDFContent(data.pdfUrl);
+        }
+      } else {
+        // For non-Supabase URLs, use direct download
+        pdfContent = await downloadPDFContent(data.pdfUrl);
+      }
+      
       attachments = [
         {
           Name: `waiver-${data.waiverId}.pdf`,
@@ -85,6 +100,7 @@ export async function sendWaiverConfirmationEmail(data: WaiverEmailData): Promis
           ContentID: null
         }
       ];
+      console.log('PDF attachment prepared successfully');
     } catch (pdfError) {
       console.warn('PDF attachment failed, sending email without attachment:', pdfError);
       // Continue without PDF attachment
@@ -115,20 +131,97 @@ export async function sendWaiverConfirmationEmail(data: WaiverEmailData): Promis
 }
 
 /**
+ * Get PDF content directly from Supabase storage
+ */
+async function getPDFFromStorage(pdfUrl: string): Promise<string> {
+  try {
+    // Extract the file path from the URL
+    const urlParts = pdfUrl.split('/storage/v1/object/public/');
+    if (urlParts.length !== 2) {
+      throw new Error('Invalid Supabase storage URL format');
+    }
+    
+    const pathParts = urlParts[1].split('/');
+    const bucket = pathParts[0];
+    const filePath = pathParts.slice(1).join('/');
+    
+    console.log('Extracting PDF from storage:', { bucket, filePath });
+    
+    // Import Supabase client
+    const { createClient } = await import('@supabase/supabase-js');
+    
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase configuration missing');
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+
+    // Download the file directly from storage
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .download(filePath);
+
+    if (error) {
+      console.error('Supabase storage download error:', error);
+      throw new Error(`Failed to download from storage: ${error.message}`);
+    }
+
+    if (!data) {
+      throw new Error('No data returned from storage');
+    }
+
+    // Convert blob to base64
+    const arrayBuffer = await data.arrayBuffer();
+    const base64Content = Buffer.from(arrayBuffer).toString('base64');
+    
+    console.log('PDF retrieved from storage successfully, size:', arrayBuffer.byteLength, 'bytes');
+    return base64Content;
+  } catch (error) {
+    console.error('Storage PDF retrieval error:', error);
+    throw new Error(`Failed to retrieve PDF from storage: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
  * Download PDF content from URL for email attachment
  */
 async function downloadPDFContent(pdfUrl: string): Promise<string> {
   try {
-    const response = await fetch(pdfUrl);
+    console.log('Attempting to download PDF from URL:', pdfUrl);
+    
+    // Add headers to handle potential CORS issues
+    const response = await fetch(pdfUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/pdf',
+        'User-Agent': 'BadgeMaker-EmailService/1.0'
+      }
+    });
+    
+    console.log('PDF download response status:', response.status, response.statusText);
+    
     if (!response.ok) {
-      throw new Error(`Failed to download PDF: ${response.statusText}`);
+      const errorText = await response.text().catch(() => 'Unknown error');
+      console.error('PDF download failed:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText: errorText,
+        url: pdfUrl
+      });
+      throw new Error(`Failed to download PDF: ${response.status} ${response.statusText}`);
     }
     
     const buffer = await response.arrayBuffer();
-    return Buffer.from(buffer).toString('base64');
+    const base64Content = Buffer.from(buffer).toString('base64');
+    
+    console.log('PDF downloaded successfully, size:', buffer.byteLength, 'bytes');
+    return base64Content;
   } catch (error) {
     console.error('PDF download error:', error);
-    throw new Error('Failed to download PDF for email attachment');
+    throw new Error(`Failed to download PDF for email attachment: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -357,8 +450,8 @@ export async function getBadgeConfirmationData(
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // Get all data in a single query with joins
-    const { data, error } = await supabase
+    // Get badge data first
+    const { data: badgeData, error: badgeError } = await supabase
       .from('badges')
       .select(`
         id,
@@ -366,51 +459,87 @@ export async function getBadgeConfirmationData(
         email,
         social_media_handles,
         created_at,
-        waivers!inner(
+        waiver_id,
+        session_id
+      `)
+      .eq('id', badgeId)
+      .single();
+
+    if (badgeError || !badgeData) {
+      console.error('Error fetching badge data:', badgeError);
+      return null;
+    }
+
+    // Get waiver data
+    let waiverData = null;
+    if (badgeData.waiver_id) {
+      const { data: waiver, error: waiverError } = await supabase
+        .from('waivers')
+        .select(`
           id,
           first_name,
           last_name,
           signed_at,
           pdf_url
-        ),
-        telegram_invites(
+        `)
+        .eq('id', badgeData.waiver_id)
+        .single();
+
+      if (!waiverError && waiver) {
+        waiverData = waiver;
+      }
+    }
+
+    // Get telegram invite data
+    let telegramInvite = null;
+    if (badgeData.session_id) {
+      const { data: telegramData, error: telegramError } = await supabase
+        .from('telegram_invites')
+        .select(`
           invite_url,
           expires_at
-        ),
-        events!inner(
-          name,
-          slug
-        )
+        `)
+        .eq('session_id', badgeData.session_id)
+        .single();
+
+      if (!telegramError && telegramData) {
+        telegramInvite = telegramData;
+      }
+    }
+
+    // Get event data
+    const { data: eventData, error: eventError } = await supabase
+      .from('events')
+      .select(`
+        name,
+        slug
       `)
-      .eq('id', badgeId)
-      .eq('events.slug', eventSlug)
+      .eq('slug', eventSlug)
       .single();
 
-    if (error || !data) {
-      console.error('Error fetching badge confirmation data:', error);
+    if (eventError || !eventData) {
+      console.error('Error fetching event data:', eventError);
       return null;
     }
 
     // Format the data for email template
-    const waiver = Array.isArray(data.waivers) ? data.waivers[0] : data.waivers;
-    const event = Array.isArray(data.events) ? data.events[0] : data.events;
-    const fullName = `${waiver.first_name} ${waiver.last_name}`;
+    const fullName = waiverData ? `${waiverData.first_name} ${waiverData.last_name}` : 'Unknown User';
     
     return {
       fullName,
-      email: data.email,
-      badgeName: data.badge_name,
-      socialMediaHandles: data.social_media_handles || [],
-      badgeCreatedAt: data.created_at,
-      waiverId: waiver.id,
-      waiverSignedAt: waiver.signed_at,
-      waiverPdfUrl: waiver.pdf_url,
-      telegramInvite: data.telegram_invites?.[0] ? {
-        url: data.telegram_invites[0].invite_url,
-        expiresAt: data.telegram_invites[0].expires_at
+      email: badgeData.email,
+      badgeName: badgeData.badge_name,
+      socialMediaHandles: badgeData.social_media_handles || [],
+      badgeCreatedAt: badgeData.created_at,
+      waiverId: waiverData?.id || 'N/A',
+      waiverSignedAt: waiverData?.signed_at || badgeData.created_at,
+      waiverPdfUrl: waiverData?.pdf_url || '',
+      telegramInvite: telegramInvite ? {
+        url: telegramInvite.invite_url,
+        expiresAt: telegramInvite.expires_at
       } : undefined,
-      eventName: event.name,
-      eventSlug: event.slug
+      eventName: eventData.name,
+      eventSlug: eventData.slug
     };
   } catch (error) {
     console.error('Error in getBadgeConfirmationData:', error);
@@ -551,9 +680,24 @@ export async function sendBadgeConfirmationEmail(
 
     let attachments: EmailAttachment[] = [];
     
-    // Try to download PDF content for attachment
+    // Try to get PDF content for attachment
     try {
-      const pdfContent = await downloadPDFContent(data.waiverPdfUrl);
+      let pdfContent: string;
+      
+      // Try to get PDF directly from Supabase storage first
+      if (data.waiverPdfUrl.includes('/storage/v1/object/public/')) {
+        try {
+          console.log('Attempting to get PDF from Supabase storage...');
+          pdfContent = await getPDFFromStorage(data.waiverPdfUrl);
+        } catch (storageError) {
+          console.warn('Storage method failed, trying URL download:', storageError);
+          pdfContent = await downloadPDFContent(data.waiverPdfUrl);
+        }
+      } else {
+        // For non-Supabase URLs, use direct download
+        pdfContent = await downloadPDFContent(data.waiverPdfUrl);
+      }
+      
       attachments = [
         {
           Name: `waiver-${data.waiverId}.pdf`,
@@ -562,6 +706,7 @@ export async function sendBadgeConfirmationEmail(
           ContentID: null
         }
       ];
+      console.log('PDF attachment prepared successfully');
     } catch (pdfError) {
       console.warn('PDF attachment failed, sending email without attachment:', pdfError);
       // Continue without PDF attachment
