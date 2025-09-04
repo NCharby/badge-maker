@@ -123,24 +123,21 @@ NEXT_PUBLIC_DEBUG=false
 ```
 
 ### 2.3 Update Nginx Configuration
-```bash
-# Update domain name in Nginx configuration
-sed -i 's/yourdomain.com/your-actual-domain.com/g' nginx/conf.d/badge-maker.conf
-```
+The nginx configuration is already set for `badgie.shinydogproductions.com`. No changes needed.
 
 ## Step 3: SSL Certificate Setup
 
 ### 3.1 Obtain SSL Certificate
 ```bash
-# Get SSL certificate (replace with your domain)
-sudo certbot certonly --standalone -d yourdomain.com -d www.yourdomain.com
+# Get SSL certificate for badgie.shinydogproductions.com
+sudo certbot certonly --standalone -d badgie.shinydogproductions.com
 
 # Copy certificates to nginx directory
-sudo cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem nginx/ssl/
-sudo cp /etc/letsencrypt/live/yourdomain.com/privkey.pem nginx/ssl/
+sudo cp /etc/letsencrypt/live/badgie.shinydogproductions.com/fullchain.pem /opt/badge-maker/nginx/ssl/
+sudo cp /etc/letsencrypt/live/badgie.shinydogproductions.com/privkey.pem /opt/badge-maker/nginx/ssl/
 
 # Set proper permissions
-sudo chown -R badge-maker:badge-maker nginx/ssl/
+sudo chown -R badge-maker:badge-maker /opt/badge-maker/nginx/ssl/
 ```
 
 ### 3.2 Setup Automatic Certificate Renewal
@@ -158,8 +155,8 @@ sudo nano /opt/badge-maker/renew-ssl.sh
 certbot renew --quiet
 
 # Copy new certificates
-cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem /opt/badge-maker/nginx/ssl/
-cp /etc/letsencrypt/live/yourdomain.com/privkey.pem /opt/badge-maker/nginx/ssl/
+cp /etc/letsencrypt/live/badgie.shinydogproductions.com/fullchain.pem /opt/badge-maker/nginx/ssl/
+cp /etc/letsencrypt/live/badgie.shinydogproductions.com/privkey.pem /opt/badge-maker/nginx/ssl/
 
 # Restart nginx container
 cd /opt/badge-maker
@@ -190,7 +187,7 @@ sudo crontab -e
 ### 4.2 Verify Database Connection
 ```bash
 # Test database connection after deployment
-curl -X GET "https://yourdomain.com/api/test-db"
+curl -X GET "https://badgie.shinydogproductions.com/api/test-db"
 ```
 
 ## Step 5: External Services Setup
@@ -225,10 +222,10 @@ docker-compose logs -f badge-maker
 ### 6.2 Verify Deployment
 ```bash
 # Check if application is running
-curl -I https://yourdomain.com
+curl -I https://badgie.shinydogproductions.com
 
 # Check health endpoint
-curl https://yourdomain.com/health
+curl https://badgie.shinydogproductions.com/health
 
 # Check container health
 docker-compose ps
@@ -496,6 +493,54 @@ For deployment issues:
 3. Verify environment variables are set correctly
 4. Test each external service connection individually
 5. Contact support at hello@shinydogproductions.com
+
+## Quick Reference: Remaining Deployment Steps
+
+Since you've completed through Step 2.2, here are the next steps:
+
+### **Step 3: SSL Certificate Setup**
+```bash
+# Get SSL certificate
+sudo certbot certonly --standalone -d badgie.shinydogproductions.com
+
+# Copy certificates
+sudo cp /etc/letsencrypt/live/badgie.shinydogproductions.com/fullchain.pem /opt/badge-maker/nginx/ssl/
+sudo cp /etc/letsencrypt/live/badgie.shinydogproductions.com/privkey.pem /opt/badge-maker/nginx/ssl/
+sudo chown -R badge-maker:badge-maker /opt/badge-maker/nginx/ssl/
+```
+
+### **Step 4: Configure External Services**
+1. **Supabase**: Create project, run `supabase/schema.sql`, get API keys
+2. **Postmark**: Create account, get API key and template ID
+3. **Telegram Bot** (optional): Get bot token from @BotFather
+
+### **Step 5: Deploy Application**
+```bash
+# Switch to badge-maker user
+sudo su - badge-maker
+cd /opt/badge-maker
+
+# Make deploy script executable
+chmod +x scripts/deploy.sh
+
+# Deploy the application
+./scripts/deploy.sh
+```
+
+### **Step 6: Verify Deployment**
+```bash
+# Test the application
+curl -I https://badgie.shinydogproductions.com
+curl https://badgie.shinydogproductions.com/health
+
+# Check container status
+docker-compose ps
+```
+
+### **Access Your Application:**
+- **Landing Page**: https://badgie.shinydogproductions.com/default/landing
+- **COG Classic 2026**: https://badgie.shinydogproductions.com/cog-classic-2026/landing
+- **Health Check**: https://badgie.shinydogproductions.com/health
 
 ---
 

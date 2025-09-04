@@ -184,7 +184,7 @@ main() {
     show_status
     
     log_success "Deployment completed successfully!"
-    log_info "Application is available at: https://yourdomain.com"
+    log_info "Application is available at: https://badgie.shinydogproductions.com"
 }
 
 # Handle command line arguments
