@@ -67,6 +67,35 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
     day: 'numeric'
   });
 
+  // Debug: Log signature data info
+  console.log('Signature data info:', {
+    hasSignature: !!data.signatureImage,
+    signatureLength: data.signatureImage?.length || 0,
+    signatureStart: data.signatureImage?.substring(0, 50) || 'none',
+    isDataUrl: data.signatureImage?.startsWith('data:') || false
+  });
+
+  // Process signature image for PDF compatibility
+  let signatureSrc = '';
+  if (data.signatureImage) {
+    if (data.signatureImage.startsWith('data:')) {
+      // Already a data URL, use as-is
+      signatureSrc = data.signatureImage;
+    } else {
+      // Assume it's base64, create data URL
+      signatureSrc = `data:image/png;base64,${data.signatureImage}`;
+    }
+    
+    // Additional debugging
+    console.log('Processed signature src:', {
+      length: signatureSrc.length,
+      start: signatureSrc.substring(0, 100),
+      isValid: signatureSrc.startsWith('data:image/')
+    });
+  } else {
+    console.log('No signature image provided');
+  }
+
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -146,10 +175,12 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
           padding-top: 20px;
         }
         .signature-image {
-          max-width: 200px;
-          max-height: 100px;
+          max-width: 300px;
+          max-height: 150px;
           border: 1px solid #ccc;
           margin: 10px 0;
+          display: block;
+          background: white;
         }
         .signature-details {
           font-size: 11px;
@@ -241,7 +272,7 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
         
         <div>
           <strong>Signature:</strong><br>
-          <img src="data:image/png;base64,${data.signatureImage}" alt="Digital Signature" class="signature-image">
+          ${signatureSrc ? `<img src="${signatureSrc}" alt="Digital Signature" class="signature-image">` : '<p style="color: red; font-style: italic;">No signature provided</p>'}
         </div>
         
         <div class="signature-details">
@@ -274,6 +305,12 @@ async function generatePDFFromHTML(htmlContent: string): Promise<Buffer> {
   try {
     const page = await browser.newPage();
     await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    
+    // Wait for images to load
+    await page.waitForFunction(() => {
+      const images = document.querySelectorAll('img');
+      return Array.from(images).every(img => img.complete);
+    }, { timeout: 5000 });
     
     const pdfBuffer = await page.pdf({
       format: 'A4',
