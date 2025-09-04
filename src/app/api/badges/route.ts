@@ -38,6 +38,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate social media handles limit
+    if (social_media_handles && social_media_handles.length > 2) {
+      return NextResponse.json(
+        { error: 'Maximum 2 social media handles allowed' },
+        { status: 400 }
+      )
+    }
+
     // Check if waiver exists and is completed
     let sessionId = null;
     if (waiver_id) {

@@ -16,7 +16,7 @@ interface SocialMediaInputProps {
 
 export function SocialMediaInput({ platforms, value, onChange, error }: SocialMediaInputProps) {
   const addHandle = () => {
-    if (value.length < 3) {
+    if (value.length < 2) {
       onChange([...value, { platform: 'none' as const, handle: '' }])
     }
   }
@@ -33,7 +33,7 @@ export function SocialMediaInput({ platforms, value, onChange, error }: SocialMe
 
   return (
     <div className="space-y-3">
-             {[0, 1, 2].map((index) => {
+             {[0, 1].map((index) => {
          const handle = value[index] || { platform: 'none' as const, handle: '' }
          const isActive = index < value.length
         

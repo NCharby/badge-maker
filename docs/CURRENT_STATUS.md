@@ -8,9 +8,10 @@ Badge Maker is a Next.js 14 application that allows users to create conference b
 ### **Core Badge Creation**
 - ✅ Badge creation with live preview
 - ✅ Image upload and cropping
-- ✅ Social media input fields
-- ✅ Badge template system
+- ✅ Social media input fields (limited to 2 handles)
+- ✅ Hardcoded badge design with decorative elements (matches Figma)
 - ✅ PDF generation and storage
+- ✅ Visual social media icons with fallback support
 
 ### **Waiver Signing System**
 - ✅ Digital signature capture using `react-signature-canvas`
@@ -42,6 +43,8 @@ Badge Maker is a Next.js 14 application that allows users to create conference b
 - ✅ Query parameter pre-population
 - ✅ Responsive design with Tailwind CSS
 - ✅ Custom fonts (Montserrat, Open Sans)
+- ✅ Hardcoded badge design with decorative frill elements
+- ✅ Visual social media platform icons with fallback support
 
 ### **Error Handling & Support**
 - ✅ React Error Boundary for component errors
