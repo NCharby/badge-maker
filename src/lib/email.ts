@@ -81,7 +81,6 @@ export async function sendWaiverConfirmationEmail(data: WaiverEmailData): Promis
       // Try to get PDF directly from Supabase storage first
       if (data.pdfUrl.includes('/storage/v1/object/public/')) {
         try {
-          console.log('Attempting to get PDF from Supabase storage...');
           pdfContent = await getPDFFromStorage(data.pdfUrl);
         } catch (storageError) {
           console.warn('Storage method failed, trying URL download:', storageError);
@@ -100,7 +99,6 @@ export async function sendWaiverConfirmationEmail(data: WaiverEmailData): Promis
           ContentID: null
         }
       ];
-      console.log('PDF attachment prepared successfully');
     } catch (pdfError) {
       console.warn('PDF attachment failed, sending email without attachment:', pdfError);
       // Continue without PDF attachment
@@ -145,7 +143,6 @@ async function getPDFFromStorage(pdfUrl: string): Promise<string> {
     const bucket = pathParts[0];
     const filePath = pathParts.slice(1).join('/');
     
-    console.log('Extracting PDF from storage:', { bucket, filePath });
     
     // Import Supabase client
     const { createClient } = await import('@supabase/supabase-js');
@@ -177,7 +174,6 @@ async function getPDFFromStorage(pdfUrl: string): Promise<string> {
     const arrayBuffer = await data.arrayBuffer();
     const base64Content = Buffer.from(arrayBuffer).toString('base64');
     
-    console.log('PDF retrieved from storage successfully, size:', arrayBuffer.byteLength, 'bytes');
     return base64Content;
   } catch (error) {
     console.error('Storage PDF retrieval error:', error);
@@ -190,7 +186,6 @@ async function getPDFFromStorage(pdfUrl: string): Promise<string> {
  */
 async function downloadPDFContent(pdfUrl: string): Promise<string> {
   try {
-    console.log('Attempting to download PDF from URL:', pdfUrl);
     
     // Add headers to handle potential CORS issues
     const response = await fetch(pdfUrl, {
@@ -201,7 +196,6 @@ async function downloadPDFContent(pdfUrl: string): Promise<string> {
       }
     });
     
-    console.log('PDF download response status:', response.status, response.statusText);
     
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown error');
@@ -217,7 +211,6 @@ async function downloadPDFContent(pdfUrl: string): Promise<string> {
     const buffer = await response.arrayBuffer();
     const base64Content = Buffer.from(buffer).toString('base64');
     
-    console.log('PDF downloaded successfully, size:', buffer.byteLength, 'bytes');
     return base64Content;
   } catch (error) {
     console.error('PDF download error:', error);
@@ -470,11 +463,6 @@ export async function getBadgeConfirmationData(
       return null;
     }
 
-    console.log('Badge data retrieved:', {
-      id: badgeData.id,
-      waiver_id: badgeData.waiver_id,
-      session_id: badgeData.session_id
-    });
 
     // Get waiver data
     let waiverData = null;
@@ -499,7 +487,6 @@ export async function getBadgeConfirmationData(
     // Get telegram invite data
     let telegramInvite = null;
     if (badgeData.session_id) {
-      console.log('Looking for telegram invite with session_id:', badgeData.session_id);
       const { data: telegramData, error: telegramError } = await supabase
         .from('telegram_invites')
         .select(`
@@ -510,15 +497,11 @@ export async function getBadgeConfirmationData(
         .single();
 
       if (telegramError) {
-        console.log('Telegram invite error:', telegramError);
       } else if (telegramData) {
-        console.log('Telegram invite found:', telegramData);
         telegramInvite = telegramData;
       } else {
-        console.log('No telegram invite found for session_id:', badgeData.session_id);
       }
     } else {
-      console.log('No session_id found in badge data');
     }
 
     // Get event data
@@ -556,10 +539,6 @@ export async function getBadgeConfirmationData(
       eventSlug: eventData.slug
     };
 
-    console.log('Final confirmation data:', {
-      hasTelegramInvite: !!result.telegramInvite,
-      telegramInvite: result.telegramInvite
-    });
 
     return result;
   } catch (error) {
@@ -671,9 +650,7 @@ ${data.telegramPublicChannel ? `- Public Channel: ${data.telegramPublicChannel.n
       let pdfContent = null;
       try {
         pdfContent = await getPDFFromStorage(data.waiverPdfUrl);
-        console.log('PDF retrieved from storage successfully');
       } catch (storageError) {
-        console.log('Storage method failed, trying URL download:', storageError);
         pdfContent = await downloadPDFContent(data.waiverPdfUrl);
       }
       
@@ -686,7 +663,6 @@ ${data.telegramPublicChannel ? `- Public Channel: ${data.telegramPublicChannel.n
             ContentID: null
           }
         ];
-        console.log('PDF attachment added successfully');
       }
     } catch (pdfError) {
       console.warn('PDF attachment failed, sending email without attachment:', pdfError);
@@ -699,20 +675,6 @@ ${data.telegramPublicChannel ? `- Public Channel: ${data.telegramPublicChannel.n
       throw new Error('POSTMARK_TEMPLATE_ID environment variable is required');
     }
 
-    console.log('=== POSTMARK EMAIL DATA ===');
-    console.log('Template ID:', templateId);
-    console.log('From:', process.env.POSTMARK_FROM_EMAIL || 'noreply@yourdomain.com');
-    console.log('To:', data.email);
-    console.log('Template Data:', JSON.stringify(templateData, null, 2));
-    console.log('Attachments:', attachments.length > 0 ? `${attachments.length} attachment(s)` : 'No attachments');
-    if (attachments.length > 0) {
-      console.log('Attachment details:', attachments.map(att => ({
-        name: att.Name,
-        contentType: att.ContentType,
-        contentLength: att.Content ? att.Content.length : 0
-      })));
-    }
-    console.log('=== END POSTMARK DATA ===');
 
     const result = await postmarkClient.sendEmailWithTemplate({
       To: data.email,
@@ -760,7 +722,6 @@ export async function sendBadgeConfirmationEmail(
       // Try to get PDF directly from Supabase storage first
       if (data.waiverPdfUrl.includes('/storage/v1/object/public/')) {
         try {
-          console.log('Attempting to get PDF from Supabase storage...');
           pdfContent = await getPDFFromStorage(data.waiverPdfUrl);
         } catch (storageError) {
           console.warn('Storage method failed, trying URL download:', storageError);
@@ -779,7 +740,6 @@ export async function sendBadgeConfirmationEmail(
           ContentID: null
         }
       ];
-      console.log('PDF attachment prepared successfully');
     } catch (pdfError) {
       console.warn('PDF attachment failed, sending email without attachment:', pdfError);
       // Continue without PDF attachment

@@ -117,15 +117,11 @@ export async function POST(request: NextRequest) {
       // Check if telegram is available for this event
       const isAvailable = await telegramService.isAvailable(event_slug);
       if (isAvailable) {
-        console.log('Generating telegram invite for new badge...');
         const invite = await telegramService.generatePrivateInvite(event_slug, sessionId);
         if (invite) {
-          console.log('Telegram invite generated successfully:', invite.id);
         } else {
-          console.log('Failed to generate telegram invite');
         }
       } else {
-        console.log('Telegram not available for this event');
       }
     } catch (telegramError) {
       // Don't fail badge creation if telegram fails

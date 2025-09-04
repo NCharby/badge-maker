@@ -299,7 +299,6 @@ async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData): Promi
   const fileName = `waiver-${Date.now()}-${data.fullName.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
   const filePath = `pdfs/${fileName}`;
 
-  console.log('Attempting to upload PDF to storage...');
   const { data: uploadData, error } = await supabase.storage
     .from('waiver-documents')
     .upload(filePath, pdfBuffer, {
@@ -312,10 +311,8 @@ async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData): Promi
     throw new Error(`Failed to upload PDF: ${error.message}`);
   }
 
-  console.log('PDF uploaded successfully:', uploadData);
 
   // Try to get a public URL first, then fall back to signed URL
-  console.log('Attempting to get public URL...');
   
   try {
     // Get the public URL (this should work immediately after upload)
@@ -324,7 +321,6 @@ async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData): Promi
       .getPublicUrl(uploadData.path);
     
     if (publicUrlData?.publicUrl) {
-      console.log('Public URL generated successfully:', publicUrlData.publicUrl);
       return publicUrlData.publicUrl;
     }
   } catch (publicUrlError) {
@@ -332,7 +328,6 @@ async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData): Promi
   }
 
   // Fall back to signed URL if public URL fails
-  console.log('Falling back to signed URL generation...');
   const { data: signedUrlData, error: signedUrlError } = await supabase.storage
     .from('waiver-documents')
     .createSignedUrl(uploadData.path, 24 * 60 * 60); // 24 hours expiry
@@ -347,7 +342,6 @@ async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData): Promi
     throw new Error('Failed to generate signed URL for PDF: No data returned');
   }
 
-  console.log('Signed URL generated successfully:', signedUrlData.signedUrl);
   return signedUrlData.signedUrl;
 }
 

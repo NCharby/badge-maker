@@ -162,7 +162,6 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
       
       if (badgeResponse.ok) {
         const badgeData = await badgeResponse.json()
-        console.log('Badge created successfully:', badgeData)
         
         // Redirect to confirmation page
         window.location.href = `/${eventSlug}/confirmation?badge_id=${badgeData.badge_id}`

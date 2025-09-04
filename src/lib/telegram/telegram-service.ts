@@ -21,33 +21,23 @@ export class TelegramService {
    */
   async isAvailable(eventSlug: string): Promise<boolean> {
     try {
-      console.log(`Checking Telegram availability for event: ${eventSlug}`);
       
       // Check if bot token is available in environment
       const envBotToken = process.env.TELEGRAM_BOT_TOKEN;
       if (!envBotToken) {
-        console.log('No TELEGRAM_BOT_TOKEN in environment');
         return false;
       }
       
       const config = await this.dbService.getEventTelegramConfig(eventSlug);
-      console.log(`Telegram config retrieved:`, config);
       
       if (!config || !config.enabled) {
-        console.log('Telegram not enabled for this event');
         return false;
       }
       
       // Merge environment bot token with database config
       const fullConfig = { ...config, botToken: envBotToken };
-      console.log(`Full config with bot token:`, { ...fullConfig, botToken: '***HIDDEN***' });
       
       const isAvailable = !!fullConfig.botToken && !!fullConfig.privateGroupId;
-      console.log(`Telegram availability result:`, isAvailable, {
-        enabled: fullConfig.enabled,
-        hasBotToken: !!fullConfig.botToken,
-        hasPrivateGroupId: !!fullConfig.privateGroupId
-      });
       
       return isAvailable;
     } catch (error) {
@@ -189,12 +179,10 @@ export class TelegramService {
       // Check if Telegram is available for this event
       const isAvailable = await this.isAvailable(eventSlug);
       if (!isAvailable) {
-        console.log('Telegram not available for this event');
         return false;
       }
 
       if (!this.botService) {
-        console.log('Bot service not available');
         return false;
       }
 

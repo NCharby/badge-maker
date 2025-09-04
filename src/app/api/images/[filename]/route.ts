@@ -31,9 +31,6 @@ export async function GET(
     }
 
     // Generate signed URL for secure access (expires in 1 hour)
-    console.log('Attempting to generate signed URL for:', filename)
-    console.log('Using bucket: badge-images')
-    console.log('Full path being requested:', filename)
     
     // First, let's try to list files to see what's actually there
     const { data: listData, error: listError } = await supabase.storage
@@ -43,7 +40,6 @@ export async function GET(
     if (listError) {
       console.error('List error:', listError)
     } else {
-      console.log('Files in bucket:', listData)
     }
     const { data: signedUrlData, error } = await supabase.storage
       .from('badge-images')
@@ -62,7 +58,6 @@ export async function GET(
       )
     }
 
-    console.log('Signed URL generated successfully for:', filename)
     return NextResponse.json({
       success: true,
       url: signedUrlData.signedUrl,

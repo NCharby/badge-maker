@@ -179,12 +179,10 @@ export class TelegramDatabaseService {
         .single();
 
       if (existingSession) {
-        console.log(`Using existing session: ${sessionId}`);
         return existingSession.id;
       }
 
       // If session doesn't exist, create a test session
-      console.log(`Creating test session: ${sessionId}`);
       const eventId = await this.getEventId(eventSlug);
       if (!eventId) {
         throw new Error('Event not found');
@@ -206,7 +204,6 @@ export class TelegramDatabaseService {
         throw new Error('Failed to create test session');
       }
 
-      console.log(`Created test session: ${newSession.id}`);
       return newSession.id;
     } catch (error) {
       console.error('Error in getOrCreateTestSession:', error);

@@ -73,7 +73,6 @@ export async function POST(request: NextRequest) {
 
     } else if (type === 'badge-confirmation') {
       // Send badge confirmation email
-      console.log('Badge confirmation email request received:', { type, data });
       
       const { badgeId, eventSlug } = data;
       
@@ -85,7 +84,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      console.log('Getting badge confirmation data for:', { badgeId, eventSlug });
       
       // Get all confirmation data
       const confirmationData = await getBadgeConfirmationData(badgeId, eventSlug);
@@ -98,13 +96,10 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      console.log('Badge confirmation data retrieved:', confirmationData);
 
       // Send the confirmation email using Postmark template
-      console.log('Sending badge confirmation email...');
       const result = await sendBadgeConfirmationEmailWithTemplate(confirmationData);
 
-      console.log('Email sending result:', result);
 
       if (!result.success) {
         console.error('Email sending failed:', result.error);
@@ -114,7 +109,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      console.log('Email sent successfully with message ID:', result.messageId);
       return NextResponse.json({
         success: true,
         messageId: result.messageId,

@@ -88,27 +88,15 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
   // Send confirmation email when badge data is loaded and telegram is ready
   useEffect(() => {
     const sendConfirmationEmail = async () => {
-      console.log('Confirmation email useEffect triggered:', {
-        badgeId: badgeData?.id,
-        eventSlug,
-        emailStatus
-      });
       
       if (!badgeData?.id || !eventSlug || emailStatus !== 'idle') {
-        console.log('Email sending skipped:', {
-          hasBadgeId: !!badgeData?.id,
-          hasEventSlug: !!eventSlug,
-          emailStatus
-        });
         return;
       }
       
       try {
-        console.log('Starting email sending process...');
         setEmailStatus('sending');
         
         // Wait a moment for telegram bot to potentially generate invite
-        console.log('Waiting for telegram bot to potentially generate invite...');
         await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
         
         const requestData = {
@@ -116,7 +104,6 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
           data: { badgeId: badgeData.id, eventSlug }
         };
         
-        console.log('Sending email request:', requestData);
         
         const response = await fetch('/api/email', {
           method: 'POST',
@@ -124,11 +111,9 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
           body: JSON.stringify(requestData)
         });
         
-        console.log('Email API response status:', response.status);
         
         if (response.ok) {
           const responseData = await response.json();
-          console.log('Email sent successfully:', responseData);
           setEmailStatus('sent');
         } else {
           const errorData = await response.json();
