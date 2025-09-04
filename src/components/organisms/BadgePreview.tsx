@@ -111,9 +111,9 @@ export function BadgePreview() {
                            sm:text-[26px] 
                            md:text-[28px] 
                            lg:text-[30px] 
-                           text-nowrap text-white"
+                           text-white text-center"
               >
-                <p className="leading-[17px] sm:leading-[18px] md:leading-[19px] lg:leading-[20px] whitespace-pre">
+                <p className="leading-[17px] sm:leading-[18px] md:leading-[19px] lg:leading-[20px] break-words">
                   {data.badge_name || 'BADGE NAME'}
                 </p>
               </div>

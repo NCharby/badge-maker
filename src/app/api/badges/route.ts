@@ -38,6 +38,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate badge name length
+    if (badge_name && badge_name.length > 40) {
+      return NextResponse.json(
+        { error: 'Badge name must be 40 characters or less' },
+        { status: 400 }
+      )
+    }
+
     // Validate social media handles limit
     if (social_media_handles && social_media_handles.length > 2) {
       return NextResponse.json(
