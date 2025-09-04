@@ -99,6 +99,8 @@ export class TelegramService {
 
       // Get event configuration
       const config = await this.dbService.getEventTelegramConfig(eventSlug);
+      console.log('Retrieved Telegram config:', config);
+      
       if (!config?.enabled || !config.privateGroupId) {
         throw new Error('Telegram private group not configured for this event');
       }
@@ -141,6 +143,14 @@ export class TelegramService {
         member_limit: 1, // One-time use
         creates_join_request: false
       };
+
+      console.log('Creating Telegram invite with request:', {
+        chat_id: request.chat_id,
+        name: request.name,
+        expire_date: request.expire_date,
+        member_limit: request.member_limit,
+        creates_join_request: request.creates_join_request
+      });
 
       const botResponse = await this.botService.createChatInviteLink(request);
       

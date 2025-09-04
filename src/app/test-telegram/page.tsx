@@ -17,7 +17,7 @@ function generateUUID(): string {
 }
 
 export default function TestTelegramPage() {
-  const [eventSlug, setEventSlug] = useState('default');
+  const [eventSlug, setEventSlug] = useState('cog-classic-2026');
   const [sessionId, setSessionId] = useState(generateUUID());
   const [testResults, setTestResults] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -29,12 +29,12 @@ export default function TestTelegramPage() {
   const testBotConnection = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/telegram/test-connection?eventSlug=${encodeURIComponent(eventSlug)}`);
+      const response = await fetch(`/api/telegram/test?eventSlug=${encodeURIComponent(eventSlug)}`);
       const data = await response.json();
-      setTestResults({ type: 'Bot Connection', data });
+      setTestResults({ type: 'Comprehensive Test', data });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      setTestResults({ type: 'Bot Connection', error: errorMessage });
+      setTestResults({ type: 'Comprehensive Test', error: errorMessage });
     } finally {
       setLoading(false);
     }
@@ -71,6 +71,20 @@ export default function TestTelegramPage() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       setTestResults({ type: 'Generate Invite', error: errorMessage });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const testBotPermissions = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/telegram/test-bot-permissions?eventSlug=${encodeURIComponent(eventSlug)}`);
+      const data = await response.json();
+      setTestResults({ type: 'Bot Permissions', data });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setTestResults({ type: 'Bot Permissions', error: errorMessage });
     } finally {
       setLoading(false);
     }
@@ -128,12 +142,15 @@ export default function TestTelegramPage() {
               </div>
             </div>
 
-            <div className="flex space-x-4">
+            <div className="flex space-x-4 flex-wrap gap-2">
               <Button onClick={testBotConnection} disabled={loading}>
-                Test Bot Connection
+                Comprehensive Test
               </Button>
               <Button onClick={testGroupInfo} disabled={loading}>
                 Test Group Info
+              </Button>
+              <Button onClick={testBotPermissions} disabled={loading}>
+                Test Bot Permissions
               </Button>
               <Button onClick={testGenerateInvite} disabled={loading}>
                 Test Generate Invite
@@ -184,15 +201,19 @@ export default function TestTelegramPage() {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span>TELEGRAM_BOT_TOKEN:</span>
-                <span className={process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN ? 'text-green-600' : 'text-red-600'}>
-                  {process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN ? 'Configured' : 'Not Configured'}
+                <span className="text-yellow-600">
+                  Check server logs for status
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>TELEGRAM_INVITE_EXPIRY_HOURS:</span>
                 <span className="text-blue-600">
-                  {process.env.NEXT_PUBLIC_TELEGRAM_INVITE_EXPIRY_HOURS || '24 (default)'}
+                  24 (default)
                 </span>
+              </div>
+              <div className="text-sm text-gray-500 mt-2">
+                Note: TELEGRAM_BOT_TOKEN is server-side only and cannot be checked from the browser.
+                Use the "Comprehensive Test" button to verify configuration.
               </div>
             </div>
           </CardContent>

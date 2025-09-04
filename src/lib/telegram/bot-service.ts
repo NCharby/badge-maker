@@ -51,19 +51,42 @@ export class TelegramBotService {
     const url = `${this.baseUrl}${endpoint}`;
     
     try {
-      const response = await fetch(url, {
+      let requestOptions: RequestInit = {
         method: data ? 'POST' : 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: data ? JSON.stringify(data) : undefined,
-      });
+      };
+
+      if (data) {
+        // Telegram Bot API expects form data, not JSON
+        const formData = new FormData();
+        Object.keys(data).forEach(key => {
+          if (data[key] !== undefined && data[key] !== null) {
+            formData.append(key, data[key].toString());
+          }
+        });
+        requestOptions.body = formData;
+        
+        // Debug logging
+        console.log('Telegram API request data:', data);
+        console.log('FormData entries:');
+        Array.from(formData.entries()).forEach(([key, value]) => {
+          console.log(`  ${key}: ${value}`);
+        });
+      }
+
+      const response = await fetch(url, requestOptions);
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Telegram API error response:`, errorText);
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const result: TelegramBotResponse<T> = await response.json();
+      
+      if (!result.ok) {
+        console.error(`Telegram API error:`, result);
+        throw new Error(`Telegram API error: ${result.description || 'Unknown error'}`);
+      }
       
       // Rate limiting - wait before next request
       await this.delay(this.rateLimitDelay);
