@@ -11,3 +11,4 @@ export { ApiErrorHandler } from './ApiErrorHandler';
 export { FormErrorHandler } from './FormErrorHandler';
 export { PhoneInput } from './PhoneInput';
 export { TelegramLinks } from './TelegramLinks';
+export { AlphaNoticePopup } from './AlphaNoticePopup';
