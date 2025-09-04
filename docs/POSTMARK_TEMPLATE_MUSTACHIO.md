@@ -1,4 +1,4 @@
-# Postmark Email Template: Badge Confirmation Complete (CORRECTED)
+# Postmark Email Template: Badge Confirmation (Mustachio Syntax)
 
 ## Template Configuration
 
@@ -26,9 +26,11 @@ The following variables will be passed to the template:
   waiverSignedAt: string;
   waiverPdfUrl: string;
   
-  // Telegram Information (pre-formatted strings)
-  telegramInvite: string;
-  telegramPublicChannel: string;
+  // Telegram Information (empty string if not available)
+  telegramSectionHtml: string; // Complete HTML block or empty string
+  telegramSectionText: string; // Complete text block or empty string
+  telegramNextStepsHtml: string; // HTML list item or empty string
+  telegramNextStepsText: string; // Text line or empty string
   
   // Event Information
   eventName: string;
@@ -36,7 +38,7 @@ The following variables will be passed to the template:
 }
 ```
 
-## HTML Template (CORRECTED - No Conditionals)
+## HTML Template (Mustachio Syntax)
 
 ```html
 <!DOCTYPE html>
@@ -232,14 +234,7 @@ The following variables will be passed to the template:
         <p><strong>PDF Attachment:</strong> Your signed waiver is attached to this email for your records.</p>
       </div>
       
-      <div class="section telegram-section">
-        <h3>💬 Join the Community</h3>
-        <p>Connect with other attendees and stay updated on event information:</p>
-        <p><strong>Private Group Invite:</strong></p>
-        <div class="telegram-text">{{telegramInvite}}</div>
-        <p><strong>Public Channel:</strong></p>
-        <div class="telegram-text">{{telegramPublicChannel}}</div>
-      </div>
+      {{telegramSectionHtml}}
       
       <div class="highlight">
         <h3>🎯 What's Next?</h3>
@@ -247,7 +242,7 @@ The following variables will be passed to the template:
         <ul>
           <li>Save this email for your records</li>
           <li>Download and print your badge if needed</li>
-          <li>Join the Telegram group to connect with other attendees</li>
+          {{telegramNextStepsHtml}}
           <li>Check your email for any additional event updates</li>
         </ul>
       </div>
@@ -267,7 +262,7 @@ The following variables will be passed to the template:
 </html>
 ```
 
-## Plain Text Template (CORRECTED)
+## Plain Text Template (Mustachio Syntax)
 
 ```text
 🎉 Your Badge is Ready!
@@ -289,16 +284,13 @@ Your waiver has been successfully signed and processed:
 - Signed: {{waiverSignedAt}}
 - PDF Attachment: Your signed waiver is attached to this email for your records.
 
-💬 JOIN THE COMMUNITY
-Connect with other attendees and stay updated on event information:
-- Private Group Invite: {{telegramInvite}}
-- Public Channel: {{telegramPublicChannel}}
+{{telegramSectionText}}
 
 🎯 WHAT'S NEXT?
 You're all set for {{eventName}}! Make sure to:
 - Save this email for your records
 - Download and print your badge if needed
-- Join the Telegram group to connect with other attendees
+{{telegramNextStepsText}}
 - Check your email for any additional event updates
 
 Need Help? If you have any questions or need assistance, please contact the event organizers.
@@ -309,7 +301,7 @@ This email was sent by Shiny Dog Productions INC
 If you have any questions, please contact the event organizers
 ```
 
-## Test Data
+## Test Data (With Telegram)
 
 ```json
 {
@@ -321,19 +313,50 @@ If you have any questions, please contact the event organizers
   "waiverId": "WAIVER-12345",
   "waiverSignedAt": "December 15, 2024 at 2:25 PM",
   "waiverPdfUrl": "https://example.com/waiver.pdf",
-  "telegramInvite": "https://t.me/+ABC123DEF456 (expires: December 16, 2024 at 2:30 PM)",
-  "telegramPublicChannel": "Event Updates - https://t.me/eventupdates",
+  "telegramSectionHtml": "<div class=\"section telegram-section\"><h3>💬 Join the Community</h3><p>Connect with other attendees and stay updated on event information:</p><p><strong>Private Group Invite:</strong></p><div class=\"telegram-text\">https://t.me/+ABC123DEF456 (expires: December 16, 2024 at 2:30 PM)</div><p><strong>Public Channel:</strong></p><div class=\"telegram-text\">Event Updates - https://t.me/eventupdates</div></div>",
+  "telegramSectionText": "💬 JOIN THE COMMUNITY\nConnect with other attendees and stay updated on event information:\n- Private Group Invite: https://t.me/+ABC123DEF456 (expires: December 16, 2024 at 2:30 PM)\n- Public Channel: Event Updates - https://t.me/eventupdates\n\n",
+  "telegramNextStepsHtml": "<li>Join the Telegram group to connect with other attendees</li>",
+  "telegramNextStepsText": "- Join the Telegram group to connect with other attendees",
   "eventName": "Tech Conference 2024",
   "eventSlug": "tech-conf-2024"
 }
 ```
 
-## Key Changes Made
+## Test Data (No Telegram)
 
-1. **Removed all conditional statements** (`{{#if}}` and `{{#each}}`)
-2. **Pre-formatted data as strings** in the email service
-3. **Simplified template structure** to avoid Postmark syntax issues
-4. **Added proper styling** for pre-formatted text sections
-5. **Maintained professional appearance** while avoiding complex Handlebars syntax
+```json
+{
+  "fullName": "John Doe",
+  "email": "john.doe@example.com",
+  "badgeName": "John Doe",
+  "socialMediaHandles": "• twitter: @johndoe\n• instagram: @john_doe",
+  "badgeCreatedAt": "December 15, 2024 at 2:30 PM",
+  "waiverId": "WAIVER-12345",
+  "waiverSignedAt": "December 15, 2024 at 2:25 PM",
+  "waiverPdfUrl": "https://example.com/waiver.pdf",
+  "telegramSectionHtml": "",
+  "telegramSectionText": "",
+  "telegramNextStepsHtml": "",
+  "telegramNextStepsText": "",
+  "eventName": "Tech Conference 2024",
+  "eventSlug": "tech-conf-2024"
+}
+```
 
-This template should work perfectly with Postmark without any syntax errors!
+## Key Features
+
+- ✅ **Pure Mustachio Syntax**: Uses only `{{variable}}` interpolation
+- ✅ **No Conditionals**: All conditional logic handled in backend
+- ✅ **Pre-formatted Blocks**: Telegram sections sent as complete HTML/text blocks
+- ✅ **Clean Design**: Professional appearance with proper styling
+- ✅ **Mobile Responsive**: Works on all devices
+- ✅ **Fallback Handling**: Empty strings for missing data
+
+## How It Works
+
+1. **Backend Logic**: The email service formats telegram data into complete HTML/text blocks
+2. **Template Variables**: Sends pre-formatted strings to the template
+3. **Mustachio Rendering**: Template simply interpolates the variables
+4. **Conditional Display**: Empty strings result in no content being displayed
+
+This approach follows Postmark's Mustachio syntax exactly and avoids any conditional logic in the template itself.

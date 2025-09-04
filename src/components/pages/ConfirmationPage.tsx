@@ -85,7 +85,7 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
     fetchBadgeData()
   }, [badgeId])
 
-  // Send confirmation email when badge data is loaded
+  // Send confirmation email when badge data is loaded and telegram is ready
   useEffect(() => {
     const sendConfirmationEmail = async () => {
       console.log('Confirmation email useEffect triggered:', {
@@ -106,6 +106,10 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
       try {
         console.log('Starting email sending process...');
         setEmailStatus('sending');
+        
+        // Wait a moment for telegram bot to potentially generate invite
+        console.log('Waiting for telegram bot to potentially generate invite...');
+        await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
         
         const requestData = {
           type: 'badge-confirmation',
@@ -293,7 +297,7 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
                   <div className="flex items-center justify-center space-x-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                     <p className="text-[#949494] font-open-sans text-[14px]">
-                      Sending confirmation email...
+                      Preparing confirmation email...
                     </p>
                   </div>
                 )}

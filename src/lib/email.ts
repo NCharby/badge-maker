@@ -470,6 +470,12 @@ export async function getBadgeConfirmationData(
       return null;
     }
 
+    console.log('Badge data retrieved:', {
+      id: badgeData.id,
+      waiver_id: badgeData.waiver_id,
+      session_id: badgeData.session_id
+    });
+
     // Get waiver data
     let waiverData = null;
     if (badgeData.waiver_id) {
@@ -493,18 +499,26 @@ export async function getBadgeConfirmationData(
     // Get telegram invite data
     let telegramInvite = null;
     if (badgeData.session_id) {
+      console.log('Looking for telegram invite with session_id:', badgeData.session_id);
       const { data: telegramData, error: telegramError } = await supabase
         .from('telegram_invites')
         .select(`
-          invite_url,
+          invite_link,
           expires_at
         `)
         .eq('session_id', badgeData.session_id)
         .single();
 
-      if (!telegramError && telegramData) {
+      if (telegramError) {
+        console.log('Telegram invite error:', telegramError);
+      } else if (telegramData) {
+        console.log('Telegram invite found:', telegramData);
         telegramInvite = telegramData;
+      } else {
+        console.log('No telegram invite found for session_id:', badgeData.session_id);
       }
+    } else {
+      console.log('No session_id found in badge data');
     }
 
     // Get event data
@@ -525,7 +539,7 @@ export async function getBadgeConfirmationData(
     // Format the data for email template
     const fullName = waiverData ? `${waiverData.first_name} ${waiverData.last_name}` : 'Unknown User';
     
-    return {
+    const result = {
       fullName,
       email: badgeData.email,
       badgeName: badgeData.badge_name,
@@ -535,12 +549,19 @@ export async function getBadgeConfirmationData(
       waiverSignedAt: waiverData?.signed_at || badgeData.created_at,
       waiverPdfUrl: waiverData?.pdf_url || '',
       telegramInvite: telegramInvite ? {
-        url: telegramInvite.invite_url,
+        url: telegramInvite.invite_link,
         expiresAt: telegramInvite.expires_at
       } : undefined,
       eventName: eventData.name,
       eventSlug: eventData.slug
     };
+
+    console.log('Final confirmation data:', {
+      hasTelegramInvite: !!result.telegramInvite,
+      telegramInvite: result.telegramInvite
+    });
+
+    return result;
   } catch (error) {
     console.error('Error in getBadgeConfirmationData:', error);
     return null;
@@ -595,13 +616,36 @@ export async function sendBadgeConfirmationEmailWithTemplate(
       ? data.socialMediaHandles.map(handle => `• ${handle.platform}: @${handle.handle}`).join('\n')
       : 'None provided';
 
-    const telegramInviteText = data.telegramInvite 
-      ? `${data.telegramInvite.url} (expires: ${telegramExpiryDate})`
-      : 'Not available';
+    // Format telegram sections as complete HTML blocks
+    const telegramSectionHtml = data.telegramInvite 
+      ? `<div class="section telegram-section">
+        <h3>💬 Join the Community</h3>
+        <p>Connect with other attendees and stay updated on event information:</p>
+        <p><strong>Private Group Invite:</strong></p>
+        <div class="telegram-text">${data.telegramInvite.url} (expires: ${telegramExpiryDate})</div>
+        ${data.telegramPublicChannel ? `
+        <p><strong>Public Channel:</strong></p>
+        <div class="telegram-text">${data.telegramPublicChannel.name} - ${data.telegramPublicChannel.url}</div>
+        ` : ''}
+      </div>`
+      : '';
 
-    const telegramChannelText = data.telegramPublicChannel 
-      ? `${data.telegramPublicChannel.name} - ${data.telegramPublicChannel.url}`
-      : 'Not available';
+    const telegramSectionText = data.telegramInvite 
+      ? `💬 JOIN THE COMMUNITY
+Connect with other attendees and stay updated on event information:
+- Private Group Invite: ${data.telegramInvite.url} (expires: ${telegramExpiryDate})
+${data.telegramPublicChannel ? `- Public Channel: ${data.telegramPublicChannel.name} - ${data.telegramPublicChannel.url}` : ''}
+
+`
+      : '';
+
+    const telegramNextStepsHtml = data.telegramInvite 
+      ? '<li>Join the Telegram group to connect with other attendees</li>'
+      : '';
+
+    const telegramNextStepsText = data.telegramInvite 
+      ? '- Join the Telegram group to connect with other attendees'
+      : '';
 
     const templateData = {
       fullName: data.fullName,
@@ -612,8 +656,10 @@ export async function sendBadgeConfirmationEmailWithTemplate(
       waiverId: data.waiverId,
       waiverSignedAt: waiverSignedDate,
       waiverPdfUrl: data.waiverPdfUrl,
-      telegramInvite: telegramInviteText,
-      telegramPublicChannel: telegramChannelText,
+      telegramSectionHtml: telegramSectionHtml,
+      telegramSectionText: telegramSectionText,
+      telegramNextStepsHtml: telegramNextStepsHtml,
+      telegramNextStepsText: telegramNextStepsText,
       eventName: data.eventName,
       eventSlug: data.eventSlug
     };
@@ -621,15 +667,27 @@ export async function sendBadgeConfirmationEmailWithTemplate(
     // Download PDF for attachment
     let attachments: EmailAttachment[] = [];
     try {
-      const pdfContent = await downloadPDFContent(data.waiverPdfUrl);
-      attachments = [
-        {
-          Name: `waiver-${data.waiverId}.pdf`,
-          Content: pdfContent,
-          ContentType: 'application/pdf',
-          ContentID: null
-        }
-      ];
+      // Try to get PDF from storage first, then fallback to URL download
+      let pdfContent = null;
+      try {
+        pdfContent = await getPDFFromStorage(data.waiverPdfUrl);
+        console.log('PDF retrieved from storage successfully');
+      } catch (storageError) {
+        console.log('Storage method failed, trying URL download:', storageError);
+        pdfContent = await downloadPDFContent(data.waiverPdfUrl);
+      }
+      
+      if (pdfContent) {
+        attachments = [
+          {
+            Name: `waiver-${data.waiverId}.pdf`,
+            Content: pdfContent,
+            ContentType: 'application/pdf',
+            ContentID: null
+          }
+        ];
+        console.log('PDF attachment added successfully');
+      }
     } catch (pdfError) {
       console.warn('PDF attachment failed, sending email without attachment:', pdfError);
     }
@@ -640,6 +698,21 @@ export async function sendBadgeConfirmationEmailWithTemplate(
     if (!templateId) {
       throw new Error('POSTMARK_TEMPLATE_ID environment variable is required');
     }
+
+    console.log('=== POSTMARK EMAIL DATA ===');
+    console.log('Template ID:', templateId);
+    console.log('From:', process.env.POSTMARK_FROM_EMAIL || 'noreply@yourdomain.com');
+    console.log('To:', data.email);
+    console.log('Template Data:', JSON.stringify(templateData, null, 2));
+    console.log('Attachments:', attachments.length > 0 ? `${attachments.length} attachment(s)` : 'No attachments');
+    if (attachments.length > 0) {
+      console.log('Attachment details:', attachments.map(att => ({
+        name: att.Name,
+        contentType: att.ContentType,
+        contentLength: att.Content ? att.Content.length : 0
+      })));
+    }
+    console.log('=== END POSTMARK DATA ===');
 
     const result = await postmarkClient.sendEmailWithTemplate({
       To: data.email,
