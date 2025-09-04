@@ -376,18 +376,48 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
 async function generatePDFFromHTML(htmlContent: string): Promise<Buffer> {
   const browser = await puppeteer.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-web-security',
+      '--disable-features=VizDisplayCompositor',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-default-apps',
+      '--disable-extensions',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding'
+    ],
+    protocolTimeout: 60000, // 60 second timeout
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser'
   });
 
   try {
     const page = await browser.newPage();
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
     
-    // Wait for images to load
-    await page.waitForFunction(() => {
-      const images = document.querySelectorAll('img');
-      return Array.from(images).every(img => img.complete);
-    }, { timeout: 5000 });
+    // Set page timeout
+    page.setDefaultTimeout(30000); // 30 second timeout
+    page.setDefaultNavigationTimeout(30000);
+    
+    // Set content with longer timeout
+    await page.setContent(htmlContent, { 
+      waitUntil: 'domcontentloaded', // Use faster loading condition
+      timeout: 30000 
+    });
+    
+    // Wait for images to load with increased timeout
+    try {
+      await page.waitForFunction(() => {
+        const images = document.querySelectorAll('img');
+        return Array.from(images).every(img => img.complete);
+      }, { timeout: 10000 });
+    } catch (imageTimeout) {
+      console.warn('Image loading timeout, proceeding with PDF generation:', imageTimeout);
+      // Continue with PDF generation even if images don't load
+    }
     
     const pdfBuffer = await page.pdf({
       format: 'A4',
@@ -397,12 +427,17 @@ async function generatePDFFromHTML(htmlContent: string): Promise<Buffer> {
         right: '0.5in',
         bottom: '0.5in',
         left: '0.5in'
-      }
+      },
+      timeout: 30000 // Add PDF generation timeout
     });
 
     return Buffer.from(pdfBuffer);
   } finally {
-    await browser.close();
+    try {
+      await browser.close();
+    } catch (closeError) {
+      console.warn('Browser close error (non-critical):', closeError);
+    }
   }
 }
 
