@@ -55,6 +55,29 @@ Badge Maker follows a modern, scalable architecture built on Next.js 14 with a f
 
 ## 🗄️ **Data Architecture**
 
+### **Badge Template System**
+
+**Current Implementation**: The badge preview system has been **temporarily bypassed** in favor of a hardcoded design implementation.
+
+#### **Template System (Currently Unused)**
+- **Database Table**: `templates` with `config JSONB` field
+- **Original Design**: Dynamic badge layouts based on database configuration
+- **Status**: Infrastructure exists but is not actively used
+
+#### **Hardcoded Implementation (Current)**
+- **Component**: `BadgePreview.tsx` with direct Figma design implementation
+- **Design Source**: Figma specifications hardcoded in JSX/Tailwind CSS
+- **Benefits**: 
+  - Consistent design matching Figma exactly
+  - Better performance (no database queries for template config)
+  - Easier maintenance and updates
+  - Responsive design with proper scaling
+
+#### **Future Considerations**
+- **Template System**: Can be re-enabled for multi-template support
+- **Hybrid Approach**: Combine hardcoded base design with template variations
+- **Migration Path**: Database template system remains available for future use
+
 ### **Database Schema**
 ```sql
 -- Core entities
@@ -258,7 +281,7 @@ interface UserFlowState {
 
 ---
 
-**Last Updated**: December 2024  
-**Architecture Version**: 2.1.0 (With Telegram Integration)  
+**Last Updated**: January 2025  
+**Architecture Version**: 2.2.0 (With Hardcoded Badge Design)  
 **Status**: Production Ready  
 **Next Review**: As needed for new features

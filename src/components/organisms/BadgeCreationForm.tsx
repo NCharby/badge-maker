@@ -278,7 +278,7 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
       </form>
 
       {/* Preview Section */}
-      <div className="flex flex-col items-center">
+      <div className="flex flex-col items-center justify-center min-h-[600px]">
         <BadgePreview />
         <p className="text-[#949494] font-open-sans text-[12px] text-center max-w-[300px] mt-0 sm:mt-0 md:mt-[45px] lg:mt-[45px]">
           *Simulated layout. Your actual badge will be printed slightly differently.

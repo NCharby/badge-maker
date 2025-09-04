@@ -151,7 +151,7 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
     <ConfirmationTemplate>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-12 max-w-7xl">
         {/* Badge Preview */}
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center justify-center min-h-[600px]">
           <BadgePreview 
             badgeData={badgeData}
             imageUrl={imageUrl || undefined}
