@@ -31,10 +31,14 @@ export function BadgePreview() {
   const displayImage = croppedImage || originalImage
 
   return (
-    <div className="flex justify-center">
-      {/* Badge Container - Exact Figma specifications */}
+    <div className="flex justify-center items-center min-h-[600px] sm:min-h-[500px] md:min-h-[600px]">
+      {/* Badge Container - Responsive scaling while maintaining aspect ratio */}
       <div 
-        className="bg-gradient-to-r box-border content-stretch flex from-[#170a2a] from-[0.214%] gap-2.5 items-center justify-start p-[15px] relative size-full to-[#0f2733] to-[99.748%] w-[284px] h-[400px]"
+        className="bg-gradient-to-r box-border content-stretch flex from-[#170a2a] from-[0.214%] gap-2.5 items-center justify-start p-[15px] relative size-full to-[#0f2733] to-[99.748%] 
+                   w-[284px] h-[400px] scale-100
+                   sm:w-[320px] sm:h-[450px] sm:scale-110
+                   md:w-[355px] md:h-[500px] md:scale-125
+                   lg:w-[390px] lg:h-[550px] lg:scale-140"
         data-name="Badge"
       >
         <div 
@@ -68,20 +72,29 @@ export function BadgePreview() {
               data-name="Image Wrapper"
             >
               <div 
-                className="bg-[#d9d9d9] rounded-[80px] shrink-0 size-[145px] flex items-center justify-center"
+                className="bg-[#d9d9d9] shrink-0 
+                           size-[145px] rounded-[80px]
+                           sm:size-[160px] sm:rounded-[90px]
+                           md:size-[180px] md:rounded-[100px]
+                           lg:size-[200px] lg:rounded-[110px]
+                           flex items-center justify-center"
                 data-name="Badge Image"
               >
                 {displayImage ? (
                   <img
                     src={URL.createObjectURL(displayImage)}
                     alt="Profile"
-                    className="w-full h-full object-cover rounded-[80px]"
+                    className="w-full h-full object-cover 
+                               rounded-[80px]
+                               sm:rounded-[90px]
+                               md:rounded-[100px]
+                               lg:rounded-[110px]"
                   />
                 ) : (
                   <img
                     src="/assets/question-placer@2x.png"
                     alt="Question mark placeholder"
-                    className="w-8 h-8 object-contain"
+                    className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 lg:w-12 lg:h-12 object-contain"
                   />
                 )}
               </div>
@@ -93,9 +106,14 @@ export function BadgePreview() {
               data-name="Name Wrapper"
             >
               <div 
-                className="font-['Montserrat:Regular',_sans-serif] leading-[0] not-italic relative shrink-0 text-[24px] text-nowrap text-white"
+                className="font-['Montserrat:Regular',_sans-serif] leading-[0] not-italic relative shrink-0 
+                           text-[24px] 
+                           sm:text-[26px] 
+                           md:text-[28px] 
+                           lg:text-[30px] 
+                           text-nowrap text-white"
               >
-                <p className="leading-[17px] whitespace-pre">
+                <p className="leading-[17px] sm:leading-[18px] md:leading-[19px] lg:leading-[20px] whitespace-pre">
                   {data.badge_name || 'BADGE NAME'}
                 </p>
               </div>
@@ -119,7 +137,7 @@ export function BadgePreview() {
                 data-name="Social 1"
               >
                 <div 
-                  className="h-7 relative shrink-0 w-6"
+                  className="h-7 w-6 sm:h-8 sm:w-7 md:h-9 md:w-8 lg:h-10 lg:w-9 relative shrink-0"
                   data-name="Vector"
                 >
                   {getPlatformIcon(data.social_media_handles[0].platform) ? (
@@ -138,9 +156,14 @@ export function BadgePreview() {
                   )}
                 </div>
                 <div 
-                  className="font-['Montserrat:Regular',_sans-serif] leading-[0] not-italic relative shrink-0 text-[16px] text-nowrap text-white"
+                  className="font-['Montserrat:Regular',_sans-serif] leading-[0] not-italic relative shrink-0 
+                             text-[16px] 
+                             sm:text-[17px] 
+                             md:text-[18px] 
+                             lg:text-[19px] 
+                             text-nowrap text-white"
                 >
-                  <p className="leading-[17px] whitespace-pre">
+                  <p className="leading-[17px] sm:leading-[18px] md:leading-[19px] lg:leading-[20px] whitespace-pre">
                     {data.social_media_handles[0]?.handle || '@social_handle1'}
                   </p>
                 </div>
@@ -154,7 +177,7 @@ export function BadgePreview() {
                 data-name="Social 2"
               >
                 <div 
-                  className="h-7 relative shrink-0 w-6"
+                  className="h-7 w-6 sm:h-8 sm:w-7 md:h-9 md:w-8 lg:h-10 lg:w-9 relative shrink-0"
                   data-name="Vector"
                 >
                   {getPlatformIcon(data.social_media_handles[1].platform) ? (
@@ -173,9 +196,14 @@ export function BadgePreview() {
                   )}
                 </div>
                 <div 
-                  className="font-['Montserrat:Regular',_sans-serif] leading-[0] not-italic relative shrink-0 text-[16px] text-nowrap text-white"
+                  className="font-['Montserrat:Regular',_sans-serif] leading-[0] not-italic relative shrink-0 
+                             text-[16px] 
+                             sm:text-[17px] 
+                             md:text-[18px] 
+                             lg:text-[19px] 
+                             text-nowrap text-white"
                 >
-                  <p className="leading-[17px] whitespace-pre">
+                  <p className="leading-[17px] sm:leading-[18px] md:leading-[19px] lg:leading-[20px] whitespace-pre">
                     {data.social_media_handles[1]?.handle || '@social_handle2'}
                   </p>
                 </div>
