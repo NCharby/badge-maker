@@ -15,8 +15,16 @@ export async function GET(request: NextRequest) {
 
     // Get the group ID from database
     const { createClient } = await import('@supabase/supabase-js');
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json({
+        success: false,
+        error: 'Supabase configuration missing'
+      }, { status: 500 });
+    }
+    
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
     const { data: eventData, error: eventError } = await supabase

@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateWaiverPDF, WaiverPDFData } from '@/lib/pdf';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
 export async function POST(request: NextRequest) {
   try {
+    // Initialize Supabase client inside the function
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json({
+        success: false,
+        error: 'Supabase configuration missing'
+      }, { status: 500 });
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
     const body = await request.json();
     const {
       firstName,
@@ -56,7 +63,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Generate PDF
-    const result = await generateWaiverPDF(pdfData);
+    const result = await generateWaiverPDF(pdfData, supabase);
 
     if (!result.success) {
       return NextResponse.json(
@@ -143,6 +150,19 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    // Initialize Supabase client inside the function
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json({
+        success: false,
+        error: 'Supabase configuration missing'
+      }, { status: 500 });
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    
     const { searchParams } = new URL(request.url);
     const waiverId = searchParams.get('waiverId');
 

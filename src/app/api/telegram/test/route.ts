@@ -2,13 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createTelegramService } from '@/lib/telegram/telegram-service';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
 export async function GET(request: NextRequest) {
   try {
+    // Initialize Supabase client inside the function
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json({
+        success: false,
+        error: 'Supabase configuration missing',
+        details: 'NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY not set'
+      }, { status: 500 });
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
     const { searchParams } = new URL(request.url);
     const eventSlug = searchParams.get('eventSlug') || 'cog-classic-2026';
 
@@ -60,7 +68,7 @@ export async function GET(request: NextRequest) {
       },
       summary: {
         overallStatus: hasBotToken && eventData && isAvailable && botConnectionTest ? 'PASS' : 'FAIL',
-        issues: []
+        issues: [] as string[]
       }
     };
 

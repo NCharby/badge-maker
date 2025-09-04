@@ -1,10 +1,5 @@
 import puppeteer from 'puppeteer';
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export interface WaiverPDFData {
   // Participant Information
@@ -33,7 +28,7 @@ export interface PDFGenerationResult {
 /**
  * Generate a waiver PDF with signature and participant information
  */
-export async function generateWaiverPDF(data: WaiverPDFData): Promise<PDFGenerationResult> {
+export async function generateWaiverPDF(data: WaiverPDFData, supabase: SupabaseClient): Promise<PDFGenerationResult> {
   try {
     // Create HTML template for the PDF
     const htmlContent = createWaiverHTMLTemplate(data);
@@ -42,7 +37,7 @@ export async function generateWaiverPDF(data: WaiverPDFData): Promise<PDFGenerat
     const pdfBuffer = await generatePDFFromHTML(htmlContent);
     
     // Upload PDF to Supabase Storage
-    const pdfUrl = await uploadPDFToStorage(pdfBuffer, data);
+    const pdfUrl = await uploadPDFToStorage(pdfBuffer, data, supabase);
     
     return {
       success: true,
@@ -414,7 +409,7 @@ async function generatePDFFromHTML(htmlContent: string): Promise<Buffer> {
 /**
  * Upload PDF to Supabase Storage
  */
-async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData): Promise<string> {
+async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData, supabase: SupabaseClient): Promise<string> {
   const fileName = `waiver-${Date.now()}-${data.fullName.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
   const filePath = `pdfs/${fileName}`;
 
@@ -476,7 +471,7 @@ function generateDocumentId(): string {
 /**
  * Get signed URL for a PDF (for accessing existing PDFs)
  */
-export async function getPDFSignedUrl(filePath: string, expiryHours: number = 24): Promise<string | null> {
+export async function getPDFSignedUrl(filePath: string, supabase: SupabaseClient, expiryHours: number = 24): Promise<string | null> {
   try {
     const { data, error } = await supabase.storage
       .from('waiver-documents')

@@ -15,10 +15,17 @@ export async function generateMetadata({ params }: EventLandingPageProps): Promi
   const eventSlug = params['event-name'];
   
   // Fetch event data for metadata
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return {
+      title: 'Badge Maker',
+      description: 'Create your conference badge'
+    };
+  }
+  
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
   const { data: event } = await supabase
     .from('events')
     .select('name, description')
@@ -43,10 +50,22 @@ export default async function EventLandingPage({ params }: EventLandingPageProps
   const eventSlug = params['event-name'];
   
   // Validate event exists and is active
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  
+  if (!supabaseUrl || !supabaseAnonKey) {
+    // Return a fallback page when Supabase is not configured
+    return (
+      <div className="min-h-screen bg-[#111111] flex items-center justify-center">
+        <div className="text-center text-white">
+          <h1 className="text-4xl font-bold mb-4">Configuration Required</h1>
+          <p className="text-gray-400">Supabase environment variables are not configured.</p>
+        </div>
+      </div>
+    );
+  }
+  
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
   const { data: event, error } = await supabase
     .from('events')
     .select('*')

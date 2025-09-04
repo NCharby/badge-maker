@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/atoms/car
 import { Button } from '@/components/atoms/button'
 import { TelegramLinks } from '@/components/molecules/TelegramLinks'
 import { BadgePreview } from '@/components/organisms/BadgePreview'
+import { SocialMediaHandle } from '@/types/badge'
 import Link from 'next/link'
 import { getSignedImageUrl } from '@/lib/utils/imageUtils'
 
@@ -153,7 +154,10 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
         {/* Badge Preview */}
         <div className="flex flex-col items-center justify-center min-h-[600px]">
           <BadgePreview 
-            badgeData={badgeData}
+            badgeData={badgeData ? {
+              badge_name: badgeData.badge_name,
+              social_media_handles: badgeData.social_media_handles as SocialMediaHandle[]
+            } : undefined}
             imageUrl={imageUrl || undefined}
           />
           <p className="text-[#949494] font-open-sans text-[12px] text-center max-w-[300px] mt-0 sm:mt-0 md:mt-[45px] lg:mt-[45px]">

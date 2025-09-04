@@ -4,10 +4,17 @@ import { createClient } from '@supabase/supabase-js';
 export async function GET() {
   try {
     // Test database connection
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json({
+        success: false,
+        error: 'Supabase configuration missing'
+      }, { status: 500 });
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
     // Test basic connection
     const { data: events, error } = await supabase
