@@ -16,12 +16,11 @@ import { ImageUpload } from '@/components/molecules/ImageUpload'
 import { SocialMediaInput } from '@/components/molecules/SocialMediaInput'
 
 const badgeSchema = z.object({
-  badge_name: z.string().min(1, 'Badge name is required'),
-  email: z.string().email('Please enter a valid email'),
+  badge_name: z.string().min(1, 'Badge name is required').max(40, 'Badge name must be 40 characters or less'),
   social_media_handles: z.array(z.object({
     platform: z.enum(['none', 'x', 'bluesky', 'telegram', 'recon', 'furaffinity', 'fetlife', 'discord', 'instagram', 'other']),
     handle: z.string().min(1, 'Handle is required')
-  })).max(3, 'Maximum 3 social media handles allowed')
+  })).max(2, 'Maximum 2 social media handles allowed')
 })
 
 type BadgeFormData = z.infer<typeof badgeSchema>
@@ -65,24 +64,22 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
     resolver: zodResolver(badgeSchema),
     defaultValues: {
       badge_name: prePopulatedName,
-      email: prePopulatedEmail,
       social_media_handles: data.social_media_handles
     }
   })
 
   // Update form and store when waiver data changes
   useEffect(() => {
-    if (prePopulatedEmail !== data.email || prePopulatedName !== data.badge_name) {
+    if (prePopulatedName !== data.badge_name) {
       const updatedData = {
         badge_name: prePopulatedName,
-        email: prePopulatedEmail,
         social_media_handles: data.social_media_handles
       }
       
       setData(updatedData)
       form.reset(updatedData)
     }
-  }, [prePopulatedEmail, prePopulatedName, data.social_media_handles, setData, form])
+  }, [prePopulatedName, data.badge_name, data.social_media_handles, setData, form])
 
   const onSubmit = async (formData: BadgeFormData) => {
     setIsSubmitting(true)
@@ -147,7 +144,7 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
         },
         body: JSON.stringify({
           badge_name: formData.badge_name,
-          email: formData.email,
+          email: prePopulatedEmail,
           social_media_handles: formData.social_media_handles,
           original_image_url: originalImageUrl,
           cropped_image_url: croppedImageUrl,
@@ -196,25 +193,6 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
-            {/* Contact Email */}
-            <div className="space-y-[5px]">
-              <div className="flex justify-between items-center">
-                <Label htmlFor="email" className="text-[16px] font-normal text-white font-montserrat">
-                  Contact Email*
-                </Label>
-              </div>
-              <Input
-                id="email"
-                type="email"
-                {...form.register('email')}
-                onBlur={(e) => handleFormChange('email', e.target.value)}
-                placeholder="hello@example.com"
-                className="h-[41px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] font-open-sans text-[16px]"
-              />
-              {form.formState.errors.email && (
-                <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>
-              )}
-            </div>
 
             {/* Badge Name */}
             <div className="space-y-[5px]">
@@ -223,7 +201,7 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
                   Badge Name*
                 </Label>
                 <span className="text-[14px] text-[#949494] font-montserrat">
-                  {form.watch('badge_name')?.length || 0}/85
+                  {form.watch('badge_name')?.length || 0}/40
                 </span>
               </div>
               <Input
@@ -231,6 +209,7 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
                 {...form.register('badge_name')}
                 onBlur={(e) => handleFormChange('badge_name', e.target.value)}
                 placeholder="Sgt. Thunder Beef"
+                maxLength={40}
                 className="h-[41px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] font-open-sans text-[16px]"
               />
               {form.formState.errors.badge_name && (
@@ -299,8 +278,11 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
       </form>
 
       {/* Preview Section */}
-      <div className="flex justify-center">
+      <div className="flex flex-col items-center justify-center min-h-[600px]">
         <BadgePreview />
+        <p className="text-[#949494] font-open-sans text-[12px] text-center max-w-[300px] mt-0 sm:mt-0 md:mt-[45px] lg:mt-[45px]">
+          *Simulated layout. Your actual badge will be printed slightly differently.
+        </p>
       </div>
     </div>
   )
