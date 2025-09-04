@@ -67,6 +67,18 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
     day: 'numeric'
   });
 
+  // Process signature image for PDF compatibility
+  let signatureSrc = '';
+  if (data.signatureImage) {
+    if (data.signatureImage.startsWith('data:')) {
+      // Already a data URL, use as-is
+      signatureSrc = data.signatureImage;
+    } else {
+      // Assume it's base64, create data URL
+      signatureSrc = `data:image/png;base64,${data.signatureImage}`;
+    }
+  }
+
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -90,14 +102,40 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
           margin-bottom: 30px;
         }
         .header h1 {
-          margin: 0;
+          margin: 0 0 10px 0;
           color: #2d2d2d;
-          font-size: 28px;
+          font-size: 24px;
+          font-weight: bold;
         }
         .header .date {
           color: #666;
           font-size: 14px;
-          margin-top: 10px;
+          margin: 0 0 15px 0;
+        }
+        .header .company-info {
+          margin-bottom: 10px;
+        }
+        .header .company-name {
+          font-size: 16px;
+          font-weight: bold;
+          color: #2d2d2d;
+          margin: 0 0 5px 0;
+        }
+        .header .company-website {
+          font-size: 12px;
+          color: #666;
+          margin: 0 0 8px 0;
+        }
+        .header .company-address {
+          font-size: 12px;
+          color: #666;
+          line-height: 1.4;
+          margin: 0 0 5px 0;
+        }
+        .header .company-email {
+          font-size: 12px;
+          color: #666;
+          margin: 0;
         }
         .section {
           margin-bottom: 30px;
@@ -146,10 +184,12 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
           padding-top: 20px;
         }
         .signature-image {
-          max-width: 200px;
-          max-height: 100px;
+          max-width: 300px;
+          max-height: 150px;
           border: 1px solid #ccc;
           margin: 10px 0;
+          display: block;
+          background: white;
         }
         .signature-details {
           font-size: 11px;
@@ -173,6 +213,12 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
       <div class="header">
         <h1>Event Waiver & Terms of Service</h1>
         <div class="date">Generated on ${currentDate}</div>
+        <div class="company-info">
+          <div class="company-name">Shiny Dog Productions Inc.</div>
+          <div class="company-website">shinydogproductions.com</div>
+          <div class="company-address">10503 Creek Street SE<br>Unit 2958<br>Yelm, WA 98597</div>
+          <div class="company-email">hello@shinydogproductions.com</div>
+        </div>
       </div>
 
       <div class="section">
@@ -241,7 +287,7 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
         
         <div>
           <strong>Signature:</strong><br>
-          <img src="data:image/png;base64,${data.signatureImage}" alt="Digital Signature" class="signature-image">
+          ${signatureSrc ? `<img src="${signatureSrc}" alt="Digital Signature" class="signature-image">` : '<p style="color: red; font-style: italic;">No signature provided</p>'}
         </div>
         
         <div class="signature-details">
@@ -275,6 +321,12 @@ async function generatePDFFromHTML(htmlContent: string): Promise<Buffer> {
     const page = await browser.newPage();
     await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
     
+    // Wait for images to load
+    await page.waitForFunction(() => {
+      const images = document.querySelectorAll('img');
+      return Array.from(images).every(img => img.complete);
+    }, { timeout: 5000 });
+    
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
@@ -299,7 +351,6 @@ async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData): Promi
   const fileName = `waiver-${Date.now()}-${data.fullName.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
   const filePath = `pdfs/${fileName}`;
 
-  console.log('Attempting to upload PDF to storage...');
   const { data: uploadData, error } = await supabase.storage
     .from('waiver-documents')
     .upload(filePath, pdfBuffer, {
@@ -312,10 +363,8 @@ async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData): Promi
     throw new Error(`Failed to upload PDF: ${error.message}`);
   }
 
-  console.log('PDF uploaded successfully:', uploadData);
 
   // Try to get a public URL first, then fall back to signed URL
-  console.log('Attempting to get public URL...');
   
   try {
     // Get the public URL (this should work immediately after upload)
@@ -324,7 +373,6 @@ async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData): Promi
       .getPublicUrl(uploadData.path);
     
     if (publicUrlData?.publicUrl) {
-      console.log('Public URL generated successfully:', publicUrlData.publicUrl);
       return publicUrlData.publicUrl;
     }
   } catch (publicUrlError) {
@@ -332,7 +380,6 @@ async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData): Promi
   }
 
   // Fall back to signed URL if public URL fails
-  console.log('Falling back to signed URL generation...');
   const { data: signedUrlData, error: signedUrlError } = await supabase.storage
     .from('waiver-documents')
     .createSignedUrl(uploadData.path, 24 * 60 * 60); // 24 hours expiry
@@ -347,7 +394,6 @@ async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData): Promi
     throw new Error('Failed to generate signed URL for PDF: No data returned');
   }
 
-  console.log('Signed URL generated successfully:', signedUrlData.signedUrl);
   return signedUrlData.signedUrl;
 }
 

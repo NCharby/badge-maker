@@ -47,6 +47,7 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle')
 
   useEffect(() => {
     const fetchBadgeData = async () => {
@@ -83,6 +84,50 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
 
     fetchBadgeData()
   }, [badgeId])
+
+  // Send confirmation email when badge data is loaded and telegram is ready
+  useEffect(() => {
+    const sendConfirmationEmail = async () => {
+      
+      if (!badgeData?.id || !eventSlug || emailStatus !== 'idle') {
+        return;
+      }
+      
+      try {
+        setEmailStatus('sending');
+        
+        // Wait a moment for telegram bot to potentially generate invite
+        await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
+        
+        const requestData = {
+          type: 'badge-confirmation',
+          data: { badgeId: badgeData.id, eventSlug }
+        };
+        
+        
+        const response = await fetch('/api/email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestData)
+        });
+        
+        
+        if (response.ok) {
+          const responseData = await response.json();
+          setEmailStatus('sent');
+        } else {
+          const errorData = await response.json();
+          console.error('Email sending failed:', errorData);
+          setEmailStatus('failed');
+        }
+      } catch (error) {
+        console.error('Error sending confirmation email:', error);
+        setEmailStatus('failed');
+      }
+    };
+    
+    sendConfirmationEmail();
+  }, [badgeData?.id, eventSlug, emailStatus])
 
   if (loading) {
     return (
@@ -230,15 +275,38 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
               </>
             )}
 
-            <div className="flex justify-center pt-4">
-              <Link href="/">
-                <Button 
-                  variant="outline"
-                  className="bg-transparent border-[#767676] text-white font-open-sans text-[16px] rounded-[3px] hover:bg-[#767676] hover:text-black"
-                >
-                  Create Another Badge
-                </Button>
-              </Link>
+            {/* Email Status Display */}
+            <div className="border-t border-[#5c5c5c] pt-4">
+              <div className="text-center space-y-2">
+                {emailStatus === 'sending' && (
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <p className="text-[#949494] font-open-sans text-[14px]">
+                      Preparing confirmation email...
+                    </p>
+                  </div>
+                )}
+                {emailStatus === 'sent' && (
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="w-4 h-4 bg-green-400 rounded-full flex items-center justify-center">
+                      <span className="text-black text-xs">✓</span>
+                    </div>
+                    <p className="text-green-400 font-open-sans text-[14px]">
+                      Confirmation email sent successfully!
+                    </p>
+                  </div>
+                )}
+                {emailStatus === 'failed' && (
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="w-4 h-4 bg-red-400 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">!</span>
+                    </div>
+                    <p className="text-red-400 font-open-sans text-[14px]">
+                      Failed to send confirmation email. Please contact support.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Telegram Integration */}

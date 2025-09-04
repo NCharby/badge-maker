@@ -164,7 +164,6 @@ export function WaiverForm({ eventSlug }: WaiverFormProps) {
               setWaiverId(result.waiverId);
             }
 
-            console.log('PDF generated successfully:', result);
             
             // Navigate to badge creation
             router.push(`/${eventSlug}/badge-creator`);

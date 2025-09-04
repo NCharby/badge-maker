@@ -32,7 +32,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateI
       }, { status: 503 });
     }
 
-    console.log(`Generating invite for event: ${eventSlug}, session: ${sessionId}`);
     const invite = await telegramService.generatePrivateInvite(eventSlug, sessionId);
     
     if (!invite) {

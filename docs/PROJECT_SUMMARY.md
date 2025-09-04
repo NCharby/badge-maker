@@ -21,11 +21,17 @@ Badge Maker is a comprehensive web application built with Next.js 14 that enable
 - **Isolated Storage**: Separate storage buckets per event
 
 ### **Waiver Signing System**
-- **Digital Signatures**: Canvas-based signature capture
+- **Digital Signatures**: Canvas-based signature capture with proper PDF rendering
 - **PDF Generation**: Server-side PDF creation with Puppeteer
 - **Legal Compliance**: Audit trails and IP tracking
-- **Email Delivery**: Automated PDF delivery via Postmark
 - **Data Collection**: Dietary restrictions and volunteering preferences
+
+### **Email System**
+- **Consolidated Confirmation**: Single comprehensive email sent at end of user flow
+- **Postmark Integration**: Template-based email system with Mustachio syntax
+- **PDF Attachments**: Waiver documents automatically attached to confirmation emails
+- **Telegram Integration**: Automatic invite generation and conditional email content
+- **Smart Timing**: 3-second delay to ensure telegram invites are ready before email sending
 
 ### **User Experience**
 - **Progressive Flow**: Landing → Waiver → Badge Creation → Confirmation

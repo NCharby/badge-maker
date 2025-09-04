@@ -57,7 +57,6 @@ export async function POST(request: NextRequest) {
     const fileExtension = file.name.split('.').pop()
     const filename = `${type}/${timestamp}.${fileExtension}`
 
-    console.log('Attempting to upload:', { filename, type, size: file.size })
 
     // Convert file to buffer
     const bytes = await file.arrayBuffer()
@@ -83,7 +82,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('Upload successful:', data)
 
     // Generate public URL for immediate access
     const { data: publicUrlData } = supabase.storage

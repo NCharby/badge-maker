@@ -33,7 +33,6 @@ export function useErrorHandler() {
     // Optionally log to external service in production
     if (process.env.NODE_ENV === 'production') {
       // Could send to Sentry, LogRocket, etc.
-      console.log('Error logged with ID:', errorId);
     }
   }, [generateErrorId]);
 

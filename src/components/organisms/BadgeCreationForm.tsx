@@ -155,13 +155,13 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
             // Add any crop data if needed
             timestamp: new Date().toISOString()
           },
-          waiver_id: waiverId
+          waiver_id: waiverId,
+          event_slug: eventSlug
         })
       })
       
       if (badgeResponse.ok) {
         const badgeData = await badgeResponse.json()
-        console.log('Badge created successfully:', badgeData)
         
         // Redirect to confirmation page
         window.location.href = `/${eventSlug}/confirmation?badge_id=${badgeData.badge_id}`

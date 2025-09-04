@@ -90,7 +90,7 @@ Supabase Storage
 1. **User Input** → Form validation → State store
 2. **State Store** → API calls → Database
 3. **File Upload** → Processing → Storage bucket
-4. **PDF Generation** → Storage → Email delivery
+4. **PDF Generation** → Storage → Consolidated confirmation email
 
 ## 🔒 **Security Architecture**
 
@@ -124,7 +124,7 @@ Supabase Storage
 
 ### **External Services**
 - **Supabase**: Database, storage, and authentication
-- **Postmark**: Transactional email delivery
+- **Postmark**: Consolidated confirmation email with template system
 - **Puppeteer**: Server-side PDF generation
 - **Telegram Bot API**: Automatic invite link generation
 - **Next.js**: Framework and deployment platform

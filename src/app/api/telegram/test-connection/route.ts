@@ -6,12 +6,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const eventSlug = searchParams.get('eventSlug') || 'default';
     
-    console.log(`Testing Telegram connection for event: ${eventSlug}`);
     
     const telegramService = createTelegramService();
     
     const isAvailable = await telegramService.isAvailable(eventSlug);
-    console.log(`Telegram availability check result:`, isAvailable);
     
     if (!isAvailable) {
       return NextResponse.json({
