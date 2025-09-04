@@ -374,7 +374,10 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
  * Generate PDF from HTML using Puppeteer
  */
 async function generatePDFFromHTML(htmlContent: string): Promise<Buffer> {
-  const browser = await puppeteer.launch({
+  // Detect if we're in a Docker environment
+  const isDocker = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.NODE_ENV === 'production'
+  
+  const launchOptions: any = {
     headless: true,
     args: [
       '--no-sandbox',
@@ -392,8 +395,14 @@ async function generatePDFFromHTML(htmlContent: string): Promise<Buffer> {
       '--disable-renderer-backgrounding'
     ],
     protocolTimeout: 60000, // 60 second timeout
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser'
-  });
+  }
+  
+  // Only set executablePath in Docker/production environments
+  if (isDocker) {
+    launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser'
+  }
+  
+  const browser = await puppeteer.launch(launchOptions);
 
   try {
     const page = await browser.newPage();

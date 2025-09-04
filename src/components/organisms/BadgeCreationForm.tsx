@@ -58,7 +58,8 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
   
   // Get pre-populated values from waiver data first, then existing badge data
   const prePopulatedEmail = waiverEmail || data.email
-  const prePopulatedName = `${firstName} ${lastName}`.trim() || data.badge_name
+  // Don't pre-populate badge name with user's real name - let them choose their own badge name
+  const prePopulatedName = data.badge_name || ''
   
   const form = useForm<BadgeFormData>({
     resolver: zodResolver(badgeSchema),
@@ -68,9 +69,10 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
     }
   })
 
-  // Update form and store when waiver data changes
+  // Update form and store when waiver data changes (but preserve user's badge name choice)
   useEffect(() => {
-    if (prePopulatedName !== data.badge_name) {
+    // Only update if we don't already have a badge name set (preserve user's custom choice)
+    if (!data.badge_name && prePopulatedName !== data.badge_name) {
       const updatedData = {
         badge_name: prePopulatedName,
         social_media_handles: data.social_media_handles
