@@ -6,6 +6,7 @@ import { ConfirmationTemplate } from '@/components/templates/ConfirmationTemplat
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/atoms/card'
 import { Button } from '@/components/atoms/button'
 import { TelegramLinks } from '@/components/molecules/TelegramLinks'
+import { BadgePreview } from '@/components/organisms/BadgePreview'
 import Link from 'next/link'
 import { getSignedImageUrl } from '@/lib/utils/imageUtils'
 
@@ -23,18 +24,6 @@ interface BadgeData {
   created_at: string
 }
 
-// Platform display mapping
-const platformDisplay = {
-  x: 'X',
-  bluesky: 'BS',
-  telegram: 'TG',
-  recon: 'RC',
-  furaffinity: 'FA',
-  fetlife: 'FL',
-  discord: 'DC',
-  instagram: 'IG',
-  other: 'OT'
-}
 
 interface ConfirmationPageProps {
   eventSlug: string;
@@ -163,49 +152,10 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-12 max-w-7xl">
         {/* Badge Preview */}
         <div className="flex justify-center">
-          <div className="bg-[#ffcc00] rounded-[20px] p-[50px_40px] flex flex-col items-center justify-start gap-[30px] w-full max-w-[587px] h-[983px]">
-            {/* Badge Name */}
-            <div className="text-center">
-              <h2 className="text-[48px] font-normal text-black leading-[normal] font-open-sans">
-                {badgeData?.badge_name || '[Badge Name]'}
-              </h2>
-            </div>
-
-            {/* Photo */}
-            <div className="w-[400px] h-[400px] rounded-[200px] bg-cover bg-center bg-no-repeat flex items-center justify-center">
-              {imageUrl ? (
-                <img
-                  src={imageUrl}
-                  alt="Profile"
-                  className="w-full h-full object-cover rounded-[200px]"
-                />
-              ) : (
-                <div className="w-full h-full bg-[#414042] rounded-[200px] flex items-center justify-center">
-                  <img
-                    src="/assets/question-placer@2x.png"
-                    alt="Question mark placeholder"
-                    className="w-32 h-32 object-contain"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Social Media Handles */}
-            <div className="flex flex-col gap-[18px] items-center justify-center">
-              {badgeData?.social_media_handles?.map((handle, index) => (
-                <div key={index} className="flex items-center justify-center gap-[18px]">
-                  <div className="w-7 h-[25px] flex items-center justify-center">
-                    <span className="text-black font-bold text-lg">
-                      {platformDisplay[handle.platform as keyof typeof platformDisplay] || 'X'}
-                    </span>
-                  </div>
-                  <span className="text-black text-[32px] font-normal leading-[normal] font-open-sans">
-                    @{handle.handle}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <BadgePreview 
+            badgeData={badgeData}
+            imageUrl={imageUrl || undefined}
+          />
         </div>
 
         {/* Badge Details */}

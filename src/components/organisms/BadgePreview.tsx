@@ -2,6 +2,15 @@
 
 import { useBadgeStore } from '@/hooks/useBadgeStore'
 import { getPlatformIcon, getPlatformDisplayName } from '@/lib/badge-assets'
+import { SocialMediaHandle } from '@/types/badge'
+
+interface BadgePreviewProps {
+  badgeData?: {
+    badge_name?: string
+    social_media_handles?: SocialMediaHandle[]
+  }
+  imageUrl?: string
+}
 
 // Figma-generated asset paths
 const imgFrillLeft = "/assets/8f843d894bd14f810d7e08a72c13f91ad17c5f48.svg";
@@ -24,11 +33,12 @@ const imgVector1 = "/assets/1efc31fed812b9e092a380850264248ce3a30d63.svg";
  * - Compact vertical layout with specific spacing
  * - Maximum 2 social media handles with visual icons
  */
-export function BadgePreview() {
+export function BadgePreview({ badgeData, imageUrl }: BadgePreviewProps = {}) {
   const { data, originalImage, croppedImage } = useBadgeStore()
 
-  // Use cropped image if available, otherwise fall back to original image
-  const displayImage = croppedImage || originalImage
+  // Use props data if provided, otherwise fall back to store data
+  const displayData = badgeData || data
+  const displayImage = imageUrl ? null : (croppedImage || originalImage)
 
   return (
     <div className="flex justify-center items-center min-h-[600px] sm:min-h-[500px] md:min-h-[600px]">
@@ -80,7 +90,17 @@ export function BadgePreview() {
                            flex items-center justify-center"
                 data-name="Badge Image"
               >
-                {displayImage ? (
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt="Profile"
+                    className="w-full h-full object-cover 
+                               rounded-[80px]
+                               sm:rounded-[90px]
+                               md:rounded-[100px]
+                               lg:rounded-[110px]"
+                  />
+                ) : displayImage ? (
                   <img
                     src={URL.createObjectURL(displayImage)}
                     alt="Profile"
@@ -114,7 +134,7 @@ export function BadgePreview() {
                            text-white text-center"
               >
                 <p className="leading-[17px] sm:leading-[18px] md:leading-[19px] lg:leading-[20px] break-words">
-                  {data.badge_name || 'BADGE NAME'}
+                  {displayData.badge_name || 'BADGE NAME'}
                 </p>
               </div>
             </div>
@@ -131,7 +151,7 @@ export function BadgePreview() {
 
             {/* Social Media Handles - Limited to 2 */}
             {/* Social Handle 1 */}
-            {data.social_media_handles[0]?.platform && data.social_media_handles[0].platform !== 'none' && (
+            {displayData.social_media_handles?.[0]?.platform && displayData.social_media_handles[0].platform !== 'none' && (
               <div 
                 className="box-border content-stretch flex gap-2.5 items-center justify-start overflow-clip px-5 py-1 relative shrink-0 w-full"
                 data-name="Social 1"
@@ -140,10 +160,10 @@ export function BadgePreview() {
                   className="h-7 w-6 sm:h-8 sm:w-7 md:h-9 md:w-8 lg:h-10 lg:w-9 relative shrink-0"
                   data-name="Vector"
                 >
-                  {getPlatformIcon(data.social_media_handles[0].platform) ? (
+                  {getPlatformIcon(displayData.social_media_handles[0].platform) ? (
                     <img 
-                      src={getPlatformIcon(data.social_media_handles[0].platform)!}
-                      alt={`${data.social_media_handles[0].platform} icon`}
+                      src={getPlatformIcon(displayData.social_media_handles[0].platform)!}
+                      alt={`${displayData.social_media_handles[0].platform} icon`}
                       className="block max-w-none size-full"
                       onError={(e) => {
                         // Fallback to default icon if platform icon fails to load
@@ -164,14 +184,14 @@ export function BadgePreview() {
                              text-nowrap text-white"
                 >
                   <p className="leading-[17px] sm:leading-[18px] md:leading-[19px] lg:leading-[20px] whitespace-pre">
-                    {data.social_media_handles[0]?.handle || '@social_handle1'}
+                    {displayData.social_media_handles?.[0]?.handle || '@social_handle1'}
                   </p>
                 </div>
               </div>
             )}
 
             {/* Social Handle 2 */}
-            {data.social_media_handles[1]?.platform && data.social_media_handles[1].platform !== 'none' && (
+            {displayData.social_media_handles?.[1]?.platform && displayData.social_media_handles[1].platform !== 'none' && (
               <div 
                 className="box-border content-stretch flex gap-2.5 items-center justify-start overflow-clip px-5 py-[5px] relative shrink-0 w-full"
                 data-name="Social 2"
@@ -180,10 +200,10 @@ export function BadgePreview() {
                   className="h-7 w-6 sm:h-8 sm:w-7 md:h-9 md:w-8 lg:h-10 lg:w-9 relative shrink-0"
                   data-name="Vector"
                 >
-                  {getPlatformIcon(data.social_media_handles[1].platform) ? (
+                  {getPlatformIcon(displayData.social_media_handles[1].platform) ? (
                     <img 
-                      src={getPlatformIcon(data.social_media_handles[1].platform)!}
-                      alt={`${data.social_media_handles[1].platform} icon`}
+                      src={getPlatformIcon(displayData.social_media_handles[1].platform)!}
+                      alt={`${displayData.social_media_handles[1].platform} icon`}
                       className="block max-w-none size-full"
                       onError={(e) => {
                         // Fallback to default icon if platform icon fails to load
@@ -204,7 +224,7 @@ export function BadgePreview() {
                              text-nowrap text-white"
                 >
                   <p className="leading-[17px] sm:leading-[18px] md:leading-[19px] lg:leading-[20px] whitespace-pre">
-                    {data.social_media_handles[1]?.handle || '@social_handle2'}
+                    {displayData.social_media_handles?.[1]?.handle || '@social_handle2'}
                   </p>
                 </div>
               </div>
