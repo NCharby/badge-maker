@@ -16,8 +16,16 @@ Badge Maker is a Next.js 14 application that allows users to create conference b
 - ✅ Digital signature capture using `react-signature-canvas`
 - ✅ Server-side PDF generation with Puppeteer
 - ✅ Waiver storage in dedicated Supabase bucket
-- ✅ Email delivery via Postmark with PDF attachments
 - ✅ Form validation and error handling
+- ✅ Signature images display correctly in generated PDFs
+
+### **Email System**
+- ✅ Consolidated confirmation email sent at end of user flow
+- ✅ Postmark template system with Mustachio syntax
+- ✅ Automatic telegram invite generation during badge creation
+- ✅ PDF attachment system with waiver documents
+- ✅ Conditional content rendering (telegram sections only when available)
+- ✅ 3-second delay for telegram bot response before email sending
 
 ### **Multi-Event Support**
 - ✅ Dynamic routing: `/[event-name]/...`

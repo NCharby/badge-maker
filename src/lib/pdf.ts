@@ -67,14 +67,6 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
     day: 'numeric'
   });
 
-  // Debug: Log signature data info
-  console.log('Signature data info:', {
-    hasSignature: !!data.signatureImage,
-    signatureLength: data.signatureImage?.length || 0,
-    signatureStart: data.signatureImage?.substring(0, 50) || 'none',
-    isDataUrl: data.signatureImage?.startsWith('data:') || false
-  });
-
   // Process signature image for PDF compatibility
   let signatureSrc = '';
   if (data.signatureImage) {
@@ -85,15 +77,6 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
       // Assume it's base64, create data URL
       signatureSrc = `data:image/png;base64,${data.signatureImage}`;
     }
-    
-    // Additional debugging
-    console.log('Processed signature src:', {
-      length: signatureSrc.length,
-      start: signatureSrc.substring(0, 100),
-      isValid: signatureSrc.startsWith('data:image/')
-    });
-  } else {
-    console.log('No signature image provided');
   }
 
   return `
