@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendWaiverConfirmationEmail, sendEmail, verifyEmailConfiguration } from '@/lib/email';
+import { sendWaiverConfirmationEmail, sendEmail, verifyEmailConfiguration, sendBadgeConfirmationEmailWithTemplate, getBadgeConfirmationData } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
   try {
@@ -71,9 +71,46 @@ export async function POST(request: NextRequest) {
         message: 'Email sent successfully'
       });
 
+    } else if (type === 'badge-confirmation') {
+      // Send badge confirmation email
+      const { badgeId, eventSlug } = data;
+      
+      if (!badgeId || !eventSlug) {
+        return NextResponse.json(
+          { error: 'Missing required fields: badgeId and eventSlug are required' },
+          { status: 400 }
+        );
+      }
+
+      // Get all confirmation data
+      const confirmationData = await getBadgeConfirmationData(badgeId, eventSlug);
+      
+      if (!confirmationData) {
+        return NextResponse.json(
+          { error: 'Failed to retrieve badge confirmation data' },
+          { status: 404 }
+        );
+      }
+
+      // Send the confirmation email using Postmark template
+      const result = await sendBadgeConfirmationEmailWithTemplate(confirmationData);
+
+      if (!result.success) {
+        return NextResponse.json(
+          { error: result.error || 'Failed to send badge confirmation email' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        messageId: result.messageId,
+        message: 'Badge confirmation email sent successfully'
+      });
+
     } else {
       return NextResponse.json(
-        { error: 'Invalid email type. Supported types: waiver-confirmation, generic' },
+        { error: 'Invalid email type. Supported types: waiver-confirmation, generic, badge-confirmation' },
         { status: 400 }
       );
     }
