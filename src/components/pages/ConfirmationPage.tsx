@@ -151,11 +151,14 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
     <ConfirmationTemplate>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-12 max-w-7xl">
         {/* Badge Preview */}
-        <div className="flex justify-center">
+        <div className="flex flex-col items-center">
           <BadgePreview 
             badgeData={badgeData}
             imageUrl={imageUrl || undefined}
           />
+          <p className="text-[#949494] font-open-sans text-[12px] text-center max-w-[300px] mt-0 sm:mt-0 md:mt-[45px] lg:mt-[45px]">
+            *Simulated layout. Your actual badge will be printed slightly differently.
+          </p>
         </div>
 
         {/* Badge Details */}
@@ -193,7 +196,7 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
                               {handle.platform}:
                             </span>
                             <span className="text-white font-open-sans text-[14px]">
-                              @{handle.handle}
+                              {handle.handle}
                             </span>
                           </div>
                         ))}
@@ -219,7 +222,7 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
                 <div className="border-t border-[#5c5c5c] pt-4">
                   <p className="text-[#949494] font-open-sans text-[14px] text-center">
                     Your badge has been successfully created and saved to our database.
-                    You can now proceed with your conference registration.
+                    Join us on Telegram to stay updated with the latest news and events.
                   </p>
                 </div>
               </>

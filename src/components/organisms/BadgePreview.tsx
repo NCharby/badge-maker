@@ -44,7 +44,7 @@ export function BadgePreview({ badgeData, imageUrl }: BadgePreviewProps = {}) {
     <div className="flex justify-center items-center min-h-[600px] sm:min-h-[500px] md:min-h-[600px]">
       {/* Badge Container - Responsive scaling while maintaining aspect ratio */}
       <div 
-        className="bg-gradient-to-r box-border content-stretch flex from-[#170a2a] from-[0.214%] gap-2.5 items-center justify-start p-[15px] relative size-full to-[#0f2733] to-[99.748%] 
+        className="bg-gradient-to-b box-border content-stretch flex from-[#0f2733] from-[0.214%] gap-2.5 items-center justify-start p-[15px] relative size-full to-[#170a2a] to-[99.748%] rounded-[10px]
                    w-[284px] h-[400px] scale-100
                    sm:w-[320px] sm:h-[450px] sm:scale-110
                    md:w-[355px] md:h-[500px] md:scale-125
