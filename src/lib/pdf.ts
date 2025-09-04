@@ -102,14 +102,40 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
           margin-bottom: 30px;
         }
         .header h1 {
-          margin: 0;
+          margin: 0 0 10px 0;
           color: #2d2d2d;
-          font-size: 28px;
+          font-size: 24px;
+          font-weight: bold;
         }
         .header .date {
           color: #666;
           font-size: 14px;
-          margin-top: 10px;
+          margin: 0 0 15px 0;
+        }
+        .header .company-info {
+          margin-bottom: 10px;
+        }
+        .header .company-name {
+          font-size: 16px;
+          font-weight: bold;
+          color: #2d2d2d;
+          margin: 0 0 5px 0;
+        }
+        .header .company-website {
+          font-size: 12px;
+          color: #666;
+          margin: 0 0 8px 0;
+        }
+        .header .company-address {
+          font-size: 12px;
+          color: #666;
+          line-height: 1.4;
+          margin: 0 0 5px 0;
+        }
+        .header .company-email {
+          font-size: 12px;
+          color: #666;
+          margin: 0;
         }
         .section {
           margin-bottom: 30px;
@@ -187,6 +213,12 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
       <div class="header">
         <h1>Event Waiver & Terms of Service</h1>
         <div class="date">Generated on ${currentDate}</div>
+        <div class="company-info">
+          <div class="company-name">Shiny Dog Productions Inc.</div>
+          <div class="company-website">shinydogproductions.com</div>
+          <div class="company-address">10503 Creek Street SE<br>Unit 2958<br>Yelm, WA 98597</div>
+          <div class="company-email">hello@shinydogproductions.com</div>
+        </div>
       </div>
 
       <div class="section">
