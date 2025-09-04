@@ -31,9 +31,10 @@ interface DateOfBirthInputProps {
   value: Date;
   onChange: (date: Date) => void;
   error?: string;
+  disabled?: boolean;
 }
 
-export function DateOfBirthInput({ value, onChange, error }: DateOfBirthInputProps) {
+export function DateOfBirthInput({ value, onChange, error, disabled = false }: DateOfBirthInputProps) {
   const [dateOfBirthOpen, setDateOfBirthOpen] = useState(false);
   const [dateOfBirthMonth, setDateOfBirthMonth] = useState<Date>(value);
   const [dateOfBirthValue, setDateOfBirthValue] = useState(formatDate(value));
@@ -53,10 +54,15 @@ export function DateOfBirthInput({ value, onChange, error }: DateOfBirthInputPro
         <Input
           value={dateOfBirthValue}
           placeholder="Select your date of birth"
-          className={`w-full bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] pr-10 h-12 ${
+          className={`w-full rounded-[3px] pr-10 h-12 ${
+            disabled 
+              ? 'bg-[#2a2a2a] border-[#3a3a3a] text-gray-400 placeholder:text-[#666666] cursor-not-allowed'
+              : 'bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494]'
+          } ${
             error ? 'border-red-500' : ''
           }`}
           onChange={(e) => {
+            if (disabled) return;
             const date = new Date(e.target.value)
             setDateOfBirthValue(e.target.value)
             if (isValidDate(date)) {
@@ -65,19 +71,24 @@ export function DateOfBirthInput({ value, onChange, error }: DateOfBirthInputPro
             }
           }}
           onKeyDown={(e) => {
+            if (disabled) return;
             if (e.key === "ArrowDown") {
               e.preventDefault()
               setDateOfBirthOpen(true)
             }
           }}
+          disabled={disabled}
         />
-        <Popover open={dateOfBirthOpen} onOpenChange={setDateOfBirthOpen}>
+        <Popover open={disabled ? false : dateOfBirthOpen} onOpenChange={disabled ? undefined : setDateOfBirthOpen}>
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
-              className="absolute top-1/2 right-3 size-6 -translate-y-1/2 bg-transparent hover:bg-transparent p-0"
+              className={`absolute top-1/2 right-3 size-6 -translate-y-1/2 bg-transparent hover:bg-transparent p-0 ${
+                disabled ? 'cursor-not-allowed' : ''
+              }`}
+              disabled={disabled}
             >
-              <CalendarIcon className="size-4 text-[#949494]" />
+              <CalendarIcon className={`size-4 ${disabled ? 'text-[#666666]' : 'text-[#949494]'}`} />
               <span className="sr-only">Select date</span>
             </Button>
           </PopoverTrigger>

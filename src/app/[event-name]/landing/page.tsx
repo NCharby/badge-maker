@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { LandingForm } from '@/components/organisms/LandingForm';
 import { ProgressSteps } from '@/components/molecules/ProgressSteps';
+import { AlphaNoticePopup } from '@/components/molecules/AlphaNoticePopup';
 
 interface EventLandingPageProps {
   params: {
@@ -59,6 +60,9 @@ export default async function EventLandingPage({ params }: EventLandingPageProps
 
   return (
     <div className="min-h-screen bg-[#111111]">
+      {/* Alpha Notice Popup */}
+      <AlphaNoticePopup />
+      
       <div className="container mx-auto px-4 py-8">
         {/* Event Header */}
         <div className="text-center mb-8">
