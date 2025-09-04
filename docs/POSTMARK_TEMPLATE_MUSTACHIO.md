@@ -234,7 +234,7 @@ The following variables will be passed to the template:
         <p><strong>PDF Attachment:</strong> Your signed waiver is attached to this email for your records.</p>
       </div>
       
-      {{telegramSectionHtml}}
+      {{{telegramSectionHtml}}}
       
       <div class="highlight">
         <h3>🎯 What's Next?</h3>
@@ -242,7 +242,7 @@ The following variables will be passed to the template:
         <ul>
           <li>Save this email for your records</li>
           <li>Download and print your badge if needed</li>
-          {{telegramNextStepsHtml}}
+          {{{telegramNextStepsHtml}}}
           <li>Check your email for any additional event updates</li>
         </ul>
       </div>

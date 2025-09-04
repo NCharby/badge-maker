@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
       original_image_url, 
       cropped_image_url, 
       crop_data,
-      waiver_id 
+      waiver_id,
+      event_slug 
     } = body
 
     // Validate required fields
@@ -106,6 +107,29 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to create badge' },
         { status: 500 }
       )
+    }
+
+    // Generate telegram invite if available
+    try {
+      const { createTelegramService } = await import('@/lib/telegram/telegram-service');
+      const telegramService = createTelegramService();
+      
+      // Check if telegram is available for this event
+      const isAvailable = await telegramService.isAvailable(event_slug);
+      if (isAvailable) {
+        console.log('Generating telegram invite for new badge...');
+        const invite = await telegramService.generatePrivateInvite(event_slug, sessionId);
+        if (invite) {
+          console.log('Telegram invite generated successfully:', invite.id);
+        } else {
+          console.log('Failed to generate telegram invite');
+        }
+      } else {
+        console.log('Telegram not available for this event');
+      }
+    } catch (telegramError) {
+      // Don't fail badge creation if telegram fails
+      console.error('Telegram invite generation failed:', telegramError);
     }
 
     return NextResponse.json({

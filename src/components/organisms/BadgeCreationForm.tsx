@@ -155,7 +155,8 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
             // Add any crop data if needed
             timestamp: new Date().toISOString()
           },
-          waiver_id: waiverId
+          waiver_id: waiverId,
+          event_slug: eventSlug
         })
       })
       
