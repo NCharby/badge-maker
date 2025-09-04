@@ -21,6 +21,8 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get('file') as File
     const type = formData.get('type') as string // 'original' or 'cropped'
+    const badgeName = formData.get('badgeName') as string
+    const email = formData.get('email') as string
 
     if (!file) {
       return NextResponse.json(
@@ -32,6 +34,13 @@ export async function POST(request: NextRequest) {
     if (!type || !['original', 'cropped'].includes(type)) {
       return NextResponse.json(
         { error: 'Invalid type. Must be "original" or "cropped"' },
+        { status: 400 }
+      )
+    }
+
+    if (!badgeName || !email) {
+      return NextResponse.json(
+        { error: 'Badge name and email are required for file naming' },
         { status: 400 }
       )
     }
@@ -52,10 +61,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate unique filename with folder structure
+    // Generate human-readable filename: [badgename]-[email]-[timestamp].blob
     const timestamp = Date.now()
-    const fileExtension = file.name.split('.').pop()
-    const filename = `${type}/${timestamp}.${fileExtension}`
+    
+    // Sanitize badge name and email for filename
+    const sanitizedBadgeName = badgeName
+      .replace(/[^a-zA-Z0-9\s-]/g, '') // Remove special characters except spaces and hyphens
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .toLowerCase()
+      .substring(0, 50) // Limit length
+    
+    const sanitizedEmail = email
+      .replace(/[^a-zA-Z0-9@.-]/g, '') // Keep only alphanumeric, @, ., and -
+      .replace('@', '-at-') // Replace @ with -at- for filename safety
+      .toLowerCase()
+      .substring(0, 50) // Limit length
+    
+    const filename = `${type}/${sanitizedBadgeName}-${sanitizedEmail}-${timestamp}.blob`
 
 
     // Convert file to buffer

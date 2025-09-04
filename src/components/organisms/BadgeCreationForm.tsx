@@ -97,6 +97,8 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
           const originalFormData = new FormData()
           originalFormData.append('file', originalImage)
           originalFormData.append('type', 'original')
+          originalFormData.append('badgeName', formData.badge_name)
+          originalFormData.append('email', prePopulatedEmail)
           
           const originalResponse = await fetch('/api/upload', {
             method: 'POST',
@@ -119,6 +121,8 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
           const croppedFormData = new FormData()
           croppedFormData.append('file', croppedImage)
           croppedFormData.append('type', 'cropped')
+          croppedFormData.append('badgeName', formData.badge_name)
+          croppedFormData.append('email', prePopulatedEmail)
           
           const croppedResponse = await fetch('/api/upload', {
             method: 'POST',
