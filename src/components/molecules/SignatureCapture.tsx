@@ -61,8 +61,8 @@ export function SignatureCapture({
         />
       </div>
       
-      <div className="flex justify-between items-center">
-        <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+        <div className="flex flex-col sm:flex-row gap-2">
           <Button
             type="button"
             variant="outline"
@@ -87,7 +87,7 @@ export function SignatureCapture({
           </Button>
         </div>
         
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-gray-400 text-center sm:text-left">
           {value ? 'Signature captured ✓' : 'Signature required'}
         </p>
       </div>

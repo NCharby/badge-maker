@@ -213,7 +213,7 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
               <Input
                 id="badge_name"
                 {...form.register('badge_name')}
-                onBlur={(e) => handleFormChange('badge_name', e.target.value)}
+                onChange={(e) => handleFormChange('badge_name', e.target.value)}
                 placeholder="Sgt. Thunder Beef"
                 maxLength={40}
                 className="h-[41px] bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] font-open-sans text-[16px]"

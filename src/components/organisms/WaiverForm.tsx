@@ -177,7 +177,7 @@ export function WaiverForm({ eventSlug }: WaiverFormProps) {
         };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-4xl mx-auto px-2 sm:px-4 py-8">
       <div className="text-center mb-8">
         <h1 className="text-4xl font-bold text-white mb-4 font-montserrat">
           Event Waiver & Terms of Service
@@ -192,12 +192,10 @@ export function WaiverForm({ eventSlug }: WaiverFormProps) {
 
              <form onSubmit={handleSubmit} className="space-y-8">
         {/* Terms of Service Section */}
-        <Card className="p-6 bg-[#111111] border-[#5c5c5c]">
-          <h2 className="text-2xl font-semibold text-white mb-6 font-montserrat">
-            Terms of Service & Event Waiver
-          </h2>
+        <Card className="p-3 sm:p-6 bg-[#111111] border-[#5c5c5c]">
+
           
-                     <div className="bg-[#2d2d2d] p-6 rounded-lg max-h-96 overflow-y-auto mb-6">
+                     <div className="bg-[#2d2d2d] p-3 sm:p-6 rounded-lg max-h-96 overflow-y-auto mb-6">
              <div className="text-white text-sm space-y-4 font-open-sans">
                <h2 className="text-lg font-semibold text-white font-montserrat">Shiny Dog Productions Release of Liability</h2>
                
@@ -471,7 +469,7 @@ export function WaiverForm({ eventSlug }: WaiverFormProps) {
         )}
 
         {/* Signature Section */}
-        <Card className="p-6 bg-[#111111] border-[#5c5c5c]">
+        <Card className="p-3 sm:p-6 bg-[#111111] border-[#5c5c5c]">
           <h2 className="text-2xl font-semibold text-white mb-6 font-montserrat">
             Digital Signature
           </h2>

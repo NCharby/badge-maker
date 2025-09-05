@@ -155,7 +155,7 @@ export function DietaryAndVolunteeringForm({
           value={additionalNotes}
           onChange={(e) => onAdditionalNotesChange(e.target.value)}
           placeholder="Any additional information, special requests, or notes..."
-          className="w-full bg-transparent border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] min-h-[100px] resize-none p-3 font-open-sans text-sm"
+          className="w-full bg-transparent border border-[#5c5c5c] text-white placeholder:text-[#949494] rounded-[3px] min-h-[100px] resize-none p-3 font-open-sans text-sm"
         />
       </div>
     </div>

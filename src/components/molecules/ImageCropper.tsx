@@ -102,9 +102,9 @@ export function ImageCropper({ isOpen, onClose }: ImageCropperProps) {
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center justify-between">
-          {/* Left side - Image manipulation tools */}
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          {/* Image manipulation tools */}
+          <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-start">
             <Button
               type="button"
               variant="outline"
@@ -150,8 +150,8 @@ export function ImageCropper({ isOpen, onClose }: ImageCropperProps) {
             </Button>
           </div>
 
-          {/* Right side - Action buttons */}
-          <div className="flex items-center gap-2">
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 justify-center sm:justify-end">
             <Button
               type="button"
               variant="outline"
