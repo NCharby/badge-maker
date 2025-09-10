@@ -10,6 +10,7 @@ import { BadgePreview } from '@/components/organisms/BadgePreview'
 import { SocialMediaHandle } from '@/types/badge'
 import Link from 'next/link'
 import { getSignedImageUrl } from '@/lib/utils/imageUtils'
+import { emailCookies } from '@/lib/utils/cookieUtils'
 
 interface BadgeData {
   id: string
@@ -76,10 +77,19 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
   }, [badgeId])
 
   // Send confirmation email when badge data is loaded and telegram is ready
+  // Uses cookie-based prevention to avoid duplicate emails on page refresh
   useEffect(() => {
     const sendConfirmationEmail = async () => {
       
       if (!badgeData?.id || !eventSlug || emailStatus !== 'idle') {
+        return;
+      }
+
+      // Check if email has already been sent for this badge using cookie
+      // Cookie is specific to badge_id so users can still receive emails for different badges
+      if (emailCookies.hasEmailBeenSent(badgeData.id)) {
+        console.log('Email already sent for badge:', badgeData.id);
+        setEmailStatus('sent');
         return;
       }
       
@@ -104,6 +114,11 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
         
         if (response.ok) {
           const responseData = await response.json();
+          
+          // Set cookie to prevent duplicate emails on page refresh (expires in 30 days)
+          // Cookie name includes badge_id to allow emails for different badges
+          emailCookies.markEmailAsSent(badgeData.id, 30);
+          
           setEmailStatus('sent');
         } else {
           const errorData = await response.json();
