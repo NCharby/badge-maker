@@ -53,7 +53,8 @@ interface BadgeCreationFormProps {
 
 export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const { data, setData } = useBadgeStore()
+  const [imageError, setImageError] = useState<string | null>(null)
+  const { data, setData, originalImage } = useBadgeStore()
   const { email: waiverEmail, firstName, lastName, waiverId } = useUserFlowStore()
   
   // Get pre-populated values from waiver data first, then existing badge data
@@ -83,16 +84,32 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
     }
   }, [prePopulatedName, data.badge_name, data.social_media_handles, setData, form])
 
+  // Clear image error when an image is uploaded
+  useEffect(() => {
+    if (originalImage && imageError) {
+      setImageError(null)
+    }
+  }, [originalImage, imageError])
+
   const onSubmit = async (formData: BadgeFormData) => {
     setIsSubmitting(true)
+    setImageError(null)
+    
     try {
+      // Check if image is required and present
+      const { originalImage, croppedImage } = useBadgeStore.getState()
+      
+      if (!originalImage && !croppedImage) {
+        setImageError('Badge photo is required. Please upload an image.')
+        setIsSubmitting(false)
+        return
+      }
+      
       setData(formData)
       
       // Upload images if they exist
       let originalImageUrl = null
       let croppedImageUrl = null
-      
-      const { originalImage, croppedImage } = useBadgeStore.getState()
       
       if (originalImage) {
         try {
@@ -171,7 +188,13 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
       } else {
         const errorData = await badgeResponse.json()
         console.error('Badge creation failed:', errorData)
-        alert('Failed to create badge. Please try again.')
+        
+        // Check if it's an image-related error and display it in the image section
+        if (errorData.error && errorData.error.includes('Badge photo is required')) {
+          setImageError(errorData.error)
+        } else {
+          alert(`Failed to create badge: ${errorData.error || 'Please try again.'}`)
+        }
       }
       
     } catch (error) {
@@ -229,7 +252,7 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
         <Card className="bg-[#111111] border-[#111111] rounded-[10px] shadow-2xl">
           <CardHeader className="pb-5">
             <CardTitle className="text-[32px] font-normal text-white font-montserrat leading-[normal]">
-              PHOTO
+              PHOTO*
             </CardTitle>
             <p className="text-[16px] font-normal text-white font-open-sans">
               Please refrain from using any pornography (e.g. genitals or sex acts)
@@ -237,6 +260,9 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
           </CardHeader>
           <CardContent className="space-y-4">
             <ImageUpload />
+            {imageError && (
+              <p className="text-sm text-destructive">{imageError}</p>
+            )}
             <div className="text-[13px] text-white font-open-sans">
               Max size: 5MB • Min size: 10KB • Accepted: PNG, JPG, JPEG, WebP, GIF
             </div>

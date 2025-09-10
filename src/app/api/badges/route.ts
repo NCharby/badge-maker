@@ -38,6 +38,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate that at least one image URL is provided
+    if (!original_image_url && !cropped_image_url) {
+      return NextResponse.json(
+        { error: 'Badge photo is required. Please upload an image.' },
+        { status: 400 }
+      )
+    }
+
     // Validate badge name length
     if (badge_name && badge_name.length > 40) {
       return NextResponse.json(
