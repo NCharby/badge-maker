@@ -276,9 +276,9 @@ export function TelegramLinks({ eventSlug, sessionId, className }: TelegramLinks
                 <Button
                   variant="outline"
                   className="w-full justify-between bg-transparent border-[#767676] text-white font-open-sans text-[14px] rounded-[3px] hover:bg-[#767676] hover:text-black"
-                  onClick={() => window.open(privateInvite.inviteLink, '_blank')}
+                  onClick={() => window.open("https://t.me/+23KS1loL6c81MDEx", '_blank')}
                 >
-                  <span className="truncate">{privateInvite.inviteLink}</span>
+                  <span className="truncate">https://t.me/+23KS1loL6c81MDEx</span>
                   <ExternalLink className="w-4 h-4" />
                 </Button>
               </div>
