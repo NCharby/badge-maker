@@ -20,10 +20,19 @@ ALTER TABLE public.templates
 ADD COLUMN IF NOT EXISTS version TEXT DEFAULT '1.0.0';
 
 -- Step 3: Clear existing template data (JSONB configs are incompatible with Mustache)
--- This will remove the current badge-maker-default template
+-- First, update events to use a temporary template ID to avoid foreign key constraint
+UPDATE public.events 
+SET template_id = NULL 
+WHERE template_id IN (SELECT id FROM public.templates WHERE template_type = 'badge' OR template_type IS NULL);
+
+-- Now we can safely delete the old templates
 DELETE FROM public.templates WHERE template_type = 'badge' OR template_type IS NULL;
 
--- Step 4: Insert COG Classic template (preserves current hardcoded design)
+-- Step 4: Change column type from JSONB to TEXT (must be done before inserting new templates)
+ALTER TABLE public.templates 
+ALTER COLUMN config TYPE TEXT;
+
+-- Step 5: Insert COG Classic template (preserves current hardcoded design)
 INSERT INTO public.templates (id, name, description, config, template_type, version) VALUES
 (
   'cog-classic-2026',
@@ -34,7 +43,7 @@ INSERT INTO public.templates (id, name, description, config, template_type, vers
   '1.0.0'
 );
 
--- Step 5: Insert default template (matches current Figma design)
+-- Step 6: Insert default template (matches current Figma design)
 INSERT INTO public.templates (id, name, description, config, template_type, version) VALUES
 (
   'badge-maker-default',
@@ -44,10 +53,6 @@ INSERT INTO public.templates (id, name, description, config, template_type, vers
   'badge',
   '1.0.0'
 );
-
--- Step 6: Change column type from JSONB to TEXT
-ALTER TABLE public.templates 
-ALTER COLUMN config TYPE TEXT;
 
 -- Step 7: Update events to use new templates
 -- Update COG Classic 2026 event to use COG Classic template
