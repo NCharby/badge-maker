@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Frills</title>
+</head>
+<body>
+    <h1>Frills Debug Test</h1>
+    
+    <!-- Test the frill elements directly -->
+    <div style="position: relative; width: 284px; height: 400px; background: linear-gradient(to bottom, #0f2733, #170a2a); border-radius: 10px; border: 2px solid red;">
+        <!-- Left Frill -->
+        <div style="position: absolute; top: 0; left: 0; width: 100px; height: 100px; z-index: 1; border: 1px solid yellow;">
+            <img src="/assets/8f843d894bd14f810d7e08a72c13f91ad17c5f48.svg" alt="Left frill" style="width: 100%; height: 100%;" />
+        </div>
+        
+        <!-- Right Frill -->
+        <div style="position: absolute; top: 0; right: 0; width: 100px; height: 100px; z-index: 1; border: 1px solid yellow;">
+            <img src="/assets/58d534b6b91424b0cf56bd425669df37da35f4d9.svg" alt="Right frill" style="width: 100%; height: 100%;" />
+        </div>
+        
+        <!-- Lower Frill -->
+        <div style="position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 173.873px; height: 57.019px; z-index: 1; border: 1px solid yellow;">
+            <img src="/assets/2c6cb173ab669ace01ece5b59fa70abcc55efcec.svg" alt="Lower frill" style="width: 100%; height: 100%;" />
+        </div>
+        
+        <!-- Content -->
+        <div style="position: relative; z-index: 10; padding: 15px; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+            <div style="width: 80px; height: 80px; border-radius: 50%; overflow: hidden; margin-bottom: 20px; background: #333; display: flex; align-items: center; justify-content: center;">
+                <img src="/assets/question-placer@2x.png" alt="Question mark placeholder" style="width: 32px; height: 32px; object-contain;" />
+            </div>
+            <h2 style="font-family: 'Montserrat', sans-serif; font-size: 24px; color: white; margin: 0; line-height: 1.2; word-break: break-word; font-weight: normal;">
+                TEST BADGE
+            </h2>
+        </div>
+    </div>
+</body>
+</html>
