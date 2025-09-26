@@ -56,7 +56,6 @@ export function BadgePreview({ badgeData, imageUrl }: BadgePreviewProps = {}) {
           data-name="Window"
         >
           <div className="box-border content-stretch flex flex-col items-start justify-start overflow-clip p-[10px] relative size-full">
-            
             {/* Top Decoration - Frill elements */}
             <div 
               className="box-border content-stretch flex items-start justify-between overflow-clip p-[5px] relative shrink-0 w-full"

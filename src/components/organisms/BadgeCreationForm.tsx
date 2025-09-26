@@ -54,7 +54,7 @@ interface BadgeCreationFormProps {
 export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [imageError, setImageError] = useState<string | null>(null)
-  const { data, setData, originalImage } = useBadgeStore()
+  const { data, setData, originalImage, croppedImage } = useBadgeStore()
   const { email: waiverEmail, firstName, lastName, waiverId } = useUserFlowStore()
   
   // Get pre-populated values from waiver data first, then existing badge data
@@ -311,7 +311,10 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
 
       {/* Preview Section */}
       <div className="flex flex-col items-center justify-center min-h-[600px]">
-        <BadgePreview />
+        <BadgePreview 
+          badgeData={data} 
+          imageUrl={croppedImage ? URL.createObjectURL(croppedImage) : originalImage ? URL.createObjectURL(originalImage) : undefined}
+        />
         <p className="text-[#949494] font-open-sans text-[12px] text-center max-w-[300px] mt-0 sm:mt-0 md:mt-[45px] lg:mt-[45px]">
           *Simulated layout. Your actual badge will be printed slightly differently.
         </p>
