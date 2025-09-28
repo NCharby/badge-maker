@@ -57,7 +57,7 @@ export function BadgePreview({ badgeData, imageUrl }: FallBadgePreviewProps) {
             
             {/* Badge Number */}
             <div className="flex flex-col font-['Montserrat:Bold',_sans-serif] justify-center leading-[0] not-italic relative shrink-0 text-[20px] sm:text-[30px] text-nowrap text-white">
-              <p className="leading-[16px] font-bold sm:leading-[19px] whitespace-pre">#150</p>
+              <p className="leading-[16px] font-bold sm:leading-[19px] whitespace-pre">#666</p>
             </div>
             
             {/* Badge Image */}
