@@ -26,7 +26,7 @@ export async function GET(
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch event data
+    // Fetch event data (select * already includes telegram_config)
     const { data: event, error: eventError } = await supabase
       .from('events')
       .select('*')
@@ -40,6 +40,7 @@ export async function GET(
         { status: 404 }
       );
     }
+
 
     // Fetch template data
     const { data: template, error: templateError } = await supabase
@@ -66,6 +67,7 @@ export async function GET(
         isActive: event.is_active,
         createdAt: event.created_at,
         updatedAt: event.updated_at,
+        telegram_config: event.telegram_config,
       },
       template: template?.config || null,
     };

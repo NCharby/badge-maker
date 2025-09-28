@@ -8,6 +8,11 @@ export interface TelegramConfig {
   groupName?: string;           // Display name for the group
   channelName?: string;         // Display name for the channel
   description?: string;         // Optional description
+  
+  // NEW: Per-event invite link fields
+  inviteLink?: string;          // Permanent invite link for the event
+  inviteExpiresAt?: string;     // Expiration date of the invite link
+  inviteCreatedAt?: string;     // Creation date of the invite link
 }
 
 export interface TelegramInvite {

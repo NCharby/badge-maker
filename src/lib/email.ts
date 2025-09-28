@@ -484,9 +484,25 @@ export async function getBadgeConfirmationData(
       }
     }
 
-    // Get telegram invite data
+    // Get telegram invite data - check per-event invite first, then per-attendee
     let telegramInvite = null;
-    if (badgeData.session_id) {
+    
+    // First, try to get per-event invite from telegram_config
+    const { data: eventData, error: eventError } = await supabase
+      .from('events')
+      .select('name, slug, telegram_config')
+      .eq('slug', eventSlug)
+      .single();
+
+    if (!eventError && eventData?.telegram_config?.inviteLink) {
+      // Use per-event invite
+      telegramInvite = {
+        invite_link: eventData.telegram_config.inviteLink,
+        expires_at: eventData.telegram_config.inviteExpiresAt || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // 1 year default
+      };
+      console.log(`Using per-event telegram invite for ${eventSlug}: ${telegramInvite.invite_link}`);
+    } else if (badgeData.session_id) {
+      // Fallback to per-attendee invite
       const { data: telegramData, error: telegramError } = await supabase
         .from('telegram_invites')
         .select(`
@@ -496,24 +512,13 @@ export async function getBadgeConfirmationData(
         .eq('session_id', badgeData.session_id)
         .single();
 
-      if (telegramError) {
-      } else if (telegramData) {
+      if (!telegramError && telegramData) {
         telegramInvite = telegramData;
-      } else {
+        console.log(`Using per-attendee telegram invite for session ${badgeData.session_id}: ${telegramInvite.invite_link}`);
       }
-    } else {
     }
 
-    // Get event data
-    const { data: eventData, error: eventError } = await supabase
-      .from('events')
-      .select(`
-        name,
-        slug
-      `)
-      .eq('slug', eventSlug)
-      .single();
-
+    // Get event data (reuse the eventData from telegram config query above)
     if (eventError || !eventData) {
       console.error('Error fetching event data:', eventError);
       return null;
