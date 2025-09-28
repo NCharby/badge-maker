@@ -210,4 +210,104 @@ export class TelegramDatabaseService {
       throw error;
     }
   }
+
+  /**
+   * NEW: Get event invite link from telegram_config
+   * Returns the permanent invite link for an event if it exists and is not expired
+   */
+  async getEventInviteLink(eventSlug: string): Promise<string | null> {
+    try {
+      const config = await this.getEventTelegramConfig(eventSlug);
+      if (!config?.inviteLink) {
+        return null;
+      }
+      
+      // Check if invite link is expired
+      if (config.inviteExpiresAt && new Date(config.inviteExpiresAt) < new Date()) {
+        console.log(`Event invite link for ${eventSlug} has expired`);
+        return null;
+      }
+      
+      return config.inviteLink;
+    } catch (error) {
+      console.error('Error in getEventInviteLink:', error);
+      return null;
+    }
+  }
+
+  /**
+   * NEW: Get event invite link with metadata
+   * Returns the invite link along with expiration and creation info
+   */
+  async getEventInviteWithMetadata(eventSlug: string): Promise<{
+    inviteLink: string;
+    expiresAt: string | null;
+    createdAt: string | null;
+  } | null> {
+    try {
+      const config = await this.getEventTelegramConfig(eventSlug);
+      if (!config?.inviteLink) {
+        return null;
+      }
+      
+      // Check if invite link is expired
+      if (config.inviteExpiresAt && new Date(config.inviteExpiresAt) < new Date()) {
+        console.log(`Event invite link for ${eventSlug} has expired`);
+        return null;
+      }
+      
+      return {
+        inviteLink: config.inviteLink,
+        expiresAt: config.inviteExpiresAt || null,
+        createdAt: config.inviteCreatedAt || null
+      };
+    } catch (error) {
+      console.error('Error in getEventInviteWithMetadata:', error);
+      return null;
+    }
+  }
+
+  /**
+   * NEW: Update event invite link in telegram_config
+   * Updates the telegram_config JSONB with new invite link information
+   */
+  async updateEventInviteLink(
+    eventSlug: string, 
+    inviteLink: string, 
+    expiresAt: Date
+  ): Promise<boolean> {
+    try {
+      const currentConfig = await this.getEventTelegramConfig(eventSlug);
+      if (!currentConfig) {
+        console.error(`No telegram config found for event: ${eventSlug}`);
+        return false;
+      }
+
+      const updatedConfig = {
+        ...currentConfig,
+        inviteLink,
+        inviteExpiresAt: expiresAt.toISOString(),
+        inviteCreatedAt: new Date().toISOString()
+      };
+      
+      const { error } = await this.supabase
+        .from('events')
+        .update({ 
+          telegram_config: updatedConfig,
+          updated_at: new Date().toISOString()
+        })
+        .eq('slug', eventSlug);
+
+      if (error) {
+        console.error('Error updating event invite link:', error);
+        return false;
+      }
+
+      console.log(`Successfully updated invite link for event: ${eventSlug}`);
+      return true;
+    } catch (error) {
+      console.error('Error in updateEventInviteLink:', error);
+      return false;
+    }
+  }
 }

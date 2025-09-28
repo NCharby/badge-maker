@@ -24,6 +24,7 @@ interface BadgeData {
   cropped_image_url?: string
   status: string
   created_at: string
+  session_id?: string
 }
 
 
@@ -288,7 +289,7 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
             <div className="border-t border-[#5c5c5c] pt-4">
               <TelegramLinks 
                 eventSlug={eventSlug} 
-                sessionId={badgeData?.id || ''} 
+                sessionId={badgeData?.session_id || badgeData?.id || ''} 
                 className="bg-transparent border-none shadow-none"
               />
             </div>

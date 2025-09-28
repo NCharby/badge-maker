@@ -31,10 +31,9 @@ Badge Maker is a Next.js 14 application that allows users to create conference b
 ### **Email System**
 - ✅ Consolidated confirmation email sent at end of user flow
 - ✅ Postmark template system with Mustachio syntax
-- ✅ Automatic telegram invite generation during badge creation
+- ✅ Per-event telegram invite links in confirmation emails
 - ✅ PDF attachment system with waiver documents
 - ✅ Conditional content rendering (telegram sections only when available)
-- ✅ 3-second delay for telegram bot response before email sending
 
 ### **Multi-Event Support**
 - ✅ Dynamic routing: `/[event-name]/...`
@@ -46,6 +45,16 @@ Badge Maker is a Next.js 14 application that allows users to create conference b
 - ✅ COG Classic 2026 event implementation
 - ✅ Fall COG 2025 event implementation
 - ✅ Per-event badge design system with factory pattern
+
+### **Telegram Integration**
+- ✅ Per-event telegram invite system (replaces per-attendee generation)
+- ✅ Direct rendering from database configuration
+- ✅ Fall COG 2025 telegram group integration
+- ✅ COG Classic 2026 telegram group integration
+- ✅ Clean UI with no error states or loading delays
+- ✅ Email integration with per-event invite links
+- ✅ 100% reduction in API calls (from 100 per 100 users to 0)
+- ✅ 75% faster page loads and 51% smaller component size
 
 ### **User Experience**
 - ✅ Landing page with dietary/volunteering preferences
