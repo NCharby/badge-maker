@@ -75,7 +75,14 @@ export function SignatureCapture({
           <Button
             type="button"
             variant={isFormValid ? "default" : "outline"}
-            onClick={isFormValid ? onSubmit : saveSignature}
+            onClick={() => {
+              // Always save signature first, then attempt form submission
+              saveSignature();
+              // Small delay to ensure signature is saved before validation
+              setTimeout(() => {
+                onSubmit?.();
+              }, 100);
+            }}
             disabled={isSubmitting}
             className={`${
               isFormValid 
