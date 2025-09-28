@@ -41,71 +41,88 @@ export function BadgePreview({ badgeData, imageUrl }: FallBadgePreviewProps) {
   const handle2 = socialHandles[1];
 
   return (
-    <div className="flex justify-center items-center min-h-[600px] sm:min-h-[500px] md:min-h-[600px]">
+    <div className="flex justify-center items-center min-h-[400px] sm:min-h-[500px] md:min-h-[600px] p-4">
       <div 
-        className="bg-gradient-to-t box-border content-stretch flex from-[#000000] from-[0.152%] gap-[10px] items-center p-[15px] relative size-full to-[#6d0505] to-[99.848%] rounded-[10px] w-[284px] h-[400px] scale-100 sm:w-[320px] sm:h-[450px] sm:scale-110 md:w-[355px] md:h-[500px] md:scale-125 lg:w-[390px] lg:h-[550px] lg:scale-140" 
+        className="bg-gradient-to-t box-border content-stretch flex from-[#000000] from-[0.152%] gap-[10px] items-center p-[15px] relative size-full to-[#6d0505] to-[99.848%] rounded-[10px] 
+                   w-[280px] h-[380px] 
+                   sm:w-[320px] sm:h-[450px] 
+                   md:w-[355px] md:h-[500px] 
+                   lg:w-[390px] lg:h-[550px]" 
         data-name="Badge"
       >
         <div className="basis-0 content-stretch flex flex-col grow h-full items-start min-h-px min-w-px overflow-clip relative rounded-[10px] shrink-0" data-name="Window">
           
           {/* Image Wrapper */}
-          <div className="box-border content-stretch flex items-start justify-between p-[10px] relative shrink-0 w-full" data-name="Image Wrapper">
+          <div className="box-border content-stretch flex items-start justify-between p-[10px] relative shrink-0 w-full " data-name="Image Wrapper">
             
             {/* Badge Number */}
-            <div className="flex flex-col font-['Montserrat:SemiBold',_sans-serif] justify-center leading-[0] not-italic relative shrink-0 text-[32px] text-nowrap text-white">
-              <p className="leading-[19px] whitespace-pre">#xxx</p>
+            <div className="flex flex-col font-['Montserrat:Bold',_sans-serif] justify-center leading-[0] not-italic relative shrink-0 text-[16px] sm:text-[20px] text-nowrap text-white">
+              <p className="leading-[16px] font-bold sm:leading-[19px] whitespace-pre">#150</p>
             </div>
             
             {/* Badge Image */}
-            <div className="bg-[#d9d9d9] relative rounded-[120px] shrink-0 size-[236px] flex items-center justify-center" data-name="Badge Image">
+            <div className="bg-[#d9d9d9] relative rounded-[90px] sm:rounded-[160px] md:rounded-[100px] lg:rounded-[140px] shrink-0 
+                           size-[160px]  md:size-[200px] lg:size-[240px] 
+                           flex items-center justify-center" data-name="Badge Image">
               {imageUrl ? (
                 <img 
                   src={imageUrl} 
                   alt="Badge photo" 
-                  className="w-full h-full object-cover rounded-[120px]"
+                  className="w-full h-full object-cover 
+                             rounded-[80px] sm:rounded-[90px] md:rounded-[100px] lg:rounded-[140px]"
                 />
               ) : (
                 <img 
                   src="/assets/question-placer@2x.png" 
                   alt="Question mark placeholder" 
-                  className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 lg:w-12 lg:w-12 object-contain"
+                  className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 object-contain"
                 />
               )}
-              <div aria-hidden="true" className="absolute border-4 border-solid border-white inset-[-2px] pointer-events-none rounded-[120px]" />
+              <div aria-hidden="true" className="absolute border-2 sm:border-4 border-solid border-white inset-[-2px] pointer-events-none 
+                             rounded-[82px] sm:rounded-[92px] md:rounded-[102px] lg:rounded-[140px]" />
             </div>
             
             {/* Wolf Glyph */}
-            <div className="absolute h-[180px] left-[14px] top-[150px]" data-name="Wolf_Glyph">
+            <div className="absolute h-[130px] md:h-[160px] lg:h-[180px] 
+                           left-[5px] sm:left-[10px] md:left-[14px] 
+                           top-[100px] md:top-[120px] lg:top-[140px] 
+                           " data-name="Wolf_Glyph">
               <img alt="Wolf glyph decoration" className="block max-w-none size-full" src={imgWolfGlyph} />
             </div>
           </div>
           
           {/* Name Wrapper */}
-          <div className="box-border content-stretch flex flex-col items-start overflow-clip p-[10px] relative shrink-0 w-full my-2" data-name="Name Wrapper">
-            <div className="flex flex-col font-['Montserrat:Bold',_sans-serif] justify-center leading-[28px] not-italic relative shrink-0 text-[38px] text-white w-full">
-              <p className="leading-[32px] font-bold break-words text-center">{badgeName}</p>
+          <div className="box-border content-stretch flex flex-col items-start overflow-clip p-[10px] my-4 relative shrink-0 w-full" data-name="Name Wrapper">
+            <div className="flex flex-col font-['Montserrat:Bold',_sans-serif] justify-center not-italic relative shrink-0 
+                           text-[28px]  md:text-[38px] lg:text-[42px] 
+                           text-white w-full">
+              <p className="leading-[25px] md:leading-[32px] lg:leading-[40px] break-words font-bold text-center">{badgeName}</p>
             </div>
           </div>
           
           {/* Social Media Handles */}
           {handle1 && handle1.platform !== 'none' && (
-            <div className="box-border content-stretch flex gap-[10px] items-center overflow-clip px-[10px] py-4 relative shrink-0 w-full" data-name="Social 1">
-              <div className="h-[28px] relative shrink-0 w-[24px]" data-name="Vector">
+            <div className="box-border content-stretch flex gap-[8px] sm:gap-[10px] items-center overflow-clip px-[10px] py-1 sm:py-2 relative shrink-0 w-full" data-name="Social 1">
+              <div className="h-[20px] w-[20px] sm:h-[24px] sm:w-[24px] md:h-[28px] md:w-[28px] relative shrink-0" data-name="Vector">
                 <img alt={`${handle1.platform} icon`} className="block max-w-none size-full" src={getPlatformIcon(handle1.platform)} />
               </div>
-              <div className="font-['Montserrat:Regular',_sans-serif] leading-[0] not-italic relative shrink-0 text-[22px] text-nowrap text-white">
-                <p className="leading-[17px] whitespace-pre">{handle1.handle}</p>
+              <div className="font-['Montserrat:Regular',_sans-serif] leading-[0] not-italic relative shrink-0 
+                             text-[14px] sm:text-[16px] md:text-[18px] lg:text-[20px] 
+                             text-nowrap text-white">
+                <p className="leading-[14px] sm:leading-[16px] md:leading-[18px] lg:leading-[20px] whitespace-pre">{handle1.handle}</p>
               </div>
             </div>
           )}
           
           {handle2 && handle2.platform !== 'none' && (
-            <div className="box-border content-stretch flex gap-[10px] items-center overflow-clip px-[10px] py-[5px] relative shrink-0 w-full" data-name="Social 2">
-              <div className="h-[28px] relative shrink-0 w-[24px]" data-name="Vector">
+            <div className="box-border content-stretch flex gap-[8px] sm:gap-[10px] items-center overflow-clip px-[10px] py-1 sm:py-2 relative shrink-0 w-full" data-name="Social 2">
+              <div className="h-[20px] w-[20px] sm:h-[24px] sm:w-[24px] md:h-[28px] md:w-[28px] relative shrink-0" data-name="Vector">
                 <img alt={`${handle2.platform} icon`} className="block max-w-none size-full" src={getPlatformIcon(handle2.platform)} />
               </div>
-              <div className="font-['Montserrat:Regular',_sans-serif] leading-[0] not-italic relative shrink-0 text-[22px] text-nowrap text-white">
-                <p className="leading-[17px] whitespace-pre">{handle2.handle}</p>
+              <div className="font-['Montserrat:Regular',_sans-serif] leading-[0] not-italic relative shrink-0 
+                             text-[14px] sm:text-[16px] md:text-[18px] lg:text-[20px] 
+                             text-nowrap text-white">
+                <p className="leading-[14px] sm:leading-[16px] md:leading-[18px] lg:leading-[20px] whitespace-pre">{handle2.handle}</p>
               </div>
             </div>
           )}
