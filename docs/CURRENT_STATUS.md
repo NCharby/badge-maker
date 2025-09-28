@@ -9,13 +9,15 @@ Badge Maker is a Next.js 14 application that allows users to create conference b
 - ✅ Badge creation with live preview
 - ✅ Image upload and cropping
 - ✅ Social media input fields (limited to 2 handles)
-- ✅ Hardcoded badge design with decorative elements (matches Figma)
+- ✅ Hardcoded per-event badge design system
+- ✅ COG Classic 2026 badge design (matches Figma)
+- ✅ Fall COG 2025 badge design (spooky werewolf theme)
 - ✅ PDF generation and storage
 - ✅ Visual social media icons with fallback support
 - ✅ Badge name character limit (40 characters max)
 - ✅ Text wrapping for long badge names
-- ✅ Responsive badge preview scaling
-- ✅ Vertical gradient background (inverted colors)
+- ✅ Responsive badge preview scaling across all devices
+- ✅ Event-specific gradient backgrounds and themes
 - ✅ 10px border radius on badge container
 - ✅ Simulated layout disclaimer
 
@@ -41,6 +43,9 @@ Badge Maker is a Next.js 14 application that allows users to create conference b
 - ✅ Event-specific waiver content
 - ✅ Dedicated storage buckets per event
 - ✅ Database schema with event relationships
+- ✅ COG Classic 2026 event implementation
+- ✅ Fall COG 2025 event implementation
+- ✅ Per-event badge design system with factory pattern
 
 ### **User Experience**
 - ✅ Landing page with dietary/volunteering preferences

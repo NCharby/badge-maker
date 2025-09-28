@@ -35,6 +35,8 @@ src/components/events/[event-slug]/BadgePreview.tsx
 src/components/events/
 ├── cog-classic-2026/
 │   └── BadgePreview.tsx
+├── fall-cog-2025/
+│   └── BadgePreview.tsx
 ├── default/
 │   └── BadgePreview.tsx
 └── index.ts
@@ -104,6 +106,8 @@ export function getEventBadgeComponent(eventSlug: string) {
   switch (eventSlug) {
     case 'cog-classic-2026':
       return dynamic(() => import('./cog-classic-2026/BadgePreview'));
+    case 'fall-cog-2025':
+      return dynamic(() => import('./fall-cog-2025/BadgePreview'));
     case 'default':
       return dynamic(() => import('./default/BadgePreview'));
     default:
@@ -246,6 +250,27 @@ public/assets/
 - Designers need developer assistance
 - No runtime template editing
 - Limited conditional logic per event
+
+## Current Events
+
+### COG Classic 2026
+- **Slug**: `cog-classic-2026`
+- **Design**: Classic badge with decorative frills and gradient background
+- **Theme**: Traditional conference badge design
+- **Features**: Frill decorations, social media icons, responsive scaling
+
+### Fall COG 2025
+- **Slug**: `fall-cog-2025`
+- **Design**: Spooky werewolf-themed badge
+- **Theme**: Halloween/autumn with wolf glyph decoration
+- **Features**: Wolf glyph overlay, red/black gradient, responsive mobile design
+- **Description**: "COG is back with more scandalously spooky fun! We're meeting up with our friends at CCBC in October for Monster Fucking and good times in comforting desert sun."
+
+### Default Event
+- **Slug**: `default`
+- **Design**: Fallback badge design
+- **Theme**: Generic conference badge
+- **Features**: Basic layout, social media support, responsive design
 
 ## Conclusion
 
