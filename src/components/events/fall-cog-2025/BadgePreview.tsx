@@ -56,7 +56,7 @@ export function BadgePreview({ badgeData, imageUrl }: FallBadgePreviewProps) {
           <div className="box-border content-stretch flex items-start justify-between p-[10px] relative shrink-0 w-full " data-name="Image Wrapper">
             
             {/* Badge Number */}
-            <div className="flex flex-col font-['Montserrat:Bold',_sans-serif] justify-center leading-[0] not-italic relative shrink-0 text-[16px] sm:text-[20px] text-nowrap text-white">
+            <div className="flex flex-col font-['Montserrat:Bold',_sans-serif] justify-center leading-[0] not-italic relative shrink-0 text-[20px] sm:text-[30px] text-nowrap text-white">
               <p className="leading-[16px] font-bold sm:leading-[19px] whitespace-pre">#150</p>
             </div>
             
@@ -84,7 +84,7 @@ export function BadgePreview({ badgeData, imageUrl }: FallBadgePreviewProps) {
             
             {/* Wolf Glyph */}
             <div className="absolute h-[130px] md:h-[160px] lg:h-[180px] 
-                           left-[5px] sm:left-[10px] md:left-[14px] 
+                           left-[5px]  
                            top-[100px] md:top-[120px] lg:top-[140px] 
                            " data-name="Wolf_Glyph">
               <img alt="Wolf glyph decoration" className="block max-w-none size-full" src={imgWolfGlyph} />
