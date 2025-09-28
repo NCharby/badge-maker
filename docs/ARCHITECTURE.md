@@ -57,26 +57,31 @@ Badge Maker follows a modern, scalable architecture built on Next.js 14 with a f
 
 ### **Badge Template System**
 
-**Current Implementation**: The badge preview system has been **temporarily bypassed** in favor of a hardcoded design implementation.
+**Current Implementation**: The badge system uses **hardcoded per-event badge previews** for simplicity and reliability.
 
-#### **Template System (Currently Unused)**
-- **Database Table**: `templates` with `config JSONB` field
-- **Original Design**: Dynamic badge layouts based on database configuration
-- **Status**: Infrastructure exists but is not actively used
-
-#### **Hardcoded Implementation (Current)**
-- **Component**: `BadgePreview.tsx` with direct Figma design implementation
+#### **Hardcoded Per-Event Architecture**
+- **Event-Specific Components**: Each event has its own `BadgePreview.tsx` component
+- **Factory Pattern**: Event badge components selected via factory pattern
 - **Design Source**: Figma specifications hardcoded in JSX/Tailwind CSS
-- **Benefits**: 
-  - Consistent design matching Figma exactly
-  - Better performance (no database queries for template config)
-  - Easier maintenance and updates
-  - Responsive design with proper scaling
+- **Database**: Templates table stores metadata only (no dynamic rendering)
 
-#### **Future Considerations**
-- **Template System**: Can be re-enabled for multi-template support
-- **Hybrid Approach**: Combine hardcoded base design with template variations
-- **Migration Path**: Database template system remains available for future use
+#### **Benefits**
+- **Simplicity**: No database complexity for template management
+- **Performance**: No template queries or rendering overhead
+- **Reliability**: No risk of template corruption or missing data
+- **Type Safety**: Full TypeScript support for each template
+- **Version Control**: All design changes tracked in Git
+
+#### **Adding New Events**
+1. Create event-specific badge component
+2. Update factory pattern to include new event
+3. Add database metadata entry
+4. Deploy code changes
+
+#### **Architecture Decision**
+This approach prioritizes **reliability and simplicity** over flexibility. While it requires code changes for new events, it eliminates the complexity and potential issues of a dynamic template system.
+
+**See**: `docs/HARDCODED_BADGE_ARCHITECTURE.md` for detailed implementation guide.
 
 ### **Database Schema**
 ```sql

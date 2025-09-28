@@ -20,7 +20,7 @@ const imgVector = "/assets/b781d68fabc1456063513abebee66dde467f5846.svg";
 const imgVector1 = "/assets/1efc31fed812b9e092a380850264248ce3a30d63.svg";
 
 /**
- * BadgePreview Component - Exact Figma Design Implementation
+ * COG Classic 2026 BadgePreview Component - Exact Figma Design Implementation
  * 
  * This component renders the exact badge design from Figma specifications.
  * It uses the precise dimensions, colors, typography, and layout from the design.

@@ -9,16 +9,19 @@ Badge Maker is a comprehensive web application built with Next.js 14 that enable
 ### **Badge Creation System**
 - **Live Preview**: Real-time badge updates as users input information
 - **Image Processing**: Advanced image upload, cropping, and manipulation
-- **Template System**: Event-specific badge designs and layouts
+- **Per-Event Designs**: Hardcoded badge components with unique themes
 - **Social Media Integration**: Support for multiple social media handles
 - **Export Options**: High-quality badge images for printing
+- **Responsive Design**: Mobile-optimized badge scaling across all devices
 
 ### **Multi-Event Support**
 - **Dynamic Routing**: `/[event-name]/...` URL structure
 - **Event Management**: Separate events with unique configurations
-- **Template Per Event**: One badge template per event
+- **Per-Event Badge Designs**: Hardcoded badge components for each event
 - **Event Metadata**: Dates, descriptions, and branding
 - **Isolated Storage**: Separate storage buckets per event
+- **Factory Pattern**: Dynamic badge component loading based on event
+- **Current Events**: COG Classic 2026, Fall COG 2025
 
 ### **Waiver Signing System**
 - **Digital Signatures**: Canvas-based signature capture with proper PDF rendering
