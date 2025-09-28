@@ -6,7 +6,7 @@ import { Input } from '@/components/atoms/input';
 import { Label } from '@/components/atoms/label';
 import { Card } from '@/components/atoms/card';
 import { DateOfBirthInput } from '@/components/molecules/DateOfBirthInput';
-import { PhoneInput } from '@/components/molecules/PhoneInput';
+import { PhoneInput } from '@/components/molecules/ShadcnPhoneInput';
 import { SignatureCapture } from '@/components/molecules/SignatureCapture';
 import { useRouter } from 'next/navigation';
 import { useUserFlowStore } from '@/hooks/useUserFlowStore';
@@ -411,12 +411,11 @@ export function WaiverForm({ eventSlug }: WaiverFormProps) {
                     )}
                   </div>
 
-                  <div className="flex flex-col space-y-2">
+                  <div className="flex flex-col space-y-2 pb-4">
                     <Label className="text-white font-montserrat text-sm">
                       Emergency Phone <span className="text-red-400">*</span>
                     </Label>
                     <PhoneInput
-                      label=""
                       value={formData.emergencyPhone}
                       onChange={(value) => handleInputChange('emergencyPhone', value)}
                       placeholder="Emergency contact phone"

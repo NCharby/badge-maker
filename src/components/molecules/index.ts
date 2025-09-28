@@ -9,6 +9,6 @@ export { SignatureCapture } from './SignatureCapture';
 export { ErrorBoundary } from './ErrorBoundary';
 export { ApiErrorHandler } from './ApiErrorHandler';
 export { FormErrorHandler } from './FormErrorHandler';
-export { PhoneInput } from './PhoneInput';
+export { PhoneInput } from './ShadcnPhoneInput';
 export { TelegramLinks } from './TelegramLinks';
 export { AlphaNoticePopup } from './AlphaNoticePopup';
