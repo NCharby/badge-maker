@@ -6,7 +6,7 @@ import { ConfirmationTemplate } from '@/components/templates/ConfirmationTemplat
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/atoms/card'
 import { Button } from '@/components/atoms/button'
 import { TelegramLinks } from '@/components/molecules/TelegramLinks'
-import { BadgePreview } from '@/components/organisms/BadgePreview'
+import { getEventBadgeComponent } from '@/components/events'
 import { SocialMediaHandle } from '@/types/badge'
 import Link from 'next/link'
 import { getSignedImageUrl } from '@/lib/utils/imageUtils'
@@ -39,6 +39,9 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
   const [error, setError] = useState<string | null>(null)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle')
+  
+  // Get the appropriate badge component for this event
+  const EventBadgePreview = getEventBadgeComponent(eventSlug)
 
   useEffect(() => {
     const fetchBadgeData = async () => {
@@ -168,7 +171,7 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-12 max-w-7xl">
         {/* Badge Preview */}
         <div className="flex flex-col items-center justify-center min-h-[600px]">
-          <BadgePreview 
+          <EventBadgePreview 
             badgeData={badgeData ? {
               badge_name: badgeData.badge_name,
               social_media_handles: badgeData.social_media_handles as SocialMediaHandle[]

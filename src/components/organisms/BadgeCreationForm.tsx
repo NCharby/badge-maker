@@ -11,7 +11,7 @@ import { Label } from '@/components/atoms/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/atoms/select'
 import { useBadgeStore } from '@/hooks/useBadgeStore'
 import { useUserFlowStore } from '@/hooks/useUserFlowStore'
-import { BadgePreview } from '@/components/organisms/BadgePreview'
+import { getEventBadgeComponent } from '@/components/events'
 import { ImageUpload } from '@/components/molecules/ImageUpload'
 import { SocialMediaInput } from '@/components/molecules/SocialMediaInput'
 
@@ -56,6 +56,9 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
   const [imageError, setImageError] = useState<string | null>(null)
   const { data, setData, originalImage, croppedImage } = useBadgeStore()
   const { email: waiverEmail, firstName, lastName, waiverId } = useUserFlowStore()
+  
+  // Get the appropriate badge component for this event
+  const EventBadgePreview = getEventBadgeComponent(eventSlug)
   
   // Get pre-populated values from waiver data first, then existing badge data
   const prePopulatedEmail = waiverEmail || data.email
@@ -311,7 +314,7 @@ export function BadgeCreationForm({ eventSlug }: BadgeCreationFormProps) {
 
       {/* Preview Section */}
       <div className="flex flex-col items-center justify-center min-h-[600px]">
-        <BadgePreview 
+        <EventBadgePreview 
           badgeData={data} 
           imageUrl={croppedImage ? URL.createObjectURL(croppedImage) : originalImage ? URL.createObjectURL(originalImage) : undefined}
         />
