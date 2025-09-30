@@ -296,7 +296,7 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
             <li><strong>Refund Deadlines</strong>
               <ul>
                 <li>Refund requests after purchase will be honored at 75% & less processing fees.</li>
-                <li>Refunds after October 31st, 2025 (Midnight PST) will not be available.</li>
+                <li>Refunds after September 1st, 2025 (Midnight PST) will not be available.</li>
                 <li>Any refunds will be less processing fees.</li>
                 <li>Merchandise sales are final.</li>
               </ul>

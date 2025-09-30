@@ -269,7 +269,7 @@ export function WaiverForm({ eventSlug }: WaiverFormProps) {
                  <li><strong>Refund Deadlines</strong>
                    <ul className="list-disc list-inside space-y-1 ml-4 mt-1">
                      <li>Refund requests after purchase will be honored at 75% & less processing fees.</li>
-                     <li>Refunds after October 31st, 2025 (Midnight PST) will not be available.</li>
+                     <li>Refunds after September 1st, 2025 (Midnight PST) will not be available.</li>
                      <li>Any refunds will be less processing fees.</li>
                      <li>Merchandise sales are final.</li>
                    </ul>
