@@ -191,6 +191,14 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
               Badge Created Successfully!
             </CardTitle>
           </CardHeader>
+          {/* Telegram Integration */}
+          <div className=" mb-8">
+              <TelegramLinks 
+                eventSlug={eventSlug} 
+                sessionId={badgeData?.session_id || badgeData?.id || ''} 
+                className="bg-transparent border-none shadow-none"
+              />
+            </div>
           <CardContent className="space-y-6">
             {badgeData && (
               <>
@@ -285,14 +293,7 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
               </div>
             </div>
 
-            {/* Telegram Integration */}
-            <div className="border-t border-[#5c5c5c] pt-4">
-              <TelegramLinks 
-                eventSlug={eventSlug} 
-                sessionId={badgeData?.session_id || badgeData?.id || ''} 
-                className="bg-transparent border-none shadow-none"
-              />
-            </div>
+            
           </CardContent>
         </Card>
       </div>
