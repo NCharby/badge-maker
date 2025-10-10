@@ -133,7 +133,8 @@ export function WaiverForm({ eventSlug }: WaiverFormProps) {
               dietaryRestrictions: formData.dietaryRestrictions || [],
               dietaryRestrictionsOther: formData.dietaryRestrictionsOther || null,
               volunteeringInterests: formData.volunteeringInterests || [],
-              additionalNotes: formData.additionalNotes || null
+              additionalNotes: formData.additionalNotes || null,
+              eventSlug: eventSlug
             };
 
             // Call PDF generation API

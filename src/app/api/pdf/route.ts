@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
       dietaryRestrictions,
       dietaryRestrictionsOther,
       volunteeringInterests,
-      additionalNotes
+      additionalNotes,
+      eventSlug
     } = body;
 
     // Validate required fields
@@ -72,12 +73,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get event_id from the provided eventSlug (default to 'default' if not provided for backward compatibility)
+    const eventSlugToUse = eventSlug || 'default';
+    const { data: eventData, error: eventError } = await supabase
+      .from('events')
+      .select('id')
+      .eq('slug', eventSlugToUse)
+      .single();
+
+    if (eventError || !eventData) {
+      return NextResponse.json(
+        { error: `Event not found for slug: ${eventSlugToUse}` },
+        { status: 404 }
+      );
+    }
+
     // Store waiver record in database
     const { data: waiverData, error: dbError } = await supabase
       .from('waivers')
       .insert({
         session_id: sessionId,
-        event_id: (await supabase.from('events').select('id').eq('slug', 'default').single()).data?.id,
+        event_id: eventData.id,
         first_name: firstName,
         last_name: lastName,
         email: email,
