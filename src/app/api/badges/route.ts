@@ -62,6 +62,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get event_id from event_slug
+    let eventId = null;
+    if (event_slug) {
+      const { data: event, error: eventError } = await supabase
+        .from('events')
+        .select('id')
+        .eq('slug', event_slug)
+        .eq('is_active', true)
+        .single();
+
+      if (eventError || !event) {
+        return NextResponse.json(
+          { error: 'Event not found or inactive' },
+          { status: 400 }
+        );
+      }
+      eventId = event.id;
+    }
+
     // Check if waiver exists and is completed
     let sessionId = null;
     if (waiver_id) {
@@ -105,6 +124,7 @@ export async function POST(request: NextRequest) {
       .from('badges')
       .insert({
         session_id: sessionId,
+        event_id: eventId,
         waiver_id: waiver_id || null,
         badge_name,
         email,
