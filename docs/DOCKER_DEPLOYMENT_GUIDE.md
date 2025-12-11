@@ -142,10 +142,25 @@ sudo chown -R badge-maker:badge-maker /opt/badge-maker/nginx/ssl/
 
 ### 3.2 Setup Automatic Certificate Renewal
 
-The SSL renewal script is included in the repository at `scripts/renew-ssl.sh`.
+The SSL renewal scripts are included in the repository:
+- `scripts/renew-ssl.sh` - Main renewal script
+- `scripts/setup-ssl-renewal.sh` - Setup script for automatic renewal
 
+**Automatic Setup (Recommended):**
 ```bash
-# Make the script executable (after deploying to server)
+# Make setup script executable
+sudo chmod +x /opt/badge-maker/scripts/setup-ssl-renewal.sh
+
+# Run the setup script (configures cron job automatically)
+sudo /opt/badge-maker/scripts/setup-ssl-renewal.sh
+
+# Check setup status
+sudo /opt/badge-maker/scripts/setup-ssl-renewal.sh --status
+```
+
+**Manual Setup:**
+```bash
+# Make the renewal script executable
 sudo chmod +x /opt/badge-maker/scripts/renew-ssl.sh
 
 # Test the script manually first
@@ -158,21 +173,37 @@ sudo crontab -e
 0 0,12 * * * /opt/badge-maker/scripts/renew-ssl.sh >> /var/log/ssl-renewal.log 2>&1
 ```
 
-**Note:** The script automatically:
+**Renewal Features:**
 - Checks certificate expiration (renews if less than 30 days remaining)
 - Temporarily stops nginx container during renewal
 - Uses certbot standalone mode for certificate renewal
 - Copies certificates to Docker nginx directory
 - Restarts nginx container
 - Verifies the certificate is working
+- Logs all activity to `/var/log/ssl-renewal.log`
 
 **Manual Renewal:**
 ```bash
+# Renew if expiring soon (normal usage)
+sudo /opt/badge-maker/scripts/renew-ssl.sh
+
 # Force renewal (even if certificate is still valid)
 sudo /opt/badge-maker/scripts/renew-ssl.sh --force
 
 # Check script help
 sudo /opt/badge-maker/scripts/renew-ssl.sh --help
+```
+
+**Management Commands:**
+```bash
+# Check renewal setup status
+sudo /opt/badge-maker/scripts/setup-ssl-renewal.sh --status
+
+# Remove automatic renewal
+sudo /opt/badge-maker/scripts/setup-ssl-renewal.sh --remove
+
+# View renewal logs
+sudo tail -f /var/log/ssl-renewal.log
 ```
 
 ## Step 4: Database Setup

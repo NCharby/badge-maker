@@ -88,37 +88,48 @@ check_certificate_expiration() {
 }
 
 # Renew SSL certificate
+# Arguments: $1 = "force" for force renewal, empty for normal renewal
 renew_certificate() {
-    log_info "Renewing SSL certificate for ${DOMAIN}..."
+    local FORCE_RENEWAL="$1"
     
     # Check if nginx container is running
+    local NGINX_RUNNING=false
     if docker ps | grep -q "badge-maker-nginx"; then
-        log_info "Nginx container is running. Using standalone mode for renewal..."
-        
-        # Stop nginx container temporarily to free up ports 80/443
-        log_info "Temporarily stopping nginx container..."
+        NGINX_RUNNING=true
+    fi
+    
+    if [ "$NGINX_RUNNING" = true ]; then
+        log_info "Nginx container is running. Temporarily stopping for renewal..."
         cd "${APP_DIR}"
         docker-compose stop nginx || true
-        
-        # Renew certificate using standalone mode
-        if certbot renew --cert-name "${DOMAIN}" --standalone --quiet --non-interactive; then
-            log_success "Certificate renewed successfully"
-        else
-            log_error "Certificate renewal failed"
-            # Try to start nginx again even if renewal failed
+    fi
+    
+    # Determine which certbot command to use
+    if [ "$FORCE_RENEWAL" = "force" ]; then
+        log_info "Force renewal mode: renewing certificate for ${DOMAIN}..."
+        # Use certbot certonly with --force-renewal for specific domain renewal
+        CERTBOT_CMD="certbot certonly --standalone --force-renewal -d ${DOMAIN} --quiet --non-interactive"
+    else
+        log_info "Normal renewal mode: renewing all certificates that need renewal..."
+        # Use certbot renew (renews all certificates that are due for renewal)
+        CERTBOT_CMD="certbot renew --standalone --quiet --non-interactive"
+    fi
+    
+    # Execute the certbot command
+    if eval "$CERTBOT_CMD"; then
+        log_success "Certificate renewal completed successfully"
+    else
+        log_error "Certificate renewal failed"
+        if [ "$NGINX_RUNNING" = true ]; then
             docker-compose start nginx || true
-            exit 1
         fi
-        
-        # Start nginx container again
+        exit 1
+    fi
+    
+    # Start nginx container again if it was stopped
+    if [ "$NGINX_RUNNING" = true ]; then
         log_info "Starting nginx container..."
         docker-compose start nginx || true
-    else
-        log_info "Nginx container is not running. Using standalone mode..."
-        certbot renew --cert-name "${DOMAIN}" --standalone --quiet --non-interactive || {
-            log_error "Certificate renewal failed"
-            exit 1
-        }
     fi
 }
 
@@ -204,16 +215,19 @@ main() {
     check_docker_compose
     
     # Check if renewal is needed (unless --force is used)
-    if [ "$1" != "--force" ]; then
+    local FORCE_MODE=""
+    if [ "$1" == "--force" ]; then
+        log_info "Force renewal requested..."
+        FORCE_MODE="force"
+    else
         if ! check_certificate_expiration; then
             log_info "Certificate is still valid. Use --force to renew anyway."
             exit 0
         fi
-    else
-        log_info "Force renewal requested..."
+        log_info "Certificate needs renewal. Proceeding with normal renewal..."
     fi
     
-    renew_certificate
+    renew_certificate "$FORCE_MODE"
     copy_certificates
     restart_nginx
     verify_certificate
