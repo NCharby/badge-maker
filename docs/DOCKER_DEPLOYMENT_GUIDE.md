@@ -141,39 +141,38 @@ sudo chown -R badge-maker:badge-maker /opt/badge-maker/nginx/ssl/
 ```
 
 ### 3.2 Setup Automatic Certificate Renewal
-```bash
-# Create renewal script
-sudo nano /opt/badge-maker/renew-ssl.sh
-```
 
-**SSL Renewal Script:**
-```bash
-#!/bin/bash
-# Renew SSL certificates and restart containers
-
-# Renew certificates
-certbot renew --quiet
-
-# Copy new certificates
-cp /etc/letsencrypt/live/badgie.shinydogproductions.com/fullchain.pem /opt/badge-maker/nginx/ssl/
-cp /etc/letsencrypt/live/badgie.shinydogproductions.com/privkey.pem /opt/badge-maker/nginx/ssl/
-
-# Restart nginx container
-cd /opt/badge-maker
-docker-compose restart nginx
-
-echo "SSL certificates renewed and containers restarted"
-```
+The SSL renewal script is included in the repository at `scripts/renew-ssl.sh`.
 
 ```bash
-# Make executable
-sudo chmod +x /opt/badge-maker/renew-ssl.sh
+# Make the script executable (after deploying to server)
+sudo chmod +x /opt/badge-maker/scripts/renew-ssl.sh
 
-# Add to crontab
+# Test the script manually first
+sudo /opt/badge-maker/scripts/renew-ssl.sh --force
+
+# Add to root crontab for automatic renewal (twice daily check)
 sudo crontab -e
 
-# Add this line for monthly renewal check:
-0 2 1 * * /opt/badge-maker/renew-ssl.sh
+# Add this line:
+0 0,12 * * * /opt/badge-maker/scripts/renew-ssl.sh >> /var/log/ssl-renewal.log 2>&1
+```
+
+**Note:** The script automatically:
+- Checks certificate expiration (renews if less than 30 days remaining)
+- Temporarily stops nginx container during renewal
+- Uses certbot standalone mode for certificate renewal
+- Copies certificates to Docker nginx directory
+- Restarts nginx container
+- Verifies the certificate is working
+
+**Manual Renewal:**
+```bash
+# Force renewal (even if certificate is still valid)
+sudo /opt/badge-maker/scripts/renew-ssl.sh --force
+
+# Check script help
+sudo /opt/badge-maker/scripts/renew-ssl.sh --help
 ```
 
 ## Step 4: Database Setup
