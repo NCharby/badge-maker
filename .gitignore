@@ -2,5 +2,10 @@ design
 node_modules
 .next
 .env*
+!.env.example
 .env.local
 nginx
+
+# Supabase
+.supabase/
+supabase/.temp/
