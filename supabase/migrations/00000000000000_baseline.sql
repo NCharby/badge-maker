@@ -1,8 +1,6 @@
 -- Badge Maker - Complete Database Schema
 -- Run this file for first-time setup of the database
 
--- Enable necessary extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Create custom types
 CREATE TYPE badge_status AS ENUM ('draft', 'published', 'archived');
@@ -21,7 +19,7 @@ CREATE TABLE public.templates (
 
 -- Events table for multi-event support
 CREATE TABLE public.events (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   slug TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
@@ -36,7 +34,7 @@ CREATE TABLE public.events (
 
 -- Sessions table for single-session badge creation
 CREATE TABLE public.sessions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   event_id UUID REFERENCES public.events(id) ON DELETE SET NULL,
   session_data JSONB DEFAULT '{}',
   waiver_completed BOOLEAN DEFAULT false,
@@ -47,7 +45,7 @@ CREATE TABLE public.sessions (
 
 -- Waivers table for legal agreements
 CREATE TABLE public.waivers (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id UUID REFERENCES public.sessions(id) ON DELETE CASCADE,
   event_id UUID REFERENCES public.events(id) ON DELETE CASCADE,
   first_name TEXT NOT NULL,
@@ -85,7 +83,7 @@ FOREIGN KEY (waiver_id) REFERENCES public.waivers(id) ON DELETE SET NULL;
 
 -- Badges table
 CREATE TABLE public.badges (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id UUID REFERENCES public.sessions(id) ON DELETE CASCADE,
   event_id UUID REFERENCES public.events(id) ON DELETE CASCADE,
   waiver_id UUID REFERENCES public.waivers(id) ON DELETE SET NULL,
@@ -106,7 +104,7 @@ CREATE TABLE public.badges (
 
 -- Analytics table
 CREATE TABLE public.analytics (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id UUID REFERENCES public.sessions(id) ON DELETE SET NULL,
   event_type TEXT NOT NULL,
   event_data JSONB DEFAULT '{}',
@@ -117,7 +115,7 @@ CREATE TABLE public.analytics (
 
 -- Telegram invites table for tracking unique invite links
 CREATE TABLE public.telegram_invites (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   event_id UUID REFERENCES public.events(id) ON DELETE CASCADE,
   user_id UUID, -- Can be null for anonymous users
   session_id UUID REFERENCES public.sessions(id) ON DELETE CASCADE,
@@ -320,7 +318,8 @@ ON CONFLICT (slug) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES
   ('badge-images', 'badge-images', false, 5242880, ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
-  ('waiver-documents', 'waiver-documents', false, 10485760, ARRAY['application/pdf']);
+  ('waiver-documents', 'waiver-documents', false, 10485760, ARRAY['application/pdf'])
+ON CONFLICT (id) DO NOTHING;
 
 -- Set up RLS policies for storage buckets
 CREATE POLICY "Allow authenticated uploads to badge-images" ON storage.objects FOR INSERT

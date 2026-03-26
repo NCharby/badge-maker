@@ -954,6 +954,7 @@ All new platform tables are created via timestamped migration files in `supabase
 20260101000014_create_roommate_applications.sql
 20260101000015_rls_policies.sql
 20260101000016_functions_and_triggers.sql
+20260101000017_add_roommate_codes.sql
 ```
 
 ### `platform_users` (full schema)
@@ -1072,6 +1073,7 @@ CREATE TABLE event_attendees (
   room_id UUID REFERENCES rooms(id),
   is_room_lead BOOLEAN NOT NULL DEFAULT false,  -- set from ticket_types.room_lead at purchase; EP-overridable
   room_open_group TEXT,
+  roommate_code TEXT,  -- 6-char uppercase alphanumeric code assigned to Room Lead attendees after checkout; null if not applicable
 
   volunteer_hours_required INTEGER NOT NULL DEFAULT 0,  -- copied from ticket_types at purchase
 
@@ -1084,6 +1086,11 @@ CREATE TABLE event_attendees (
 
   UNIQUE(event_id, user_id)
 );
+
+-- Partial unique index: roommate_code values must be globally unique across all non-null entries
+CREATE UNIQUE INDEX event_attendees_roommate_code_key
+  ON event_attendees(roommate_code)
+  WHERE roommate_code IS NOT NULL;
 ```
 
 ---
@@ -1108,6 +1115,7 @@ CREATE TABLE ticket_types (
   price DECIMAL(10,2) NOT NULL DEFAULT 0,
   available_count INTEGER,   -- null = unlimited
   room_lead BOOLEAN NOT NULL DEFAULT false,
+  roommate_codes_enabled BOOLEAN NOT NULL DEFAULT false,  -- opt-in per Room Lead ticket type; when true, Room Lead purchasers receive a Roommate Code after checkout; always false when room_lead = false
   volunteer_hours_required INTEGER NOT NULL DEFAULT 0,
   room_required_at_purchase BOOLEAN NOT NULL DEFAULT false,
   room_type_restriction TEXT[],  -- room_group names; empty = no restriction
@@ -1368,10 +1376,11 @@ Ticketing is the only module required for Event creation. All other modules are 
 **Checkout Flow:**
 1. User selects ticket type
 2. If `room_required_at_purchase` is enabled: room selection is inserted into the checkout flow; room is auto-locked on purchase completion
-3. If ticket type requires volunteer hours: volunteer shift selection is inserted; selected shifts are soft-locked for **15 minutes** (same mechanism as ticket soft-lock); lock releases if checkout is abandoned or the 15-minute window expires; on purchase completion, signups are confirmed
-4. User selects merchandise (if applicable)
-5. Cart is passed to Square (primary) or PayPal (backup) via API
-6. Purchase confirmation opens other event modules
+3. **Roommate Code step** (optional, between ticket selection and volunteer shifts): shown when the event has at least one Room Lead ticket type with `roommate_codes_enabled = true` AND the user's selected ticket is NOT a Room Lead type. User may enter a 6-character code shared by a Room Lead to claim a spot in their room, or skip this step. See "Room Lead Roommate Codes" sub-section below for full detail.
+4. If ticket type requires volunteer hours: volunteer shift selection is inserted; selected shifts are soft-locked for **15 minutes** (same mechanism as ticket soft-lock); lock releases if checkout is abandoned or the 15-minute window expires; on purchase completion, signups are confirmed
+5. User selects merchandise (if applicable)
+6. Cart is passed to Square (primary) or PayPal (backup) via API
+7. Purchase confirmation opens other event modules
 
 **Soft Lock on Cart:** A soft lock must be applied to tickets, merchandise, and volunteer shifts during checkout to prevent race conditions and overselling. All locks use the `locks` table with `resource_type` = `ticket`, `merchandise`, or `shift`.
 
@@ -1424,6 +1433,62 @@ return { status: 'verified', provider: 'stub' };
 - `verified` → store on `platform_users.age_verification_status = 'verified'`; visible to EP
 - `pending` → store on profile; EP can see flag; user proceeds normally
 - `failed` → store on profile; EP is notified; manual resolution at check-in
+
+---
+
+### 6.2a Room Lead Roommate Codes
+
+An optional feature, configurable per Room Lead ticket type, that gives Room Lead purchasers a unique shareable code after checkout. Non-Room-Lead ticket buyers can optionally enter this code during checkout to claim a spot in the Room Lead's room — bypassing the standard Roommate Finder / application flow. Room capacity constraints are enforced at all times.
+
+**Feature Toggle:**
+- Opt-in at the ticket type level. On any ticket type where `room_lead = true`, the EP sees an additional checkbox: **"Enable Roommate Codes"** (`roommate_codes_enabled: boolean`).
+- When checked, Room Lead purchasers of this ticket type receive a Roommate Code after checkout.
+- Non-Room-Lead checkout shows the optional code step whenever at least one Room Lead ticket type in the event has `roommate_codes_enabled = true`.
+- When `room_lead = false`, `roommate_codes_enabled` is always saved as `false`.
+
+**Code Format & Storage:**
+- **Format:** 6-character uppercase alphanumeric, excluding visually ambiguous characters (`0`, `O`, `1`, `I`, `L`). Character set: `A–Z` + `2–9` minus `{O, I, L}` → 28 characters. Example: `X3K9R7`.
+- **Storage:** `event_attendees.roommate_code TEXT` — globally unique via partial unique index on non-null values.
+- **Generation:** Inside `purchaseTicket`, after the attendee record is updated, if `ticketType.room_lead = true && ticketType.roommate_codes_enabled = true`: generate a code with retry on collision (up to 5 attempts), write to `event_attendees.roommate_code`.
+- **Lifecycle:** Code is permanent for the duration of the event. Not invalidated after use — multiple roommates can use the same code to fill the room up to capacity.
+
+**Room Lead Must Have a Room First:**
+A Roommate Code can only be validated (used) if the Room Lead has a room assigned (`event_attendees.room_id IS NOT NULL`). If the Room Lead has no room yet, `validateRoommateCode` returns `{ valid: false, reason: 'room_not_selected' }` and no notification is sent.
+
+**Non-Room-Lead Checkout Step — "Roommate Code":**
+Inserted between Ticket Selection and Volunteer Shifts. Only shown when the event has at least one Room Lead ticket type with `roommate_codes_enabled = true` AND the user's selected ticket is NOT a Room Lead type.
+
+UI flow:
+1. Page shows: "Have a Roommate Code? Enter it below to reserve a spot in your Room Lead's room. You can skip this step."
+2. Text input + "Verify Code" button + "Skip" button.
+3. On "Skip" → advance to next step, `confirmedRoomCode = null`.
+4. On "Verify Code":
+   - **Invalid code** → inline error: "This code is not valid."
+   - **Room Lead has no room** → inline error: "Your Room Lead has not selected a room yet. Skip this step and try again later, or contact your Room Lead directly."
+   - **Room full** → inline error: "This room is currently full." (Room Lead is also notified — see notification row 33.)
+   - **Valid** → show confirmation card: room name, room number, lodging type, Room Lead's display name, per-night pricing (informational), "Confirm this room" button + "Use a different code / skip" link.
+5. On "Confirm this room" → store `confirmedRoomCode` in checkout state, advance to next step.
+6. No soft lock is acquired during the confirmation UI step. The room lock is acquired inside `purchaseTicket` to avoid orphaned locks if the user abandons checkout.
+
+**Purchase Completion:**
+`purchaseTicket` accepts an optional `roommateCode?: string`. If provided:
+1. Re-validate the code server-side.
+2. Acquire a soft lock on the room (`resource_type = 'room'`, 15-minute expiry). Capacity check: `bed_spot_count − blocked_beds − current_occupants − active_room_locks >= 1`. If 0 → return error "Room is no longer available."
+3. Complete purchase (existing logic unchanged).
+4. Update attendee: set `room_id = confirmedRoomId`, `room_status = 'Selected'`.
+5. Release room lock (delete from `locks`).
+6. Send notification row 32 to Room Lead.
+
+**Available Spots Calculation:**
+`bed_spot_count − COUNT(bed_blocks WHERE event_id AND room_id) − COUNT(event_attendees WHERE room_id AND event_id AND room_status IN ('Selected','Locked In','Verified')) − COUNT(locks WHERE resource_type='room' AND resource_id=room_id AND expires_at >= now())`
+
+If the room is blocked or reserved in `event_room_config`, code validation returns `{ valid: false, reason: 'invalid_code' }` (treated as invalid; no capacity message).
+
+**Roommate Code Display:**
+Room Leads see their code in three places:
+1. **Checkout success screen** — "Your Roommate Code: **X3K9R7**. Share this with people you want in your room."
+2. **Event attendee portal** — on the ticket status card, if `roommate_code` is set.
+3. **Ticket purchase confirmation email** (notification row 15) — included in the email body if generated.
 
 ---
 
@@ -1705,6 +1770,8 @@ Complete inventory of all platform notifications. Every entry must be implemente
 | 29 | Room Lead claims user by email (claim-by-email flow) | Claimed user | Email + Telegram + in-platform | Room Lead scene name, room name/number, event name, "Accept or decline in your portal" |
 | 30 | Claimed user accepts Room Lead's claim | Room Lead | Email + in-platform | Accepted user's scene name, event name, room number |
 | 31 | Claimed user declines Room Lead's claim | Room Lead | Email + in-platform | Declined user's scene name, event name |
+| 32 | Roommate Code used — roommate successfully placed in room | Room Lead | Email + Telegram + in-platform | Roommate's scene name, event name, room number |
+| 33 | Roommate Code used but room is full (code attempted, room at capacity) | Room Lead | Email + Telegram + in-platform | Event name, room number |
 
 > **Scheduled notifications** (rows 12, 13, 17–21, 23) must be triggered by an external scheduler (Supabase Edge Functions, Zapier, or cron service) calling an API Route Handler — never by `setInterval`, `setTimeout`, or in-process timers (see §2 Hostinger constraints).
 
@@ -2030,14 +2097,14 @@ All user accounts have `date_of_birth` set to 30 years before the current date (
 - Status: custom intermediate status "Tickets Open" (after "Applications Open")
 - Modules: Application, Ticketing, Room Selection, Volunteer, Schedule, Badge, Waiver
 - Ticket types (all $0 for testing):
-  - "Room Lead Pass" (`room_lead: true`, `room_required_at_purchase: false`)
+  - "Room Lead Pass" (`room_lead: true`, `room_required_at_purchase: false`, `roommate_codes_enabled: true`)
   - "Roommate Pass" (`room_lead: false`)
   - "Volunteer Pass" (`room_lead: false`, `volunteer_hours_required: 4`)
 - Cancellation Policy: 2 checkpoints (status UUID of "Applications Open" → 100%, status UUID of "Tickets Open" → 50%)
 - Merchandise: 2 items — "Event T-Shirt" ($0, unrestricted); "VIP Lanyard" ($0, restricted to Room Lead Pass ticket type ID)
 - 3 volunteer shifts created (one overlapping pair, to verify overlap constraint)
 - Pre-seeded state:
-  - user1 has Room Lead ticket + completed order; `is_room_lead = true`
+  - user1 has Room Lead ticket + completed order; `is_room_lead = true`; `roommate_code = 'TESTRL'` (pre-assigned for easy manual testing of the Roommate Code flow)
   - user2 + user3 have Roommate tickets + completed orders
   - user4 has Volunteer ticket + completed order
   - user5 has no ticket
@@ -2090,3 +2157,23 @@ After running `npm run seed`, walk through these flows in order:
 19. **Event discovery** — Log in as `user5` (before enrolling in any event); verify `GET /api/events` returns the Full Test Event with status ≥ Published; verify no PII fields (email, DOB, owner details) are in the response.
 
 20. **Merchandise restriction** — As Event Promoter, verify the "VIP Lanyard" merchandise item does NOT appear in checkout for a user purchasing a Roommate Pass; verify it DOES appear for a user purchasing a Room Lead Pass.
+
+21. **Roommate Code — EP config** — Edit the "Room Lead Pass" ticket type on Full Test Event; verify "Enable Roommate Codes" checkbox appears only when "Room Lead" is checked; save; verify `roommate_codes_enabled = true` persists.
+
+22. **Roommate Code — code generation** — As `user5`, purchase a Room Lead Pass; verify the checkout success screen shows a 6-character code; verify `event_attendees.roommate_code` is set in the DB.
+
+23. **Roommate Code — no room yet** — As `user2` (Roommate Pass), begin checkout and enter user5's code before user5 has selected a room; verify error "Your Room Lead has not selected a room yet."
+
+24. **Roommate Code — valid flow** — Have user5 select a room; as `user2`, enter user5's code during checkout; verify the room confirmation card appears with room name, Room Lead display name, and per-night pricing; confirm; complete checkout; verify `user2.room_id` is set and `room_status = 'Selected'`.
+
+25. **Roommate Code — skip flow** — As `user3`, skip the code step during checkout; verify checkout completes with no room assignment.
+
+26. **Roommate Code — full room** — Fill all spots in user5's room; as another user, enter user5's code; verify "This room is currently full" error; verify Room Lead notification row 33 is triggered.
+
+27. **Roommate Code — notification row 32** — After the valid flow (step 24), verify Room Lead (user5) received notification row 32 with roommate's scene name, event name, and room number.
+
+28. **Roommate Code — portal display** — After step 22, log in as user5; open the Full Test Event attendee page; verify the Roommate Code is visible on the ticket status card.
+
+29. **Roommate Code — pre-seeded TESTRL** — As `user2`, enter code `TESTRL` during checkout (user1 has this pre-seeded code); verify the code resolves to user1's room (once user1 has selected one); verify successful room placement.
+
+30. **Roommate Code — feature disabled on Minimal Event** — As any user, begin checkout on the Minimal Test Event; verify the Roommate Code step does NOT appear (no Room Lead ticket type with `roommate_codes_enabled = true`).

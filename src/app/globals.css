@@ -2,6 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── SD Platform design tokens ───────────────────────────────────────────── */
+/* Used by all platform UI (auth, portal, EP panel, SA panel).                */
+/* Badge-maker components continue to use the shadcn HSL tokens below.        */
+:root {
+  --sd-bg: #EEECE8;
+  --sd-card: #fff;
+  --sd-card2: #F6F5F2;
+  --sd-border: #D4D2CC;
+  --sd-border-light: #E8E6E1;
+  --sd-text: #1A1A18;
+  --sd-muted: #6B6A66;
+  --sd-xs: #A8A7A2;
+  --sd-green: #1D9E75;
+  --sd-green-dark: #0F6E56;
+  --sd-green-light: #E1F5EE;
+  --sd-amber: #D97706;
+  --sd-amber-light: #FEF3C7;
+  --sd-red: #DC2626;
+  --sd-red-light: #FEE2E2;
+  --sd-blue: #2563EB;
+  --sd-blue-light: #DBEAFE;
+  --sd-purple: #7C3AED;
+  --sd-purple-light: #EDE9FE;
+  --sd-radius: 10px;
+}
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 @layer base {
   :root {
     --background: 0 0% 100%;

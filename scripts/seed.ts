@@ -7,7 +7,7 @@
  * NEVER run against the production database.
  *
  * Phase 1 — Badge-maker tables (runs immediately; these tables exist in production schema)
- * Phase 2 — Platform tables (stubs; run platform migrations first)
+ * Phase 2 — Platform tables (requires platform migrations to be applied)
  *
  * Seed accounts:
  *   admin@test.local     / Admin1234!  — System Administrator
@@ -69,10 +69,59 @@ const ACCOUNTS = [
   { email: 'user5@test.local',    password: 'User1234!',  label: 'User — No ticket yet' },
 ] as const
 
+// ── Stable seed UUIDs ─────────────────────────────────────────────────────────
+// Fixed UUIDs make the seed script idempotent and allow safe re-runs.
+
+const VENUE_ID        = 'aaaaaaaa-0000-0000-0000-000000000001'
+const FULL_EVENT_ID   = 'aaaaaaaa-0000-0000-0000-000000000002'
+const MINIMAL_EVENT_ID = 'aaaaaaaa-0000-0000-0000-000000000003'
+
+// Workflow status UUIDs — Full Test Event
+const WS_APP_OPEN     = 'bbbbbbbb-0000-0000-0000-000000000001' // Applications Open
+const WS_APP_CLOSED   = 'bbbbbbbb-0000-0000-0000-000000000002' // Applications Closed
+const WS_TKT_OPEN     = 'bbbbbbbb-0000-0000-0000-000000000003' // Tickets Open
+const WS_TKT_CLOSED   = 'bbbbbbbb-0000-0000-0000-000000000004' // Tickets Closed
+const WS_ROOMS_OPEN   = 'bbbbbbbb-0000-0000-0000-000000000005' // Rooms Open
+const WS_ROOMS_CLOSED = 'bbbbbbbb-0000-0000-0000-000000000006' // Rooms Closed
+// Minimal Event
+const WS_MIN_TKT_OPEN = 'bbbbbbbb-0000-0000-0000-000000000007' // Minimal: Tickets Open
+
+// Ticket type UUIDs
+const TICKET_RL   = 'cccccccc-0000-0000-0000-000000000001' // Room Lead Pass
+const TICKET_RM   = 'cccccccc-0000-0000-0000-000000000002' // Roommate Pass
+const TICKET_VOL  = 'cccccccc-0000-0000-0000-000000000003' // Volunteer Pass
+const TICKET_MIN  = 'cccccccc-0000-0000-0000-000000000004' // Minimal Event General
+
+// Merchandise UUIDs
+const MERCH_SHIRT   = 'dddddddd-0000-0000-0000-000000000001' // Event T-Shirt
+const MERCH_LANYARD = 'dddddddd-0000-0000-0000-000000000002' // VIP Lanyard
+
+// Room UUIDs
+const ROOM_KS1 = 'eeeeeeee-0000-0000-0000-000000000001' // King Studio 1
+const ROOM_KS2 = 'eeeeeeee-0000-0000-0000-000000000002' // King Studio 2
+const ROOM_KS3 = 'eeeeeeee-0000-0000-0000-000000000003' // King Studio 3
+const ROOM_QD1 = 'eeeeeeee-0000-0000-0000-000000000004' // Queen Double 1
+const ROOM_QD2 = 'eeeeeeee-0000-0000-0000-000000000005' // Queen Double 2
+const ROOM_QD3 = 'eeeeeeee-0000-0000-0000-000000000006' // Queen Double 3
+const ROOM_QD4 = 'eeeeeeee-0000-0000-0000-000000000007' // Queen Double 4
+const ROOM_BK1 = 'eeeeeeee-0000-0000-0000-000000000008' // Bunk Room 1
+const ROOM_BK2 = 'eeeeeeee-0000-0000-0000-000000000009' // Bunk Room 2
+const ROOM_BK3 = 'eeeeeeee-0000-0000-0000-00000000000a' // Bunk Room 3
+
+// Volunteer shift UUIDs
+const SHIFT_A = 'ffffffff-0000-0000-0000-000000000001' // Day 1 10:00 (overlaps B)
+const SHIFT_B = 'ffffffff-0000-0000-0000-000000000002' // Day 1 10:30 (overlaps A)
+const SHIFT_C = 'ffffffff-0000-0000-0000-000000000003' // Day 2 14:00
+const SHIFT_D = 'ffffffff-0000-0000-0000-000000000004' // Day 2 17:00 (non-overlapping; A+C+D = 4h)
+
+// Order UUIDs
+const ORDER_U1 = '99999999-0000-0000-0000-000000000001' // user1 Room Lead order
+const ORDER_U2 = '99999999-0000-0000-0000-000000000002' // user2 Roommate order
+const ORDER_U3 = '99999999-0000-0000-0000-000000000003' // user3 Roommate order
+const ORDER_U4 = '99999999-0000-0000-0000-000000000004' // user4 Volunteer order
+
 // ── Phase 1: Badge-maker tables ───────────────────────────────────────────────
 // These tables exist in the current production schema (supabase/schema.sql).
-// This phase is safe to run immediately against any environment with the
-// badge-maker schema applied.
 
 async function seedBadgeMakerTables() {
   section('Phase 1: Badge-Maker Tables')
@@ -107,7 +156,6 @@ async function seedBadgeMakerTables() {
 
   // ── Badge-maker events ───────────────────────────────────────────────────────
   // Note: This is the badge-maker `events` table — NOT platform_events.
-  // The platform_events table will be created in a future migration.
   console.log('\n  Badge-maker events...')
   for (const event of [
     {
@@ -166,20 +214,12 @@ async function seedBadgeMakerTables() {
   return authUserIds
 }
 
-// ── Phase 2: Platform tables (stubs) ─────────────────────────────────────────
-// These tables do NOT exist yet — they are created by future migration files
-// in supabase/migrations/. This phase is intentionally stubbed.
-//
-// As each migration is applied (supabase db push), uncomment the corresponding
-// TODO block and fill in the actual insert/upsert logic.
-//
-// The try/catch block detects missing tables and exits gracefully.
+// ── Phase 2: Platform tables ──────────────────────────────────────────────────
+// Requires platform migrations to be applied (supabase db push).
+// Gracefully skips if platform_users table does not exist.
 
 async function seedPlatformTables(authUserIds: Record<string, string>) {
   section('Phase 2: Platform Tables (requires platform migrations)')
-
-  // Suppress unused variable warning until TODOs are uncommented
-  void authUserIds
 
   try {
     // Test whether platform_users table exists
@@ -191,113 +231,505 @@ async function seedPlatformTables(authUserIds: Record<string, string>) {
     if (tableCheckError) {
       warn('Platform tables not yet available.')
       warn('Apply platform migrations first:')
-      warn('  supabase db push  (after creating migration files in supabase/migrations/)')
+      warn('  supabase db push')
       warn('Skipping Phase 2.')
       return
     }
 
-    // ── TODO: platform_users ──────────────────────────────────────────────────
-    // Roles:
-    //   admin@test.local    → role='system_admin'
-    //   promoter@test.local → role='event_promoter', payment_provider='square'
-    //   user1–5             → role='user'
-    // All users: date_of_birth=dob (30 years ago), roommate_finder_hidden=false
-    // user3: roommate_finder_hidden=true
-    //
-    // Uncomment when migration 20260101000000_create_platform_users.sql is applied:
-    //
-    // const platformUsers = [
-    //   { id: authUserIds['admin@test.local'],    role: 'system_admin',   email: 'admin@test.local',    date_of_birth: dob, preferred_scene_name: 'Admin',     roommate_finder_hidden: false },
-    //   { id: authUserIds['promoter@test.local'], role: 'event_promoter', email: 'promoter@test.local', date_of_birth: dob, preferred_scene_name: 'Promoter',  roommate_finder_hidden: false, payment_provider: 'square' },
-    //   { id: authUserIds['user1@test.local'],    role: 'user',           email: 'user1@test.local',    date_of_birth: dob, preferred_scene_name: 'RoomLead1', roommate_finder_hidden: false },
-    //   { id: authUserIds['user2@test.local'],    role: 'user',           email: 'user2@test.local',    date_of_birth: dob, preferred_scene_name: 'Roommate2', roommate_finder_hidden: false },
-    //   { id: authUserIds['user3@test.local'],    role: 'user',           email: 'user3@test.local',    date_of_birth: dob, preferred_scene_name: 'Hidden3',   roommate_finder_hidden: true  },
-    //   { id: authUserIds['user4@test.local'],    role: 'user',           email: 'user4@test.local',    date_of_birth: dob, preferred_scene_name: 'Volunteer4',roommate_finder_hidden: false },
-    //   { id: authUserIds['user5@test.local'],    role: 'user',           email: 'user5@test.local',    date_of_birth: dob, preferred_scene_name: 'NoTicket5', roommate_finder_hidden: false },
-    // ]
-    // for (const u of platformUsers) {
-    //   const { error } = await supabase.from('platform_users').upsert(u, { onConflict: 'id' })
-    //   if (error) warn(`platform_users upsert failed for ${u.email}: ${error.message}`)
-    //   else ok(`platform_user: ${u.email} (${u.role})`)
-    // }
-    warn('TODO: platform_users — uncomment after migration 20260101000000')
+    // ── platform_users ────────────────────────────────────────────────────────
+    console.log('\n  platform_users...')
+    const platformUsers = [
+      {
+        id: authUserIds['admin@test.local'],
+        role: 'system_admin',
+        email: 'admin@test.local',
+        date_of_birth: dob,
+        preferred_scene_name: 'Admin',
+        roommate_finder_hidden: false,
+      },
+      {
+        id: authUserIds['promoter@test.local'],
+        role: 'event_promoter',
+        email: 'promoter@test.local',
+        date_of_birth: dob,
+        preferred_scene_name: 'Promoter',
+        roommate_finder_hidden: false,
+        payment_provider: 'square',
+      },
+      {
+        id: authUserIds['user1@test.local'],
+        role: 'user',
+        email: 'user1@test.local',
+        date_of_birth: dob,
+        preferred_scene_name: 'RoomLead1',
+        roommate_finder_hidden: false,
+      },
+      {
+        id: authUserIds['user2@test.local'],
+        role: 'user',
+        email: 'user2@test.local',
+        date_of_birth: dob,
+        preferred_scene_name: 'Roommate2',
+        roommate_finder_hidden: false,
+      },
+      {
+        id: authUserIds['user3@test.local'],
+        role: 'user',
+        email: 'user3@test.local',
+        date_of_birth: dob,
+        preferred_scene_name: 'Hidden3',
+        roommate_finder_hidden: true,
+      },
+      {
+        id: authUserIds['user4@test.local'],
+        role: 'user',
+        email: 'user4@test.local',
+        date_of_birth: dob,
+        preferred_scene_name: 'Volunteer4',
+        roommate_finder_hidden: false,
+      },
+      {
+        id: authUserIds['user5@test.local'],
+        role: 'user',
+        email: 'user5@test.local',
+        date_of_birth: dob,
+        preferred_scene_name: 'NoTicket5',
+        roommate_finder_hidden: false,
+      },
+    ].filter(u => u.id) // skip accounts that failed to create
 
-    // ── TODO: venues ──────────────────────────────────────────────────────────
-    // Seed venue: "Test Venue"
-    // owner_id = authUserIds['promoter@test.local']
-    // Uncomment when migration 20260101000001_create_venues.sql is applied.
-    warn('TODO: venues — uncomment after migration 20260101000001')
+    for (const u of platformUsers) {
+      const { error } = await supabase
+        .from('platform_users')
+        .upsert(u, { onConflict: 'id' })
+      if (error) warn(`platform_users upsert failed for ${u.email}: ${error.message}`)
+      else ok(`platform_user: ${u.email} (${u.role})`)
+    }
 
-    // ── TODO: rooms ───────────────────────────────────────────────────────────
-    // 10 rooms under Test Venue:
-    //   King Studio x3:   bed_spot_count=2, min_occupancy=1
-    //   Queen Double x4:  bed_spot_count=2, min_occupancy=2
-    //   Bunk Room x3:     bed_spot_count=4, min_occupancy=2
-    // room_daily_rates: 3 nights with different rates per night (Thu, Fri, Sat)
-    // 2 rooms pre-blocked via event_room_config:
-    //   King Studio #1 → block_note="Staff"
-    //   King Studio #2 → block_note="Playroom"
-    // Uncomment when migration 20260101000002_create_rooms.sql is applied.
-    warn('TODO: rooms — uncomment after migration 20260101000002')
+    // ── venue ─────────────────────────────────────────────────────────────────
+    console.log('\n  venues...')
+    const promoterId = authUserIds['promoter@test.local']
+    if (promoterId) {
+      const { error } = await supabase
+        .from('venues')
+        .upsert(
+          {
+            id: VENUE_ID,
+            owner_id: promoterId,
+            name: 'Test Venue',
+            physical_address: '123 Test Street, Test City, TX 75001',
+            email: 'hotel@test.local',
+            phone: '555-0100',
+          },
+          { onConflict: 'id' }
+        )
+      if (error) warn(`venues upsert failed: ${error.message}`)
+      else ok('Test Venue')
+    }
 
-    // ── TODO: platform_events ─────────────────────────────────────────────────
-    // Full Test Event:
-    //   workflow_statuses: [Applications Open, Applications Closed, Tickets Open, Tickets Closed, Rooms Open, Rooms Closed]
-    //   status: "Tickets Open"
-    //   module_config: all modules; application+ticketing required, others optional
-    //   cancellation_policy: {Applications Open UUID → 100%, Tickets Open UUID → 50%}
-    //
-    // Minimal Test Event:
-    //   status: "Tickets Open"
-    //   module_config: ticketing only; 1 ticket type at $0
-    //
-    // Uncomment when migration 20260101000003_create_platform_events.sql is applied.
-    warn('TODO: platform_events — uncomment after migration 20260101000003')
+    // ── rooms ─────────────────────────────────────────────────────────────────
+    // 10 rooms for Test Venue. room_daily_rates covers 3 check-in nights
+    // (Thu Oct 1, Fri Oct 2, Sat Oct 3) for the Full Test Event (Oct 1-5).
+    console.log('\n  rooms...')
+    const rooms = [
+      { id: ROOM_KS1, venue_id: VENUE_ID, number: 'KS-101', name: 'King Studio',   lodging_type: 'Studio',       bed_type: 'King',         bed_spot_count: 2, min_occupancy: 1, room_group: 'King Studios',   room_daily_rates: [{ date: '2026-10-01', amount: 200.00 }, { date: '2026-10-02', amount: 225.00 }, { date: '2026-10-03', amount: 225.00 }] },
+      { id: ROOM_KS2, venue_id: VENUE_ID, number: 'KS-102', name: 'King Studio',   lodging_type: 'Studio',       bed_type: 'King',         bed_spot_count: 2, min_occupancy: 1, room_group: 'King Studios',   room_daily_rates: [{ date: '2026-10-01', amount: 200.00 }, { date: '2026-10-02', amount: 225.00 }, { date: '2026-10-03', amount: 225.00 }] },
+      { id: ROOM_KS3, venue_id: VENUE_ID, number: 'KS-103', name: 'King Studio',   lodging_type: 'Studio',       bed_type: 'King',         bed_spot_count: 2, min_occupancy: 1, room_group: 'King Studios',   room_daily_rates: [{ date: '2026-10-01', amount: 200.00 }, { date: '2026-10-02', amount: 225.00 }, { date: '2026-10-03', amount: 225.00 }] },
+      { id: ROOM_QD1, venue_id: VENUE_ID, number: 'QD-201', name: 'Queen Double',  lodging_type: 'Suite',        bed_type: 'Queen',        bed_spot_count: 2, min_occupancy: 2, room_group: 'Queen Doubles',  room_daily_rates: [{ date: '2026-10-01', amount: 175.00 }, { date: '2026-10-02', amount: 195.00 }, { date: '2026-10-03', amount: 195.00 }] },
+      { id: ROOM_QD2, venue_id: VENUE_ID, number: 'QD-202', name: 'Queen Double',  lodging_type: 'Suite',        bed_type: 'Queen',        bed_spot_count: 2, min_occupancy: 2, room_group: 'Queen Doubles',  room_daily_rates: [{ date: '2026-10-01', amount: 175.00 }, { date: '2026-10-02', amount: 195.00 }, { date: '2026-10-03', amount: 195.00 }] },
+      { id: ROOM_QD3, venue_id: VENUE_ID, number: 'QD-203', name: 'Queen Double',  lodging_type: 'Suite',        bed_type: 'Queen',        bed_spot_count: 2, min_occupancy: 2, room_group: 'Queen Doubles',  room_daily_rates: [{ date: '2026-10-01', amount: 175.00 }, { date: '2026-10-02', amount: 195.00 }, { date: '2026-10-03', amount: 195.00 }] },
+      { id: ROOM_QD4, venue_id: VENUE_ID, number: 'QD-204', name: 'Queen Double',  lodging_type: 'Suite',        bed_type: 'Queen',        bed_spot_count: 2, min_occupancy: 2, room_group: 'Queen Doubles',  room_daily_rates: [{ date: '2026-10-01', amount: 175.00 }, { date: '2026-10-02', amount: 195.00 }, { date: '2026-10-03', amount: 195.00 }] },
+      { id: ROOM_BK1, venue_id: VENUE_ID, number: 'BK-301', name: 'Bunk Room',     lodging_type: 'Shared',       bed_type: 'Bunk',         bed_spot_count: 4, min_occupancy: 2, room_group: 'Bunk Rooms',     room_daily_rates: [{ date: '2026-10-01', amount: 100.00 }, { date: '2026-10-02', amount: 115.00 }, { date: '2026-10-03', amount: 115.00 }] },
+      { id: ROOM_BK2, venue_id: VENUE_ID, number: 'BK-302', name: 'Bunk Room',     lodging_type: 'Shared',       bed_type: 'Bunk',         bed_spot_count: 4, min_occupancy: 2, room_group: 'Bunk Rooms',     room_daily_rates: [{ date: '2026-10-01', amount: 100.00 }, { date: '2026-10-02', amount: 115.00 }, { date: '2026-10-03', amount: 115.00 }] },
+      { id: ROOM_BK3, venue_id: VENUE_ID, number: 'BK-303', name: 'Bunk Room',     lodging_type: 'Shared',       bed_type: 'Bunk',         bed_spot_count: 4, min_occupancy: 2, room_group: 'Bunk Rooms',     room_daily_rates: [{ date: '2026-10-01', amount: 100.00 }, { date: '2026-10-02', amount: 115.00 }, { date: '2026-10-03', amount: 115.00 }] },
+    ]
+    for (const room of rooms) {
+      const { error } = await supabase.from('rooms').upsert(room, { onConflict: 'id' })
+      if (error) warn(`rooms upsert failed for ${room.number}: ${error.message}`)
+      else ok(`room: ${room.number} ${room.name}`)
+    }
 
-    // ── TODO: ticket_groups and ticket_types ──────────────────────────────────
-    // Full Test Event ticket types (all $0 for testing):
-    //   "Room Lead Pass":  room_lead=true,  room_required_at_purchase=false
-    //   "Roommate Pass":   room_lead=false
-    //   "Volunteer Pass":  room_lead=false, volunteer_hours_required=4
-    // Uncomment when migration 20260101000005_create_ticket_types_and_groups.sql is applied.
-    warn('TODO: ticket_types — uncomment after migration 20260101000005')
+    // ── platform_events ───────────────────────────────────────────────────────
+    console.log('\n  platform_events...')
+    if (promoterId) {
+      // Full Test Event workflow statuses
+      const fullWorkflowStatuses = [
+        { id: WS_APP_OPEN,     name: 'Applications Open',   order: 1, description: 'Application module opens for attendees' },
+        { id: WS_APP_CLOSED,   name: 'Applications Closed', order: 2, description: 'Application module closes' },
+        { id: WS_TKT_OPEN,     name: 'Tickets Open',        order: 3, description: 'Ticketing module opens for approved applicants' },
+        { id: WS_TKT_CLOSED,   name: 'Tickets Closed',      order: 4, description: 'Ticketing closes' },
+        { id: WS_ROOMS_OPEN,   name: 'Rooms Open',          order: 5, description: 'Room selection opens for ticket holders' },
+        { id: WS_ROOMS_CLOSED, name: 'Rooms Closed',        order: 6, description: 'Room selection closes' },
+      ]
 
-    // ── TODO: merchandise ─────────────────────────────────────────────────────
-    // Full Test Event merchandise (all $0):
-    //   "Event T-Shirt":  ticket_type_restriction=[] (unrestricted)
-    //   "VIP Lanyard":    ticket_type_restriction=[Room Lead Pass ticket type ID]
-    // Uncomment when migration 20260101000007_create_merchandise.sql is applied.
-    warn('TODO: merchandise — uncomment after migration 20260101000007')
+      const fullModuleConfig = {
+        application: {
+          enabled: true,
+          required: true,
+          opens_at_status: WS_APP_OPEN,
+          closes_at_status: WS_APP_CLOSED,
+        },
+        ticketing: {
+          enabled: true,
+          required: true,
+          opens_at_status: WS_TKT_OPEN,
+          closes_at_status: null,
+        },
+        waiver: {
+          enabled: true,
+          required: true,
+          opens_at_status: WS_TKT_OPEN,
+          closes_at_status: null,
+        },
+        room_selection: {
+          enabled: true,
+          required: false,
+          opens_at_status: WS_ROOMS_OPEN,
+          closes_at_status: WS_ROOMS_CLOSED,
+        },
+        volunteering: {
+          enabled: true,
+          required: false,
+          opens_at_status: WS_TKT_OPEN,
+          closes_at_status: null,
+        },
+        schedule: {
+          enabled: true,
+          required: false,
+          opens_at_status: 'Published',
+          closes_at_status: null,
+        },
+        badge: {
+          enabled: true,
+          required: false,
+          opens_at_status: WS_TKT_OPEN,
+          closes_at_status: null,
+        },
+      }
 
-    // ── TODO: event_attendees + orders ────────────────────────────────────────
-    // Pre-seeded attendee state for Full Test Event:
-    //   user1: Room Lead Pass, ticket_status=Complete, is_room_lead=true, completed order
-    //   user2: Roommate Pass,  ticket_status=Complete, is_room_lead=false, completed order
-    //   user3: Roommate Pass,  ticket_status=Complete, is_room_lead=false, completed order
-    //   user4: Volunteer Pass, ticket_status=Complete, volunteer_hours_required=4, completed order
-    //   user5: no ticket (ticket_status=Incomplete)
-    // Uncomment when migrations 20260101000004 and 20260101000006 are applied.
-    warn('TODO: event_attendees + orders — uncomment after migrations 20260101000004 and 20260101000006')
+      const fullCancellationPolicy = {
+        checkpoints: [
+          { status_id: WS_APP_OPEN, refund_percentage: 100 },
+          { status_id: WS_TKT_OPEN, refund_percentage: 50 },
+        ],
+      }
 
-    // ── TODO: volunteer_shifts ────────────────────────────────────────────────
-    // 3 shifts for Full Test Event:
-    //   Shift A: day 1 at 10:00, duration=60min, capacity=5
-    //   Shift B: day 1 at 10:30, duration=60min, capacity=3  ← overlaps Shift A (tests constraint)
-    //   Shift C: day 2 at 14:00, duration=90min, capacity=4
-    // Uncomment when migration 20260101000013_create_volunteer_shifts.sql is applied.
-    warn('TODO: volunteer_shifts — uncomment after migration 20260101000013')
+      const { error: fullEventError } = await supabase
+        .from('platform_events')
+        .upsert(
+          {
+            id: FULL_EVENT_ID,
+            slug: 'test-full-event',
+            owner_id: promoterId,
+            title: 'Full Test Event',
+            description: 'All modules enabled — used for manual flow verification',
+            start_date: '2026-10-01',
+            end_date: '2026-10-05',
+            venue_id: VENUE_ID,
+            status: 'Tickets Open',
+            workflow_statuses: fullWorkflowStatuses,
+            module_config: fullModuleConfig,
+            cancellation_policy: fullCancellationPolicy,
+            room_lock_in_date: '2026-09-01T00:00:00Z',
+            room_closed_date: '2026-09-15T00:00:00Z',
+          },
+          { onConflict: 'id' }
+        )
+      if (fullEventError) warn(`platform_events upsert failed (Full): ${fullEventError.message}`)
+      else ok('platform_event: Full Test Event')
 
-    // ── TODO: event_room_config (blocking) ────────────────────────────────────
-    // Block 2 rooms on Full Test Event:
-    //   King Studio #1: blocked=true, block_note="Staff"
-    //   King Studio #2: blocked=true, block_note="Playroom"
-    // Uncomment when migration 20260101000008_create_event_room_config.sql is applied.
-    warn('TODO: event_room_config blocks — uncomment after migration 20260101000008')
+      // Minimal Test Event
+      const minWorkflowStatuses = [
+        { id: WS_MIN_TKT_OPEN, name: 'Tickets Open', order: 1, description: 'Ticketing opens' },
+      ]
+      const { error: minEventError } = await supabase
+        .from('platform_events')
+        .upsert(
+          {
+            id: MINIMAL_EVENT_ID,
+            slug: 'test-minimal-event',
+            owner_id: promoterId,
+            title: 'Minimal Test Event',
+            description: 'Ticketing only',
+            start_date: '2026-11-01',
+            end_date: '2026-11-03',
+            status: 'Tickets Open',
+            workflow_statuses: minWorkflowStatuses,
+            module_config: {
+              ticketing: { enabled: true, required: true, opens_at_status: WS_MIN_TKT_OPEN, closes_at_status: null },
+            },
+            cancellation_policy: { checkpoints: [] },
+          },
+          { onConflict: 'id' }
+        )
+      if (minEventError) warn(`platform_events upsert failed (Minimal): ${minEventError.message}`)
+      else ok('platform_event: Minimal Test Event')
+    }
 
-    ok('Phase 2 stubs complete (no data inserted — platform migrations not yet applied).')
+    // ── ticket_types ──────────────────────────────────────────────────────────
+    console.log('\n  ticket_types...')
+    const ticketTypes = [
+      // Full Test Event
+      { id: TICKET_RL,  event_id: FULL_EVENT_ID,    name: 'Room Lead Pass', description: 'Designates purchaser as Room Lead',              price: 0, room_lead: true,  volunteer_hours_required: 0, room_required_at_purchase: false },
+      { id: TICKET_RM,  event_id: FULL_EVENT_ID,    name: 'Roommate Pass',  description: 'Standard attendee ticket',                      price: 0, room_lead: false, volunteer_hours_required: 0, room_required_at_purchase: false },
+      { id: TICKET_VOL, event_id: FULL_EVENT_ID,    name: 'Volunteer Pass', description: 'Requires 4 hours of volunteer shifts',           price: 0, room_lead: false, volunteer_hours_required: 4, room_required_at_purchase: false },
+      // Minimal Test Event
+      { id: TICKET_MIN, event_id: MINIMAL_EVENT_ID, name: 'General Admission', description: 'Single ticket type for minimal test event',  price: 0, room_lead: false, volunteer_hours_required: 0, room_required_at_purchase: false },
+    ]
+    for (const tt of ticketTypes) {
+      const { error } = await supabase.from('ticket_types').upsert(tt, { onConflict: 'id' })
+      if (error) warn(`ticket_types upsert failed for ${tt.name}: ${error.message}`)
+      else ok(`ticket_type: ${tt.name}`)
+    }
+
+    // ── merchandise ───────────────────────────────────────────────────────────
+    console.log('\n  merchandise...')
+    const merch = [
+      {
+        id: MERCH_SHIRT,
+        event_id: FULL_EVENT_ID,
+        name: 'Event T-Shirt',
+        description: 'Official event t-shirt — available to all attendees',
+        price: 0,
+        available_count: null, // unlimited
+        ticket_type_restriction: [], // unrestricted
+        enabled: true,
+      },
+      {
+        id: MERCH_LANYARD,
+        event_id: FULL_EVENT_ID,
+        name: 'VIP Lanyard',
+        description: 'Exclusive lanyard for Room Lead ticket holders only',
+        price: 0,
+        available_count: null,
+        ticket_type_restriction: [TICKET_RL], // Room Lead Pass only
+        enabled: true,
+      },
+    ]
+    for (const m of merch) {
+      const { error } = await supabase.from('merchandise').upsert(m, { onConflict: 'id' })
+      if (error) warn(`merchandise upsert failed for ${m.name}: ${error.message}`)
+      else ok(`merchandise: ${m.name}`)
+    }
+
+    // ── orders ────────────────────────────────────────────────────────────────
+    // Pre-completed $0 orders for users 1–4 on the Full Test Event.
+    console.log('\n  orders...')
+    const orders = [
+      { id: ORDER_U1, event_id: FULL_EVENT_ID, user_id: authUserIds['user1@test.local'], payment_provider: 'square', status: 'complete', subtotal: 0, amount_refunded: 0, completed_at: new Date().toISOString() },
+      { id: ORDER_U2, event_id: FULL_EVENT_ID, user_id: authUserIds['user2@test.local'], payment_provider: 'square', status: 'complete', subtotal: 0, amount_refunded: 0, completed_at: new Date().toISOString() },
+      { id: ORDER_U3, event_id: FULL_EVENT_ID, user_id: authUserIds['user3@test.local'], payment_provider: 'square', status: 'complete', subtotal: 0, amount_refunded: 0, completed_at: new Date().toISOString() },
+      { id: ORDER_U4, event_id: FULL_EVENT_ID, user_id: authUserIds['user4@test.local'], payment_provider: 'square', status: 'complete', subtotal: 0, amount_refunded: 0, completed_at: new Date().toISOString() },
+    ].filter(o => o.user_id)
+    for (const o of orders) {
+      const { error } = await supabase.from('orders').upsert(o, { onConflict: 'id' })
+      if (error) warn(`orders upsert failed for ${o.id}: ${error.message}`)
+      else ok(`order: ${o.id.slice(0, 8)}... for user ${o.user_id?.slice(0, 8)}...`)
+    }
+
+    // ── order_items ───────────────────────────────────────────────────────────
+    console.log('\n  order_items...')
+    const orderItems = [
+      { order_id: ORDER_U1, item_type: 'ticket', item_id: TICKET_RL,  quantity: 1, unit_price: 0, amount_refunded: 0 },
+      { order_id: ORDER_U2, item_type: 'ticket', item_id: TICKET_RM,  quantity: 1, unit_price: 0, amount_refunded: 0 },
+      { order_id: ORDER_U3, item_type: 'ticket', item_id: TICKET_RM,  quantity: 1, unit_price: 0, amount_refunded: 0 },
+      { order_id: ORDER_U4, item_type: 'ticket', item_id: TICKET_VOL, quantity: 1, unit_price: 0, amount_refunded: 0 },
+    ]
+    for (const oi of orderItems) {
+      const { error } = await supabase.from('order_items').insert(oi)
+      if (error && !error.message.includes('duplicate')) warn(`order_items insert failed: ${error.message}`)
+      else if (!error) ok(`order_item: ${oi.item_type} for order ${oi.order_id.slice(0, 8)}...`)
+    }
+
+    // ── event_attendees ───────────────────────────────────────────────────────
+    console.log('\n  event_attendees...')
+    const attendees = [
+      {
+        event_id: FULL_EVENT_ID,
+        user_id: authUserIds['user1@test.local'],
+        ticket_type_id: TICKET_RL,
+        ticket_status: 'Complete',
+        order_id: ORDER_U1,
+        ticket_purchased_at: new Date().toISOString(),
+        is_room_lead: true,
+        volunteer_hours_required: 0,
+        application_status: 'Approved',
+      },
+      {
+        event_id: FULL_EVENT_ID,
+        user_id: authUserIds['user2@test.local'],
+        ticket_type_id: TICKET_RM,
+        ticket_status: 'Complete',
+        order_id: ORDER_U2,
+        ticket_purchased_at: new Date().toISOString(),
+        is_room_lead: false,
+        volunteer_hours_required: 0,
+        application_status: 'Approved',
+      },
+      {
+        event_id: FULL_EVENT_ID,
+        user_id: authUserIds['user3@test.local'],
+        ticket_type_id: TICKET_RM,
+        ticket_status: 'Complete',
+        order_id: ORDER_U3,
+        ticket_purchased_at: new Date().toISOString(),
+        is_room_lead: false,
+        volunteer_hours_required: 0,
+        application_status: 'Approved',
+      },
+      {
+        event_id: FULL_EVENT_ID,
+        user_id: authUserIds['user4@test.local'],
+        ticket_type_id: TICKET_VOL,
+        ticket_status: 'Complete',
+        order_id: ORDER_U4,
+        ticket_purchased_at: new Date().toISOString(),
+        is_room_lead: false,
+        volunteer_hours_required: 4,
+        application_status: 'Approved',
+      },
+      {
+        event_id: FULL_EVENT_ID,
+        user_id: authUserIds['user5@test.local'],
+        ticket_status: 'Incomplete',
+        is_room_lead: false,
+        volunteer_hours_required: 0,
+        application_status: 'Incomplete',
+      },
+    ].filter(a => a.user_id)
+
+    for (const a of attendees) {
+      const { error } = await supabase
+        .from('event_attendees')
+        .upsert(a, { onConflict: 'event_id,user_id' })
+      if (error) warn(`event_attendees upsert failed for user ${a.user_id?.slice(0, 8)}...: ${error.message}`)
+      else ok(`event_attendee: user ${a.user_id?.slice(0, 8)}... ticket_status=${a.ticket_status}`)
+    }
+
+    // ── application_forms + application_responses ────────────────────────────
+    // Seed a 4-field application form for the Full Test Event, plus responses
+    // for users 1–4 (who are already attendees). user5 has no response (Incomplete).
+    console.log('\n  application_forms...')
+    const APP_FORM_ID = 'ffffffff-aaaa-0000-0000-000000000001'
+    const AF_FIELD_SCENE  = 'ffffffff-aaaa-0000-0000-000000000011'
+    const AF_FIELD_HEARD  = 'ffffffff-aaaa-0000-0000-000000000012'
+    const AF_FIELD_ACTS   = 'ffffffff-aaaa-0000-0000-000000000013'
+    const AF_FIELD_SM     = 'ffffffff-aaaa-0000-0000-000000000014'
+
+    const { error: formError } = await supabase
+      .from('application_forms')
+      .upsert(
+        {
+          id: APP_FORM_ID,
+          event_id: FULL_EVENT_ID,
+          source_form_id: null,
+          title: 'Full Test Event Application',
+          fields: [
+            { id: AF_FIELD_SCENE, type: 'text',     label: 'What is your preferred scene name?',       options: [],                                                               required: true,  order: 1 },
+            { id: AF_FIELD_HEARD, type: 'radio',    label: 'How did you hear about this event?',        options: ['Friend', 'Social Media', 'Prior event'],                        required: true,  order: 2 },
+            { id: AF_FIELD_ACTS,  type: 'checkbox', label: 'Which activities interest you?',            options: ['Kink education', 'Social dancing', 'Play parties', 'Workshops'], required: false, order: 3 },
+            { id: AF_FIELD_SM,    type: 'key_value', label: 'Share a social media handle (optional)',   options: [],                                                               required: false, order: 4 },
+          ],
+        },
+        { onConflict: 'id' }
+      )
+    if (formError) warn(`application_forms upsert failed: ${formError.message}`)
+    else ok('application_form: Full Test Event Application')
+
+    console.log('\n  application_responses...')
+    const appResponses = [
+      {
+        event_id: FULL_EVENT_ID,
+        user_id: authUserIds['user1@test.local'],
+        form_id: APP_FORM_ID,
+        responses: {
+          [AF_FIELD_SCENE]: 'RoomLead1',
+          [AF_FIELD_HEARD]: 'Prior event',
+          [AF_FIELD_ACTS]:  ['Social dancing', 'Play parties'],
+          [AF_FIELD_SM]:    { key: 'FetLife', value: 'roomlead1fl' },
+        },
+        submitted_at: new Date().toISOString(),
+      },
+      {
+        event_id: FULL_EVENT_ID,
+        user_id: authUserIds['user2@test.local'],
+        form_id: APP_FORM_ID,
+        responses: {
+          [AF_FIELD_SCENE]: 'Roommate2',
+          [AF_FIELD_HEARD]: 'Friend',
+          [AF_FIELD_ACTS]:  ['Kink education', 'Workshops'],
+          [AF_FIELD_SM]:    { key: 'Twitter', value: '@roommate2' },
+        },
+        submitted_at: new Date().toISOString(),
+      },
+      {
+        event_id: FULL_EVENT_ID,
+        user_id: authUserIds['user3@test.local'],
+        form_id: APP_FORM_ID,
+        responses: {
+          [AF_FIELD_SCENE]: 'Hidden3',
+          [AF_FIELD_HEARD]: 'Social Media',
+          [AF_FIELD_ACTS]:  ['Play parties'],
+          [AF_FIELD_SM]:    null,
+        },
+        submitted_at: new Date().toISOString(),
+      },
+      {
+        event_id: FULL_EVENT_ID,
+        user_id: authUserIds['user4@test.local'],
+        form_id: APP_FORM_ID,
+        responses: {
+          [AF_FIELD_SCENE]: 'Volunteer4',
+          [AF_FIELD_HEARD]: 'Friend',
+          [AF_FIELD_ACTS]:  ['Kink education', 'Social dancing', 'Workshops'],
+          [AF_FIELD_SM]:    null,
+        },
+        submitted_at: new Date().toISOString(),
+      },
+    ].filter(r => r.user_id)
+
+    for (const r of appResponses) {
+      const { error } = await supabase
+        .from('application_responses')
+        .upsert(r, { onConflict: 'event_id,user_id' })
+      if (error) warn(`application_responses upsert failed for user ${r.user_id?.slice(0, 8)}...: ${error.message}`)
+      else ok(`application_response: user ${r.user_id?.slice(0, 8)}...`)
+    }
+
+    // ── volunteer_shifts ──────────────────────────────────────────────────────
+    // Shift A and B intentionally overlap to test the overlap constraint.
+    console.log('\n  volunteer_shifts...')
+    const shifts = [
+      { id: SHIFT_A, event_id: FULL_EVENT_ID, name: 'Registration Desk',   date_time: '2026-10-01T10:00:00Z', duration_minutes: 60, capacity: 5 },
+      { id: SHIFT_B, event_id: FULL_EVENT_ID, name: 'Welcome Booth',       date_time: '2026-10-01T10:30:00Z', duration_minutes: 60, capacity: 3 }, // overlaps Shift A
+      { id: SHIFT_C, event_id: FULL_EVENT_ID, name: 'Afternoon Activities', date_time: '2026-10-02T14:00:00Z', duration_minutes: 90, capacity: 4 },
+      { id: SHIFT_D, event_id: FULL_EVENT_ID, name: 'Evening Cleanup',      date_time: '2026-10-02T17:00:00Z', duration_minutes: 90, capacity: 4 },
+    ]
+    for (const s of shifts) {
+      const { error } = await supabase.from('volunteer_shifts').upsert(s, { onConflict: 'id' })
+      if (error) warn(`volunteer_shifts upsert failed for ${s.name}: ${error.message}`)
+      else ok(`volunteer_shift: ${s.name} (${s.date_time.slice(0, 16)}, ${s.duration_minutes}min, cap=${s.capacity})`)
+    }
+
+    // ── event_room_config — 2 blocked rooms ──────────────────────────────────
+    // KS-101 → Staff, KS-102 → Playroom
+    console.log('\n  event_room_config (blocks)...')
+    const roomBlocks = [
+      { event_id: FULL_EVENT_ID, room_id: ROOM_KS1, blocked: true, block_note: 'Staff',     reserved: false },
+      { event_id: FULL_EVENT_ID, room_id: ROOM_KS2, blocked: true, block_note: 'Playroom',  reserved: false },
+    ]
+    for (const rb of roomBlocks) {
+      const { error } = await supabase
+        .from('event_room_config')
+        .upsert(rb, { onConflict: 'event_id,room_id' })
+      if (error) warn(`event_room_config upsert failed for room ${rb.room_id}: ${error.message}`)
+      else ok(`event_room_config: room ${rb.room_id.slice(0, 8)}... blocked=${rb.blocked} (${rb.block_note})`)
+    }
+
+    ok('Phase 2 complete.')
 
   } catch (err) {
-    warn('Platform tables not yet available — run platform migrations first.')
+    warn('Unexpected error in Phase 2.')
     console.log('  Detail:', err instanceof Error ? err.message : String(err))
     warn('Skipping Phase 2.')
   }

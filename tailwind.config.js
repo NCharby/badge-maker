@@ -18,6 +18,29 @@ module.exports = {
   	},
   	extend: {
   		colors: {
+  			// SD Platform tokens — use as bg-sd-green, text-sd-muted, border-sd-border, etc.
+  			sd: {
+  				bg:           'var(--sd-bg)',
+  				card:         'var(--sd-card)',
+  				card2:        'var(--sd-card2)',
+  				border:       'var(--sd-border)',
+  				'border-light': 'var(--sd-border-light)',
+  				text:         'var(--sd-text)',
+  				muted:        'var(--sd-muted)',
+  				xs:           'var(--sd-xs)',
+  				green:        'var(--sd-green)',
+  				'green-dark': 'var(--sd-green-dark)',
+  				'green-light':'var(--sd-green-light)',
+  				amber:        'var(--sd-amber)',
+  				'amber-light':'var(--sd-amber-light)',
+  				red:          'var(--sd-red)',
+  				'red-light':  'var(--sd-red-light)',
+  				blue:         'var(--sd-blue)',
+  				'blue-light': 'var(--sd-blue-light)',
+  				purple:       'var(--sd-purple)',
+  				'purple-light':'var(--sd-purple-light)',
+  			},
+  			// shadcn tokens — unchanged; badge-maker uses these
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
