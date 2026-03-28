@@ -1,0 +1,6 @@
+Room Number,Room Name,Max Occupancy,Min Occupancy,Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Room Description,Room Code,Bed Type,Lodging Type,Has Kitchen,Location Zone,Room Group
+101,King Studio,2,1,,$175.00,$175.00,$175.00,$175.00,$200.00,,Ground floor king studio with city view,K101,King,Studio,No,Street Level,Standard
+102,Queen Double,4,2,,$150.00,$150.00,$150.00,$150.00,$175.00,,Two queen beds ideal for groups,,Queen,Suite,No,Street Level,Standard
+201,Hill King Suite,2,1,,$210.00,$210.00,$210.00,$210.00,$250.00,,Spacious king suite on the hill with panoramic views,,King,Suite,Yes,Hill,VIP
+202,Hill Bunk Room,4,3,,$130.00,$130.00,$130.00,$130.00,$160.00,,Bunk-style room great for friend groups,,Bunk,Studio,No,Hill,Standard
+301,Garden Kitchenette,3,2,,$180.00,$180.00,$180.00,$180.00,$220.00,,Garden-facing room with full kitchen access,,Queen,Kitchenette,Yes,Garden,Standard

@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 
 export async function saveDraft(
   eventId: string,
@@ -51,6 +51,7 @@ export async function submitApplication(
   responses: Record<string, unknown>
 ) {
   const supabase = await createClient()
+  const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated' }
 
@@ -61,9 +62,16 @@ export async function submitApplication(
     .eq('user_id', user.id)
     .single()
 
-  if (!attendee) return { error: 'You are not enrolled in this event.' }
-  if (attendee.lock_status === 'Locked') return { error: 'Your attendance is locked.' }
-  if (attendee.application_status === 'Closed') return { error: 'This application is closed.' }
+  if (!attendee) {
+    // First submission — create the attendee record. Submitting an application IS the enrollment action.
+    const { error: enrollError } = await admin
+      .from('event_attendees')
+      .insert({ event_id: eventId, user_id: user.id })
+    if (enrollError) return { error: 'Failed to enroll. Please try again.' }
+  } else {
+    if (attendee.lock_status === 'Locked') return { error: 'Your attendance is locked.' }
+    if (attendee.application_status === 'Closed') return { error: 'This application is closed.' }
+  }
 
   const { error: responseError } = await supabase
     .from('application_responses')

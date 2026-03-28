@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateEventDetails } from './actions'
+import Link from 'next/link'
 
 const DRAFT_STATUS = 'Draft'
 
@@ -36,10 +37,12 @@ interface Props {
     start_date: string
     end_date: string
     location: string
+    venue_id: string
   }
+  venues: { id: string; name: string }[]
 }
 
-export default function EditEventClient({ eventId, currentStatus, initialValues }: Props) {
+export default function EditEventClient({ eventId, currentStatus, initialValues, venues }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
@@ -50,6 +53,7 @@ export default function EditEventClient({ eventId, currentStatus, initialValues 
   const [startDate, setStartDate] = useState(initialValues.start_date)
   const [endDate, setEndDate] = useState(initialValues.end_date)
   const [location, setLocation] = useState(initialValues.location)
+  const [venueId, setVenueId] = useState(initialValues.venue_id)
 
   const isPublished = currentStatus !== DRAFT_STATUS
 
@@ -62,7 +66,7 @@ export default function EditEventClient({ eventId, currentStatus, initialValues 
     if (endDate < startDate) { setError('End date must be on or after start date.'); return }
 
     startTransition(async () => {
-      const result = await updateEventDetails(eventId, { title, description, start_date: startDate, end_date: endDate, location })
+      const result = await updateEventDetails(eventId, { title, description, start_date: startDate, end_date: endDate, location, venue_id: venueId || null })
       if ('error' in result) {
         setError(result.error)
       } else {
@@ -145,6 +149,35 @@ export default function EditEventClient({ eventId, currentStatus, initialValues 
             onChange={e => setLocation(e.target.value)}
             placeholder="Physical address"
           />
+        </div>
+
+        <div>
+          <label style={labelStyle}>Venue</label>
+          {venues.length === 0 ? (
+            <p style={{ fontSize: '12px', color: 'var(--sd-muted)', margin: '4px 0 0' }}>
+              No venues yet.{' '}
+              <Link href="/ep/venues/new" style={{ color: 'var(--sd-purple)', textDecoration: 'none' }}>
+                Create a venue →
+              </Link>
+            </p>
+          ) : (
+            <select
+              style={{ ...inputStyle, cursor: 'pointer' }}
+              value={venueId}
+              onChange={e => setVenueId(e.target.value)}
+            >
+              <option value="">— No venue selected —</option>
+              {venues.map(v => (
+                <option key={v.id} value={v.id}>{v.name}</option>
+              ))}
+            </select>
+          )}
+          <p style={{ fontSize: '11px', color: 'var(--sd-muted)', marginTop: '4px' }}>
+            Used by the Venue module for room management. Selecting a venue automatically enables the Venue module and disables Room Selection.{' '}
+            <Link href="/ep/venues" style={{ color: 'var(--sd-purple)', textDecoration: 'none' }}>
+              Manage venues →
+            </Link>
+          </p>
         </div>
 
         {error && <p style={{ fontSize: '12px', color: 'var(--sd-red)', margin: 0 }}>{error}</p>}

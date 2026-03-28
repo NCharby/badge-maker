@@ -11,6 +11,7 @@ interface TicketType {
   price: number
   available_count: number | null
   room_lead: boolean
+  roommate_codes_enabled: boolean
   volunteer_hours_required: number
   room_required_at_purchase: boolean
 }
@@ -21,6 +22,7 @@ const emptyForm: TicketTypeInput = {
   price: '0',
   available_count: '',
   room_lead: false,
+  roommate_codes_enabled: false,
   volunteer_hours_required: '0',
   room_required_at_purchase: false,
 }
@@ -116,11 +118,27 @@ function TicketForm({ form, setForm, error, isPending, onSave, onCancel }: Ticke
             <input
               type="checkbox"
               checked={form.room_lead}
-              onChange={e => setForm(f => ({ ...f, room_lead: e.target.checked }))}
+              onChange={e => setForm(f => ({
+                ...f,
+                room_lead: e.target.checked,
+                // Clear roommate codes when room_lead is unchecked
+                roommate_codes_enabled: e.target.checked ? f.roommate_codes_enabled : false,
+              }))}
               style={{ accentColor: 'var(--sd-purple)' }}
             />
             Room Lead
           </label>
+          {form.room_lead && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--sd-text)', cursor: 'pointer', paddingLeft: '20px' }}>
+              <input
+                type="checkbox"
+                checked={form.roommate_codes_enabled}
+                onChange={e => setForm(f => ({ ...f, roommate_codes_enabled: e.target.checked }))}
+                style={{ accentColor: 'var(--sd-purple)' }}
+              />
+              Enable Roommate Codes
+            </label>
+          )}
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--sd-text)', cursor: 'pointer' }}>
             <input
               type="checkbox"
@@ -205,6 +223,7 @@ export default function TicketsClient({
       price: String(tt.price),
       available_count: tt.available_count === null ? '' : String(tt.available_count),
       room_lead: tt.room_lead,
+      roommate_codes_enabled: tt.roommate_codes_enabled,
       volunteer_hours_required: String(tt.volunteer_hours_required),
       room_required_at_purchase: tt.room_required_at_purchase,
     })
@@ -328,6 +347,11 @@ export default function TicketsClient({
                         {tt.room_lead && (
                           <span style={{ fontSize: '11px', background: '#ede9fe', color: '#7c3aed', padding: '1px 7px', borderRadius: '99px', fontWeight: 600 }}>
                             Room Lead
+                          </span>
+                        )}
+                        {tt.roommate_codes_enabled && (
+                          <span style={{ fontSize: '11px', background: '#d1fae5', color: '#065f46', padding: '1px 7px', borderRadius: '99px', fontWeight: 600 }}>
+                            Codes On
                           </span>
                         )}
                         {tt.volunteer_hours_required > 0 && (

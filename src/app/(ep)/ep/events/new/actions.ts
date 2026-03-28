@@ -4,9 +4,13 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 
 interface ModuleInput {
+  venue: boolean
   application: boolean
+  waiver: boolean
+  room_selection: boolean
   volunteering: boolean
   schedule: boolean
+  badge: boolean
 }
 
 export async function createEvent(data: {
@@ -58,14 +62,26 @@ export async function createEvent(data: {
   const moduleConfig: Record<string, ModuleCfg> = {
     ticketing: { enabled: true, required: true, opens_at_status: null, closes_at_status: null },
   }
+  if (data.modules.venue) {
+    moduleConfig.venue = { enabled: true, required: false, opens_at_status: null, closes_at_status: null }
+  }
   if (data.modules.application) {
     moduleConfig.application = { enabled: true, required: false, opens_at_status: null, closes_at_status: null }
+  }
+  if (data.modules.waiver) {
+    moduleConfig.waiver = { enabled: true, required: false, opens_at_status: null, closes_at_status: null }
+  }
+  if (data.modules.room_selection) {
+    moduleConfig.room_selection = { enabled: true, required: false, opens_at_status: null, closes_at_status: null }
   }
   if (data.modules.volunteering) {
     moduleConfig.volunteering = { enabled: true, required: false, opens_at_status: null, closes_at_status: null }
   }
   if (data.modules.schedule) {
     moduleConfig.schedule = { enabled: true, required: false, opens_at_status: null, closes_at_status: null }
+  }
+  if (data.modules.badge) {
+    moduleConfig.badge = { enabled: true, required: false, opens_at_status: null, closes_at_status: null }
   }
 
   const { data: event, error } = await supabase

@@ -1,33 +1,59 @@
 'use server'
 
+import { randomBytes } from 'crypto'
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
+
+// 6-char uppercase alphanumeric excluding visually ambiguous chars (0, O, 1, I, L)
+const ROOMMATE_CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+
+function generateRoommateCode(): string {
+  let code = ''
+  while (code.length < 6) {
+    const byte = randomBytes(1)[0]
+    // Rejection sampling to avoid modulo bias
+    if (byte < ROOMMATE_CODE_CHARS.length * Math.floor(256 / ROOMMATE_CODE_CHARS.length)) {
+      code += ROOMMATE_CODE_CHARS[byte % ROOMMATE_CODE_CHARS.length]
+    }
+  }
+  return code
+}
 
 export async function purchaseTicket(
   eventId: string,
   ticketTypeId: string,
-  shiftIds: string[],       // empty if no volunteer hours required
-  merchandiseIds: string[], // empty if no merchandise selected
-): Promise<{ success: true; orderId: string } | { error: string }> {
+  shiftIds: string[],          // empty if no volunteer hours required
+  merchandiseIds: string[],    // empty if no merchandise selected
+  roommateCode?: string,       // optional — non-Room-Lead attendees may supply a Room Lead's code
+): Promise<{ success: true; orderId: string; roommate_code?: string } | { error: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated' }
 
-  // 1. Attendee guard
+  // 1. Fetch or create attendee record
+  const adminSupabase = createAdminClient()
   const { data: attendee } = await supabase
     .from('event_attendees')
     .select('ticket_status, lock_status')
     .eq('event_id', eventId)
     .eq('user_id', user.id)
     .single()
-  if (!attendee) return { error: 'You are not enrolled in this event.' }
-  if (attendee.ticket_status === 'Complete') return { error: 'You already have a ticket for this event.' }
-  if (attendee.lock_status === 'Locked') return { error: 'Your attendance is locked — no further changes can be made.' }
+
+  if (!attendee) {
+    // No attendee record yet — completing a ticket purchase IS the enrollment action.
+    const { error: enrollError } = await adminSupabase
+      .from('event_attendees')
+      .insert({ event_id: eventId, user_id: user.id })
+    if (enrollError) return { error: 'Failed to enroll. Please try again.' }
+  } else {
+    if (attendee.ticket_status === 'Complete') return { error: 'You already have a ticket for this event.' }
+    if (attendee.lock_status === 'Locked') return { error: 'Your attendance is locked — no further changes can be made.' }
+  }
 
   // 2. Ticket type guard — must belong to this event
   const { data: ticketType } = await supabase
     .from('ticket_types')
-    .select('id, name, price, available_count, room_lead, volunteer_hours_required, room_required_at_purchase')
+    .select('id, name, price, available_count, room_lead, roommate_codes_enabled, volunteer_hours_required, room_required_at_purchase')
     .eq('id', ticketTypeId)
     .eq('event_id', eventId)
     .single()
@@ -196,6 +222,82 @@ export async function purchaseTicket(
     })
   }
 
+  // 5.5. Validate roommate code and acquire room soft-lock (if provided)
+  // Admin client used for cross-user data queries — RLS blocks regular users from reading
+  // other users' event_attendees rows, rooms, event_room_config, and bed_blocks.
+  const admin = createAdminClient()
+  let confirmedRoomId: string | null = null
+  if (roommateCode && !ticketType.room_lead) {
+    const code = roommateCode.toUpperCase().trim()
+
+    // Look up Room Lead attendee by code
+    const { data: leadAttendee } = await admin
+      .from('event_attendees')
+      .select('user_id, room_id, is_room_lead')
+      .eq('event_id', eventId)
+      .eq('roommate_code', code)
+      .eq('is_room_lead', true)
+      .single()
+
+    if (!leadAttendee?.room_id) {
+      await supabase.from('locks').delete().eq('locked_by', user.id)
+      return { error: 'This code is no longer valid. Please try again or skip.' }
+    }
+
+    const roomId = leadAttendee.room_id
+
+    // Check room is not blocked/reserved
+    const { data: roomConfig } = await admin
+      .from('event_room_config')
+      .select('blocked, reserved')
+      .eq('event_id', eventId)
+      .eq('room_id', roomId)
+      .maybeSingle()
+
+    if (roomConfig?.blocked || roomConfig?.reserved) {
+      await supabase.from('locks').delete().eq('locked_by', user.id)
+      return { error: 'This code is no longer valid. Please try again or skip.' }
+    }
+
+    // Acquire room soft-lock
+    await supabase.from('locks').delete()
+      .eq('resource_type', 'room').eq('resource_id', roomId).lt('expires_at', now)
+
+    const { count: roomLocks } = await admin.from('locks')
+      .select('*', { count: 'exact', head: true })
+      .eq('resource_type', 'room').eq('resource_id', roomId).gte('expires_at', now)
+
+    const { data: room } = await admin.from('rooms')
+      .select('bed_spot_count').eq('id', roomId).single()
+
+    const { count: bedBlocks } = await admin.from('bed_blocks')
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId).eq('room_id', roomId)
+
+    const { count: occupants } = await admin.from('event_attendees')
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId).eq('room_id', roomId)
+      .in('room_status', ['Selected', 'Locked In', 'Verified'])
+
+    const available =
+      (room?.bed_spot_count ?? 0) - (bedBlocks ?? 0) - (occupants ?? 0) - (roomLocks ?? 0)
+
+    if (available <= 0) {
+      await supabase.from('locks').delete().eq('locked_by', user.id)
+      return { error: 'Room is no longer available. Please try a different code or proceed without one.' }
+    }
+
+    const { error: roomLockErr } = await supabase.from('locks').insert({
+      resource_type: 'room', resource_id: roomId, locked_by: user.id, expires_at: expiresAt,
+    })
+    if (roomLockErr) {
+      await supabase.from('locks').delete().eq('locked_by', user.id)
+      return { error: 'Failed to reserve room spot. Please try again.' }
+    }
+
+    confirmedRoomId = roomId
+  }
+
   // 6. Calculate subtotal
   const ticketPrice = Number(ticketType.price)
   const subtotal = ticketPrice + merchandiseItems.reduce((sum, m) => sum + Number(m.price), 0)
@@ -243,6 +345,39 @@ export async function purchaseTicket(
     volunteer_hours_required: ticketType.volunteer_hours_required,
   }).eq('event_id', eventId).eq('user_id', user.id)
 
+  // 10.5. Assign room via Roommate Code (if provided and validated)
+  if (confirmedRoomId) {
+    await supabase.from('event_attendees').update({
+      room_id: confirmedRoomId,
+      room_status: 'Selected',
+    }).eq('event_id', eventId).eq('user_id', user.id)
+  }
+
+  // 10.6. Generate and assign Roommate Code for Room Lead purchasers
+  let generatedRoommateCode: string | undefined
+  if (ticketType.room_lead && ticketType.roommate_codes_enabled) {
+    let code: string | null = null
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = generateRoommateCode()
+      // Check uniqueness — partial unique index on non-null roommate_code values
+      const { data: existing } = await admin
+        .from('event_attendees')
+        .select('id')
+        .eq('roommate_code', candidate)
+        .maybeSingle()
+      if (!existing) {
+        code = candidate
+        break
+      }
+    }
+    if (code) {
+      await supabase.from('event_attendees').update({ roommate_code: code })
+        .eq('event_id', eventId).eq('user_id', user.id)
+      generatedRoommateCode = code
+    }
+    // If all 5 attempts collide (astronomically unlikely), skip silently — code can be assigned manually
+  }
+
   // 11. Insert volunteer signups (confirmed)
   if (effectiveShiftIds.length > 0) {
     await supabase.from('user_volunteer_signups').insert(
@@ -258,10 +393,14 @@ export async function purchaseTicket(
   // 12. Release all soft locks held by this user
   await supabase.from('locks').delete().eq('locked_by', user.id)
 
-  // 13. Notification stub — row #15 (ticket purchased → user email)
-  console.log(`[notification] ticket purchased: user=${user.id} event=${eventId} order=${orderId}`)
+  // 13. Notification stubs
+  // Row 15: ticket purchased → user email
+  console.log(`[notification-15] ticket purchased: user=${user.id} event=${eventId} order=${orderId}${generatedRoommateCode ? ` roommateCode=${generatedRoommateCode}` : ''}`)
+  // Row 32: roommate code used — notify Room Lead when a roommate is placed via code
+  if (confirmedRoomId) {
+    console.log(`[notification-32] roommate placed via code: roomLeadRoom=${confirmedRoomId} newRoommate=${user.id} event=${eventId}`)
+  }
 
   revalidatePath(`/events/${eventId}`)
-  revalidatePath(`/events/${eventId}/ticket`)
-  return { success: true, orderId }
+  return { success: true, orderId, ...(generatedRoommateCode ? { roommate_code: generatedRoommateCode } : {}) }
 }

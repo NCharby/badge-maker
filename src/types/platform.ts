@@ -93,6 +93,7 @@ export interface PlatformEvent {
     application?: ModuleConfig
     ticketing?: ModuleConfig
     waiver?: ModuleConfig
+    venue?: ModuleConfig
     room_selection?: ModuleConfig
     volunteering?: ModuleConfig
     schedule?: ModuleConfig

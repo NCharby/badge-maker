@@ -34,6 +34,11 @@ export async function updateModuleConfig(
     return { error: 'Ticketing module cannot be disabled.' }
   }
 
+  // venue and room_selection are mutually exclusive
+  if (moduleConfig.venue?.enabled && moduleConfig.room_selection?.enabled) {
+    return { error: 'Venue and Room Selection cannot both be enabled. They represent the same room workflow — enable one or the other.' }
+  }
+
   // Validate opens_at_status and closes_at_status values against known statuses
   const customStatuses = (event.workflow_statuses ?? []) as WorkflowStatus[]
   const validStatusValues = new Set([

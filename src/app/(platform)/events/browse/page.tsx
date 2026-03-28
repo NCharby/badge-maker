@@ -6,15 +6,6 @@ import Link from 'next/link'
 // We use the admin client here since this is a trusted Server Component
 // and we apply our own auth check (middleware guarantees authentication).
 
-const MODULE_LABELS: Record<string, string> = {
-  application: 'Application',
-  ticketing: 'Ticketing',
-  waiver: 'Waiver',
-  room_selection: 'Rooms',
-  volunteering: 'Volunteering',
-  schedule: 'Schedule',
-  badge: 'Badge maker',
-}
 
 function getBannerColor(status: string): string {
   const s = status.toLowerCase()
@@ -57,7 +48,7 @@ export default async function BrowseEventsPage() {
   // Fetch published+ events
   const { data: events } = await adminSupabase
     .from('platform_events')
-    .select('id, title, description, start_date, end_date, location, status, module_config')
+    .select('id, title, description, start_date, end_date, location, status')
     .not('status', 'in', '("Draft","Archived")')
     .order('start_date', { ascending: true })
 
@@ -132,14 +123,10 @@ export default async function BrowseEventsPage() {
             end_date: string
             location: string | null
             status: string
-            module_config: Record<string, { enabled?: boolean } | undefined> | null
           }) => {
             const isEnrolled = enrolledEventIds.has(event.id)
             const statusBadge = getStatusBadge(event.status)
             const bannerColor = getBannerColor(event.status)
-            const enabledModules = Object.entries(event.module_config || {})
-              .filter(([, cfg]) => cfg?.enabled)
-              .map(([key]) => MODULE_LABELS[key] || key)
 
             return (
               <div
@@ -236,34 +223,7 @@ export default async function BrowseEventsPage() {
                     </p>
                   )}
 
-                  {/* Module pills */}
-                  {enabledModules.length > 0 && (
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: '5px',
-                        flexWrap: 'wrap',
-                        paddingTop: '10px',
-                        borderTop: '1px solid var(--sd-border-light)',
-                      }}
-                    >
-                      {enabledModules.map(label => (
-                        <span
-                          key={label}
-                          style={{
-                            fontSize: '11px',
-                            background: 'var(--sd-card2)',
-                            border: '1px solid var(--sd-border-light)',
-                            borderRadius: '99px',
-                            padding: '2px 8px',
-                            color: 'var(--sd-muted)',
-                          }}
-                        >
-                          {label}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+
                 </div>
 
                 {/* Card footer */}
@@ -277,42 +237,21 @@ export default async function BrowseEventsPage() {
                     background: 'var(--sd-card2)',
                   }}
                 >
-                  {isEnrolled ? (
-                    <Link
-                      href={`/events/${event.id}`}
-                      style={{
-                        fontSize: '11px',
-                        background: 'var(--sd-green-light)',
-                        color: 'var(--sd-green-dark)',
-                        padding: '4px 10px',
-                        borderRadius: '99px',
-                        fontWeight: 600,
-                        textDecoration: 'none',
-                      }}
-                    >
-                      View my event →
-                    </Link>
-                  ) : event.status.toLowerCase().includes('application') || event.status === 'Published' ? (
-                    <Link
-                      href={`/events/${event.id}/application`}
-                      style={{
-                        background: 'var(--sd-green)',
-                        color: '#fff',
-                        border: 'none',
-                        padding: '6px 14px',
-                        borderRadius: '7px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        textDecoration: 'none',
-                      }}
-                    >
-                      Apply now
-                    </Link>
-                  ) : (
-                    <span style={{ fontSize: '11px', color: 'var(--sd-xs)' }}>
-                      Applications not yet open
-                    </span>
-                  )}
+                  <Link
+                    href={`/events/${event.id}`}
+                    style={{
+                      fontSize: '11px',
+                      background: isEnrolled ? 'var(--sd-green-light)' : 'var(--sd-card)',
+                      color: isEnrolled ? 'var(--sd-green-dark)' : 'var(--sd-text)',
+                      border: isEnrolled ? 'none' : '1px solid var(--sd-border)',
+                      padding: '4px 10px',
+                      borderRadius: '99px',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    {isEnrolled ? 'View my event →' : 'View event →'}
+                  </Link>
                 </div>
               </div>
             )

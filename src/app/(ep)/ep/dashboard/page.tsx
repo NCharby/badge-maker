@@ -50,6 +50,14 @@ export default async function EpDashboardPage() {
         .order('start_date', { ascending: true })
     : { data: [] }
 
+  const { data: venues } = user
+    ? await supabase
+        .from('venues')
+        .select('id, name, physical_address, status')
+        .eq('owner_id', user.id)
+        .order('name', { ascending: true })
+    : { data: [] }
+
   const eventList = events ?? []
   const draftEvents = eventList.filter((e: { status: string }) => e.status === 'Draft')
   const activeEvents = eventList.filter((e: { status: string }) => e.status !== 'Draft' && e.status !== 'Archived')
@@ -118,6 +126,9 @@ export default async function EpDashboardPage() {
     )
   }
 
+  const activeVenues = (venues ?? []).filter((v: { status: string }) => v.status === 'active')
+  const archivedVenues = (venues ?? []).filter((v: { status: string }) => v.status === 'archived')
+
   return (
     <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2rem 1.5rem' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '2rem' }}>
@@ -129,20 +140,37 @@ export default async function EpDashboardPage() {
             Welcome back, {displayName}.
           </p>
         </div>
-        <Link
-          href="/ep/events/new"
-          style={{
-            padding: '8px 18px',
-            background: 'var(--sd-purple)',
-            color: '#fff',
-            borderRadius: '7px',
-            fontSize: '13px',
-            fontWeight: 600,
-            textDecoration: 'none',
-          }}
-        >
-          + New Event
-        </Link>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Link
+            href="/ep/venues/new"
+            style={{
+              padding: '8px 14px',
+              background: 'none',
+              border: '1px solid var(--sd-border)',
+              color: 'var(--sd-muted)',
+              borderRadius: '7px',
+              fontSize: '13px',
+              fontWeight: 600,
+              textDecoration: 'none',
+            }}
+          >
+            + New Venue
+          </Link>
+          <Link
+            href="/ep/events/new"
+            style={{
+              padding: '8px 18px',
+              background: 'var(--sd-purple)',
+              color: '#fff',
+              borderRadius: '7px',
+              fontSize: '13px',
+              fontWeight: 600,
+              textDecoration: 'none',
+            }}
+          >
+            + New Event
+          </Link>
+        </div>
       </div>
 
       {eventList.length === 0 ? (
@@ -217,6 +245,65 @@ export default async function EpDashboardPage() {
           )}
         </div>
       )}
+      {/* Venues section */}
+      <div style={{ marginTop: '2.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--sd-muted)' }}>
+            Venues · {activeVenues.length} active
+          </div>
+          <Link href="/ep/venues" style={{ fontSize: '12px', color: 'var(--sd-purple)', textDecoration: 'none' }}>
+            Manage venues →
+          </Link>
+        </div>
+
+        {activeVenues.length === 0 && archivedVenues.length === 0 ? (
+          <div style={{
+            background: 'var(--sd-card)',
+            border: '1px solid var(--sd-border)',
+            borderRadius: 'var(--sd-radius)',
+            padding: '20px 24px',
+            fontSize: '13px',
+            color: 'var(--sd-muted)',
+          }}>
+            No venues yet.{' '}
+            <Link href="/ep/venues/new" style={{ color: 'var(--sd-purple)', textDecoration: 'none' }}>
+              Create a venue →
+            </Link>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {activeVenues.map((venue: { id: string; name: string; physical_address: string; status: string }) => (
+              <Link
+                key={venue.id}
+                href={`/ep/venues/${venue.id}`}
+                style={{
+                  background: 'var(--sd-card)',
+                  border: '1px solid var(--sd-border)',
+                  borderRadius: 'var(--sd-radius)',
+                  padding: '14px 20px',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--sd-text)' }}>{venue.name}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px' }}>{venue.physical_address}</div>
+                </div>
+                <span style={{ fontSize: '12px', color: 'var(--sd-purple)', flexShrink: 0 }}>Manage →</span>
+              </Link>
+            ))}
+            {archivedVenues.length > 0 && (
+              <div style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '4px' }}>
+                + {archivedVenues.length} archived venue{archivedVenues.length !== 1 ? 's' : ''}.{' '}
+                <Link href="/ep/venues" style={{ color: 'var(--sd-purple)', textDecoration: 'none' }}>View all →</Link>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

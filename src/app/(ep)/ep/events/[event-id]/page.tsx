@@ -30,12 +30,14 @@ export default async function EpEventPage({
   }
 
   // Maps module_config keys to the card label they control.
+  // venue and room_selection are mutually exclusive — only one will ever be enabled.
   // Attendees is always shown and is not module-gated.
   const MODULE_LABELS: Record<string, string> = {
     ticketing:      'Tickets',
+    venue:          'Venue',
     application:    'Application Form',
     volunteering:   'Volunteer',
-    room_selection: 'Rooms',
+    room_selection: 'Basic Event Rooms',
     schedule:       'Schedule',
     waiver:         'Waiver',
     badge:          'Badge',
@@ -67,10 +69,11 @@ export default async function EpEventPage({
           { label: 'Workflow', href: `/ep/events/${eventId}/workflow`, icon: '→', desc: 'Manage custom status phases' },
           { label: 'Modules', href: `/ep/events/${eventId}/modules`, icon: '🧩', desc: 'Configure which modules are active and when they open' },
           { label: 'Attendees', href: `/ep/events/${eventId}/attendees`, icon: '👥', desc: 'Review applications & manage attendees' },
+          { label: 'Venue', href: `/ep/events/${eventId}/venue`, icon: '🏛️', desc: 'Manage venue, room matrix, and room assignments' },
           { label: 'Application Form', href: `/ep/events/${eventId}/application/builder`, icon: '📋', desc: 'Build & edit the application form' },
           { label: 'Tickets', href: `/ep/events/${eventId}/tickets`, icon: '🎟️', desc: 'Configure ticket types & pricing' },
           { label: 'Waiver', href: `/ep/events/${eventId}/waiver`, icon: '✍️', desc: 'Waiver configuration and status' },
-          { label: 'Rooms', href: `/ep/events/${eventId}/rooms`, icon: '🏨', desc: 'Manage room assignments' },
+          { label: 'Basic Event Rooms', href: `/ep/events/${eventId}/rooms`, icon: '🏨', desc: 'Manage the event room matrix' },
           { label: 'Volunteer', href: `/ep/events/${eventId}/volunteer`, icon: '🙋', desc: 'Manage volunteer shifts' },
           { label: 'Schedule', href: `/ep/events/${eventId}/schedule`, icon: '📅', desc: 'Event schedule' },
           { label: 'Badge', href: `/ep/events/${eventId}/badge`, icon: '🎫', desc: 'Badge Maker module' },

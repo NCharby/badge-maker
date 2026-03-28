@@ -1,6 +1,8 @@
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import ApplicationForm from './ApplicationForm'
+import type { WorkflowStatus } from '@/types/platform'
+import { getModuleOpenState, getOpensAtName } from '@/lib/modules'
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   'Incomplete':    { bg: '#F3F4F6', color: '#6B7280' },
@@ -27,7 +29,7 @@ export default async function ApplicationPage({
   // Fetch event (admin client — users have no RLS on platform_events)
   const { data: event } = await adminSupabase
     .from('platform_events')
-    .select('id, title, module_config')
+    .select('id, title, module_config, status, workflow_statuses')
     .eq('id', eventId)
     .single()
 
@@ -48,33 +50,47 @@ export default async function ApplicationPage({
     )
   }
 
-  // Fetch or auto-create attendee record — applying IS the enrollment step
-  const { data: fetchedAttendee } = await supabase
+  // Check if the application module is currently open per event status
+  const workflowStatuses = (event.workflow_statuses ?? []) as WorkflowStatus[]
+  const moduleState = getModuleOpenState(appModuleConfig, event.status, workflowStatuses)
+  if (moduleState === 'not_yet_open') {
+    const opensAt = getOpensAtName(appModuleConfig, workflowStatuses)
+    return (
+      <div style={{ maxWidth: '680px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+        <Link
+          href={`/events/${eventId}`}
+          style={{ fontSize: '13px', color: 'var(--sd-green)', textDecoration: 'none', display: 'block', marginBottom: '1.5rem' }}
+        >
+          ← Back to event
+        </Link>
+        <div style={{
+          background: 'var(--sd-card)',
+          border: '1px solid var(--sd-border)',
+          borderRadius: 'var(--sd-radius)',
+          padding: '32px',
+          textAlign: 'center',
+        }}>
+          <p style={{ color: 'var(--sd-muted)', marginBottom: opensAt ? '8px' : '0' }}>
+            Applications are not open yet.
+          </p>
+          {opensAt && (
+            <p style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>
+              Opens at: <strong>{opensAt}</strong>
+            </p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Fetch existing attendee record if any — first-time applicants will not have one yet.
+  // Submission (submitApplication) is the enrollment action that creates the record.
+  const { data: attendee } = await supabase
     .from('event_attendees')
     .select('application_status, lock_status')
     .eq('event_id', eventId)
     .eq('user_id', user.id)
     .single()
-
-  let attendee = fetchedAttendee
-  if (!attendee) {
-    const { data: newAttendee } = await adminSupabase
-      .from('event_attendees')
-      .insert({ event_id: eventId, user_id: user.id })
-      .select('application_status, lock_status')
-      .single()
-    if (!newAttendee) {
-      return (
-        <div style={{ maxWidth: '680px', margin: '3rem auto', padding: '0 1.5rem' }}>
-          <p style={{ color: 'var(--sd-muted)' }}>Unable to start application. Please try again.</p>
-          <Link href={`/events/${eventId}`} style={{ fontSize: '13px', color: 'var(--sd-green)', textDecoration: 'none' }}>
-            ← Back to event
-          </Link>
-        </div>
-      )
-    }
-    attendee = newAttendee
-  }
 
   // Fetch application form
   const { data: form } = await supabase
@@ -111,12 +127,13 @@ export default async function ApplicationPage({
     .eq('user_id', user.id)
     .single()
 
-  const applicationStatus = attendee.application_status
-  const isLocked = attendee.lock_status === 'Locked'
+  const applicationStatus = attendee?.application_status ?? 'Incomplete'
+  const isLocked = attendee?.lock_status === 'Locked'
   const badge = STATUS_COLORS[applicationStatus] ?? STATUS_COLORS['Incomplete']
 
   const readOnly =
     isLocked ||
+    moduleState === 'closed' ||
     applicationStatus === 'Closed' ||
     applicationStatus === 'Approved' ||
     applicationStatus === 'Declined'

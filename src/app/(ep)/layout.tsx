@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import EpNav from '@/components/nav/EpNav'
+import AppNav from '@/components/nav/AppNav'
 
 export default async function EpLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -24,7 +24,7 @@ export default async function EpLayout({ children }: { children: React.ReactNode
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--sd-bg)' }}>
-      <EpNav user={platformUser} />
+      <AppNav user={platformUser} />
       <main>{children}</main>
     </div>
   )

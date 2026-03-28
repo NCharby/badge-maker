@@ -73,7 +73,7 @@ export default async function EpAttendeesPage({
     application_status: string
     ticket_status: string
     lock_status: string
-    platform_users: { id: string; email: string; preferred_scene_name: string | null }[]
+    platform_users: { id: string; email: string; preferred_scene_name: string | null }
   }[]
 
   const filtered = activeTab === 'All'
@@ -161,7 +161,7 @@ export default async function EpAttendeesPage({
             </thead>
             <tbody>
               {filtered.map((row, i) => {
-                const pu = row.platform_users?.[0]
+                const pu = row.platform_users
                 const displayName = pu ? getDisplayName(pu) : row.user_id.slice(0, 8)
                 const appBadge = STATUS_COLORS[row.application_status] ?? STATUS_COLORS['Incomplete']
                 const tktBadge = TICKET_COLORS[row.ticket_status] ?? TICKET_COLORS['Incomplete']

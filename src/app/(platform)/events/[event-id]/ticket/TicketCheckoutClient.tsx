@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { purchaseTicket } from './actions'
+import { validateRoommateCode } from './validateRoommateCode'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,7 @@ interface TicketType {
   price: number
   available_count: number | null
   room_lead: boolean
+  roommate_codes_enabled: boolean
   volunteer_hours_required: number
   room_required_at_purchase: boolean
 }
@@ -34,11 +36,21 @@ interface VolunteerShift {
   capacity: number
 }
 
+interface RoomInfo {
+  roomId: string
+  roomName: string
+  roomNumber: string
+  roomLeadName: string
+  lodgingType: string | null
+  nightlyTotal: number | null
+}
+
 interface Props {
   eventId: string
   ticketTypes: TicketType[]
   merchandise: MerchandiseItem[]
   volunteerShifts: VolunteerShift[]
+  hasRoommateCodeFeature: boolean  // true if any Room Lead ticket type has roommate_codes_enabled
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -63,8 +75,6 @@ function formatDuration(minutes: number): string {
   return `${h}h ${m}m`
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function shiftsOverlapCheck(ids: string[], shifts: VolunteerShift[]): boolean {
   const selected = ids.map(id => shifts.find(s => s.id === id)).filter(Boolean) as VolunteerShift[]
   for (let i = 0; i < selected.length; i++) {
@@ -81,9 +91,15 @@ function shiftsOverlapCheck(ids: string[], shifts: VolunteerShift[]): boolean {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-type Step = 'ticket' | 'shifts' | 'merch' | 'review' | 'success'
+type Step = 'ticket' | 'roommate_code' | 'shifts' | 'merch' | 'review' | 'success'
 
-export default function TicketCheckoutClient({ eventId, ticketTypes, merchandise, volunteerShifts }: Props) {
+export default function TicketCheckoutClient({
+  eventId,
+  ticketTypes,
+  merchandise,
+  volunteerShifts,
+  hasRoommateCodeFeature,
+}: Props) {
   const [step, setStep] = useState<Step>('ticket')
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
   const [selectedShiftIds, setSelectedShiftIds] = useState<string[]>([])
@@ -91,6 +107,16 @@ export default function TicketCheckoutClient({ eventId, ticketTypes, merchandise
   const [orderId, setOrderId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
+
+  // Roommate Code step state
+  const [codeInput, setCodeInput] = useState('')
+  const [codeError, setCodeError] = useState('')
+  const [confirmedRoomCode, setConfirmedRoomCode] = useState<string | null>(null)
+  const [confirmedRoomInfo, setConfirmedRoomInfo] = useState<RoomInfo | null>(null)
+  const [isVerifyPending, startVerifyTransition] = useTransition()
+
+  // Code returned to Room Lead after purchase (for success screen)
+  const [purchasedRoommateCode, setPurchasedRoommateCode] = useState<string | undefined>()
 
   const selectedTicket = ticketTypes.find(t => t.id === selectedTicketId)
 
@@ -100,9 +126,13 @@ export default function TicketCheckoutClient({ eventId, ticketTypes, merchandise
     return selectedTicketId !== null && m.ticket_type_restriction.includes(selectedTicketId)
   })
 
-  // Compute which steps are active given the selected ticket
+  // Show roommate code step when: feature is enabled AND selected ticket is NOT a Room Lead ticket
+  const showRoommateCodeStep =
+    hasRoommateCodeFeature && selectedTicket !== undefined && !selectedTicket.room_lead
+
   function getStepOrder(): Step[] {
     const steps: Step[] = ['ticket']
+    if (showRoommateCodeStep) steps.push('roommate_code')
     if (selectedTicket && selectedTicket.volunteer_hours_required > 0) steps.push('shifts')
     if (eligibleMerch.length > 0) steps.push('merch')
     steps.push('review')
@@ -140,21 +170,69 @@ export default function TicketCheckoutClient({ eventId, ticketTypes, merchandise
     setSelectedMerchIds(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id])
   }
 
+  function handleVerifyCode() {
+    if (!codeInput.trim()) return
+    setCodeError('')
+    setConfirmedRoomInfo(null)
+    startVerifyTransition(async () => {
+      const result = await validateRoommateCode(eventId, codeInput.trim())
+      if (!result.valid) {
+        if (result.reason === 'room_not_selected') {
+          setCodeError('Your Room Lead has not selected a room yet. Skip this step and try again later, or contact your Room Lead directly.')
+        } else if (result.reason === 'room_full') {
+          setCodeError('This room is currently full.')
+        } else {
+          setCodeError('This code is not valid.')
+        }
+      } else {
+        setConfirmedRoomInfo({
+          roomId: result.roomId,
+          roomName: result.roomName,
+          roomNumber: result.roomNumber,
+          roomLeadName: result.roomLeadName,
+          lodgingType: result.lodgingType,
+          nightlyTotal: result.nightlyTotal,
+        })
+      }
+    })
+  }
+
+  function handleConfirmRoom() {
+    if (!confirmedRoomInfo) return
+    setConfirmedRoomCode(codeInput.trim().toUpperCase())
+    nextStep()
+  }
+
+  function handleSkipCode() {
+    setCodeInput('')
+    setCodeError('')
+    setConfirmedRoomInfo(null)
+    setConfirmedRoomCode(null)
+    nextStep()
+  }
+
   function handleConfirm() {
     if (!selectedTicketId) return
     setError('')
     startTransition(async () => {
-      const result = await purchaseTicket(eventId, selectedTicketId, selectedShiftIds, selectedMerchIds)
+      const result = await purchaseTicket(
+        eventId,
+        selectedTicketId,
+        selectedShiftIds,
+        selectedMerchIds,
+        confirmedRoomCode ?? undefined,
+      )
       if ('error' in result) {
         setError(result.error)
       } else {
         setOrderId(result.orderId)
+        setPurchasedRoommateCode(result.roommate_code)
         setStep('success')
       }
     })
   }
 
-  // ── Total ────────────────────────────────────────────────────────────────────
+  // ── Total ─────────────────────────────────────────────────────────────────────
   const selectedMerchItems = selectedMerchIds.map(id => eligibleMerch.find(m => m.id === id)).filter(Boolean) as MerchandiseItem[]
   const total = (selectedTicket ? Number(selectedTicket.price) : 0) + selectedMerchItems.reduce((s, m) => s + Number(m.price), 0)
 
@@ -183,6 +261,22 @@ export default function TicketCheckoutClient({ eventId, ticketTypes, merchandise
             Order #{orderId.slice(0, 8)}
           </p>
         )}
+
+        {/* Roommate Code display for Room Leads */}
+        {purchasedRoommateCode && (
+          <div style={{ marginTop: '24px', padding: '16px 20px', background: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: '8px', textAlign: 'left' }}>
+            <p style={{ fontSize: '12px', fontWeight: 700, color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+              Your Roommate Code
+            </p>
+            <p style={{ fontSize: '28px', fontWeight: 800, letterSpacing: '0.15em', color: '#065f46', fontFamily: 'monospace', marginBottom: '6px' }}>
+              {purchasedRoommateCode}
+            </p>
+            <p style={{ fontSize: '12px', color: '#047857' }}>
+              Share this code with people you want in your room. They can enter it during checkout to reserve a spot.
+            </p>
+          </div>
+        )}
+
         <a
           href={`/events/${eventId}`}
           style={{ display: 'inline-block', marginTop: '20px', padding: '9px 20px', background: 'var(--sd-green)', color: '#fff', borderRadius: '7px', fontSize: '13px', fontWeight: 600, textDecoration: 'none' }}
@@ -214,7 +308,7 @@ export default function TicketCheckoutClient({ eventId, ticketTypes, merchandise
     </div>
   )
 
-  // ── Step 1: Ticket selection ─────────────────────────────────────────────────
+  // ── Step 1: Ticket selection ──────────────────────────────────────────────────
   if (step === 'ticket') {
     return card(
       <>
@@ -225,9 +319,13 @@ export default function TicketCheckoutClient({ eventId, ticketTypes, merchandise
             return (
               <button key={tt.id} onClick={() => {
                 setSelectedTicketId(tt.id)
-                // Reset downstream selections when ticket type changes
+                // Reset all downstream state when ticket type changes
                 setSelectedShiftIds([])
                 setSelectedMerchIds([])
+                setCodeInput('')
+                setCodeError('')
+                setConfirmedRoomInfo(null)
+                setConfirmedRoomCode(null)
               }}
                 style={{
                   textAlign: 'left', padding: '14px 16px', borderRadius: '8px', cursor: 'pointer',
@@ -260,7 +358,99 @@ export default function TicketCheckoutClient({ eventId, ticketTypes, merchandise
     )
   }
 
-  // ── Step 2: Volunteer shifts ─────────────────────────────────────────────────
+  // ── Step 1.5: Roommate Code ───────────────────────────────────────────────────
+  if (step === 'roommate_code') {
+    return card(
+      <>
+        <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '4px' }}>Roommate Code</h2>
+        <p style={{ fontSize: '13px', color: 'var(--sd-muted)', marginBottom: '20px' }}>
+          Have a Roommate Code? Enter it below to reserve a spot in your Room Lead&apos;s room. You can skip this step.
+        </p>
+
+        {/* Confirmed room card */}
+        {confirmedRoomInfo ? (
+          <div style={{ padding: '16px', background: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: '8px', marginBottom: '16px' }}>
+            <p style={{ fontSize: '12px', fontWeight: 700, color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+              Room Confirmed
+            </p>
+            <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '2px' }}>
+              {confirmedRoomInfo.roomName}
+              {confirmedRoomInfo.roomNumber && ` · Room ${confirmedRoomInfo.roomNumber}`}
+            </p>
+            {confirmedRoomInfo.lodgingType && (
+              <p style={{ fontSize: '12px', color: 'var(--sd-muted)', marginBottom: '2px' }}>{confirmedRoomInfo.lodgingType}</p>
+            )}
+            <p style={{ fontSize: '12px', color: 'var(--sd-muted)', marginBottom: confirmedRoomInfo.nightlyTotal ? '6px' : '0' }}>
+              Room Lead: {confirmedRoomInfo.roomLeadName}
+            </p>
+            {confirmedRoomInfo.nightlyTotal !== null && (
+              <p style={{ fontSize: '12px', color: 'var(--sd-muted)', marginBottom: '0' }}>
+                Est. total room cost: {formatPrice(confirmedRoomInfo.nightlyTotal)} (paid directly to hotel)
+              </p>
+            )}
+            <button
+              onClick={() => { setConfirmedRoomInfo(null); setCodeInput(''); setCodeError('') }}
+              style={{ marginTop: '10px', fontSize: '12px', color: '#047857', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+            >
+              Use a different code / skip
+            </button>
+          </div>
+        ) : (
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+              <input
+                value={codeInput}
+                onChange={e => { setCodeInput(e.target.value.toUpperCase()); setCodeError('') }}
+                placeholder="e.g. X3K9R7"
+                maxLength={6}
+                style={{
+                  flex: 1, padding: '9px 12px', borderRadius: '7px', border: `1px solid ${codeError ? 'var(--sd-red)' : 'var(--sd-border)'}`,
+                  fontSize: '15px', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--sd-text)',
+                }}
+              />
+              <button
+                onClick={handleVerifyCode}
+                disabled={!codeInput.trim() || isVerifyPending}
+                style={{
+                  padding: '9px 16px', borderRadius: '7px', border: 'none',
+                  background: !codeInput.trim() || isVerifyPending ? '#E5E7EB' : 'var(--sd-purple)',
+                  color: !codeInput.trim() || isVerifyPending ? 'var(--sd-muted)' : '#fff',
+                  fontSize: '13px', fontWeight: 600, cursor: !codeInput.trim() || isVerifyPending ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {isVerifyPending ? 'Checking…' : 'Verify Code'}
+              </button>
+            </div>
+            {codeError && (
+              <p style={{ fontSize: '12px', color: 'var(--sd-red)', margin: 0 }}>{codeError}</p>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+          <button onClick={prevStep} disabled={isPending}
+            style={{ padding: '8px 16px', borderRadius: '7px', border: '1px solid var(--sd-border)', background: 'none', color: 'var(--sd-muted)', fontSize: '13px', cursor: 'pointer' }}>
+            ← Back
+          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={handleSkipCode} disabled={isPending}
+              style={{ padding: '9px 16px', borderRadius: '7px', border: '1px solid var(--sd-border)', background: 'none', color: 'var(--sd-muted)', fontSize: '13px', cursor: 'pointer' }}>
+              Skip
+            </button>
+            {confirmedRoomInfo && (
+              <button onClick={handleConfirmRoom} disabled={isPending}
+                style={{ padding: '9px 20px', borderRadius: '7px', border: 'none', background: 'var(--sd-green)', color: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                Confirm this room →
+              </button>
+            )}
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  // ── Step 2: Volunteer shifts ──────────────────────────────────────────────────
   if (step === 'shifts' && selectedTicket) {
     const reqHours = selectedTicket.volunteer_hours_required
     const selectedHrsDisplay = (selectedMinutes / 60).toFixed(1).replace('.0', '')
@@ -370,6 +560,17 @@ export default function TicketCheckoutClient({ eventId, ticketTypes, merchandise
             <span style={{ fontSize: '13px', color: 'var(--sd-text)' }}>🎟 {selectedTicket.name}</span>
             <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--sd-text)' }}>{formatPrice(Number(selectedTicket.price))}</span>
           </div>
+
+          {/* Confirmed room via code */}
+          {confirmedRoomInfo && (
+            <div style={{ padding: '10px 0', borderBottom: '1px solid var(--sd-border)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--sd-muted)', marginBottom: '4px' }}>ROOM (VIA ROOMMATE CODE)</div>
+              <div style={{ fontSize: '13px', color: 'var(--sd-text)' }}>
+                {confirmedRoomInfo.roomName}
+                {confirmedRoomInfo.roomNumber && ` · Room ${confirmedRoomInfo.roomNumber}`}
+              </div>
+            </div>
+          )}
 
           {/* Selected shifts */}
           {selectedShiftIds.length > 0 && (

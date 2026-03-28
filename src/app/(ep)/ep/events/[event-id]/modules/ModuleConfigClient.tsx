@@ -9,14 +9,16 @@ import type { ModuleCfg } from './actions'
 const SYSTEM_BEFORE = ['Draft', 'Published']
 const SYSTEM_AFTER = ['Event Locked', 'Registration', 'Happening Now', 'Closed', 'Archived']
 
-// Canonical module order matching the attendee workflow progression
-const MODULE_ORDER = ['application', 'ticketing', 'waiver', 'room_selection', 'volunteering', 'schedule', 'badge']
+// Canonical module order matching the attendee workflow progression.
+// venue and room_selection are mutually exclusive — only one may be enabled at a time.
+const MODULE_ORDER = ['application', 'ticketing', 'waiver', 'venue', 'room_selection', 'volunteering', 'schedule', 'badge']
 
-const MODULE_META: Record<string, { label: string; description: string; lockEnabled?: boolean }> = {
+const MODULE_META: Record<string, { label: string; description: string; lockEnabled?: boolean; mutex?: string }> = {
   application:    { label: 'Application',     description: 'Custom application form attendees complete before being approved.' },
   ticketing:      { label: 'Ticketing',        description: 'Ticket types, pricing, and purchase flow. Required for all events.', lockEnabled: true },
   waiver:         { label: 'Waiver',           description: 'Digital waiver signing via Odoo integration.' },
-  room_selection: { label: 'Room Selection',   description: 'Hotel room browsing, roommate applications, and reservation.' },
+  venue:          { label: 'Venue',              description: 'A reusable location object with optional contact details and an optional Room Matrix. Assign the venue in Event Settings. When the venue has rooms, the Room Selection workflow becomes available to attendees. Mutually exclusive with Basic Event Rooms.', mutex: 'room_selection' },
+  room_selection: { label: 'Basic Event Rooms', description: 'An event-specific Room Matrix tied to this event only — not reusable across events. Add rooms after creation to enable the Room Selection workflow for attendees. Mutually exclusive with Venue.', mutex: 'venue' },
   volunteering:   { label: 'Volunteering',     description: 'Volunteer shift signup and required-hours tracking.' },
   schedule:       { label: 'Schedule',         description: 'Public event schedule and activity listings.' },
   badge:          { label: 'Badge',            description: 'Badge creation using the Badge Maker module.' },
@@ -114,7 +116,15 @@ export default function ModuleConfigClient({
   const sorted = [...workflowStatuses].sort((a, b) => a.order - b.order)
 
   function update(key: string, field: keyof FormCfg, value: string | boolean) {
-    setConfig(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } }))
+    setConfig(prev => {
+      const next = { ...prev, [key]: { ...prev[key], [field]: value } }
+      // Enforce mutex: enabling venue disables room_selection and vice versa
+      const meta = MODULE_META[key]
+      if (field === 'enabled' && value === true && meta?.mutex) {
+        next[meta.mutex] = { ...next[meta.mutex], enabled: false }
+      }
+      return next
+    })
   }
 
   function handleSave() {

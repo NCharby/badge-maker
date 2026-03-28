@@ -647,7 +647,8 @@ Keys absent from the object = module disabled for this event. `closes_at_status:
 
 **Configurable Modules:**
 - Ticketing *(required)*
-- Venue
+- Venue *(mutually exclusive with Basic Event Rooms)* — a reusable location object with optional contact details and an optional Room Matrix; the Room Selection workflow becomes available to attendees when the Venue has rooms in its Room Matrix
+- Basic Event Rooms *(mutually exclusive with Venue)* — an event-specific Room Matrix tied directly to this event; not reusable across events; the Room Selection workflow becomes available to attendees when rooms are added (internal `module_config` key: `room_selection`)
 - Application
 - Waiver (via Odoo)
 - Volunteering
@@ -706,7 +707,7 @@ A Venue is the reference for all rooms and pricing available for an Event. Requi
 - `min_occupancy` — minimum number of people expected to occupy the room; displayed in the Roommate Finder card alongside max occupancy; informational only
 - `room_code` — free-text code provided by the EP or hotel; used at venue check-in for confirmation; the platform does not generate room codes; null if not provided
 - `lodging_type`
-- `room_daily_rates` — JSONB column storing an array of `{ "date": "YYYY-MM-DD", "amount": 233.20 }` objects, one entry per **check-in night** of the event (excludes checkout day); rates may differ per night; platform displays each night's rate and a calculated total; no payment is processed by the platform (informational only). Example: for a Thu–Sun event, entries are for Thursday, Friday, and Saturday — Sunday (checkout day) has no rate entry.
+- `room_daily_rates` — JSONB column storing per-night pricing. **At the venue level** (CSV import), entries use day-of-week name keys: `[{ "date": "Thursday", "amount": 233.20 }, ...]`. Event-level rendering maps day names to actual event dates. Rates may differ per night; platform displays each night's rate and a calculated total; no payment is processed by the platform (informational only). Example: for a Thu–Sun event, entries are for Thursday, Friday, and Saturday — Sunday (checkout day) has no rate entry.
 - `bed_type`
 - `has_kitchen` (boolean)
 - `location_zone`
@@ -1022,7 +1023,13 @@ CREATE TABLE venues (
 ```sql
 CREATE TABLE rooms (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  venue_id UUID NOT NULL REFERENCES venues(id),
+  venue_id UUID REFERENCES venues(id) ON DELETE CASCADE,          -- null for event-scoped rooms
+  event_id UUID REFERENCES platform_events(id) ON DELETE CASCADE, -- null for venue-scoped rooms
+  -- XOR constraint: exactly one of venue_id or event_id must be set
+  CONSTRAINT rooms_scope_xor CHECK (
+    (venue_id IS NOT NULL AND event_id IS NULL) OR
+    (venue_id IS NULL AND event_id IS NOT NULL)
+  ),
   number TEXT,            -- null triggers AUTO-{n} trigger on insert
   name TEXT NOT NULL,
   description TEXT,
@@ -1034,12 +1041,14 @@ CREATE TABLE rooms (
   has_kitchen BOOLEAN DEFAULT false,
   location_zone TEXT,
   room_group TEXT,
-  room_daily_rates JSONB, -- [{ "date": "YYYY-MM-DD", "amount": 233.20 }] — check-in nights only, excludes checkout day
+  room_daily_rates JSONB, -- Venue-level raw pricing config: [{ "date": "Thursday", "amount": 233.20 }] — day-of-week name keys, not ISO dates. Event-level rendering maps day names to actual event dates. CSV import stores day column headers (e.g. "Thursday") directly.
   created_at TIMESTAMPTZ DEFAULT now()
 );
 ```
 
-**AUTO-{n} assignment:** A Postgres trigger fires on INSERT when `number IS NULL`. It selects `MAX(n) + 1` from all existing auto-assigned rows (matching `number ~ '^AUTO-\d+$'`) scoped to the same venue, defaulting to `AUTO-1` if none exist. The value is stored in the `number` column and used everywhere room numbers appear.
+**Venue-scoped vs event-scoped rooms:** Rooms with `venue_id` set belong to a reusable Venue object and are shared across any events that use that venue. Rooms with `event_id` set belong directly to a single event (Room Selection module) and cannot be reused. All attendee-facing features (Roommate Finder, room selection, lock-in) work identically regardless of which column is set — they reference rooms by `id` only.
+
+**AUTO-{n} assignment:** A Postgres trigger fires on INSERT when `number IS NULL`. For venue-scoped rooms it selects `MAX(n) + 1` scoped to the same `venue_id`; for event-scoped rooms it scopes to `event_id`. Defaults to `AUTO-1` if none exist. The value is stored in the `number` column and used everywhere room numbers appear.
 
 **Nightly rates:** For an event running Thursday through Sunday, rates are stored for Thursday, Friday, and Saturday (3 check-in nights). The Sunday column from a CSV import is ignored for a Thu–Sun event — checkout day carries no rate.
 
@@ -1346,6 +1355,8 @@ CREATE TABLE locks (
 
 ## 6. Module Specifications
 
+**Module gating is enforced at the platform layer.** Every attendee-facing module page checks `opens_at_status` and `closes_at_status` from `module_config` against the current event status before rendering. The utility `src/lib/modules.ts` provides `getModuleOpenState()` for this check. Modules in the `not_yet_open` state are hidden from the event hub and blocked at their individual pages. Modules in the `closed` state remain visible but are rendered read-only.
+
 ### 6.1 Application Module
 
 The Application Module replicates the existing Google Form-based application process with improved automation and event promoter tooling.
@@ -1447,7 +1458,7 @@ An optional feature, configurable per Room Lead ticket type, that gives Room Lea
 - When `room_lead = false`, `roommate_codes_enabled` is always saved as `false`.
 
 **Code Format & Storage:**
-- **Format:** 6-character uppercase alphanumeric, excluding visually ambiguous characters (`0`, `O`, `1`, `I`, `L`). Character set: `A–Z` + `2–9` minus `{O, I, L}` → 28 characters. Example: `X3K9R7`.
+- **Format:** 6-character uppercase alphanumeric, excluding visually ambiguous characters (`0`, `O`, `1`, `I`, `L`). Character set: `A–Z` + `2–9` minus `{O, I, L}` → 31 characters (23 letters + 8 digits). Example: `X3K9R7`.
 - **Storage:** `event_attendees.roommate_code TEXT` — globally unique via partial unique index on non-null values.
 - **Generation:** Inside `purchaseTicket`, after the attendee record is updated, if `ticketType.room_lead = true && ticketType.roommate_codes_enabled = true`: generate a code with retry on collision (up to 5 attempts), write to `event_attendees.roommate_code`.
 - **Lifecycle:** Code is permanent for the duration of the event. Not invalidated after use — multiple roommates can use the same code to fill the room up to capacity.
@@ -1473,7 +1484,7 @@ UI flow:
 **Purchase Completion:**
 `purchaseTicket` accepts an optional `roommateCode?: string`. If provided:
 1. Re-validate the code server-side.
-2. Acquire a soft lock on the room (`resource_type = 'room'`, 15-minute expiry). Capacity check: `bed_spot_count − blocked_beds − current_occupants − active_room_locks >= 1`. If 0 → return error "Room is no longer available."
+2. Acquire a soft lock on the room (`resource_type = 'room'`, 15-minute expiry). Capacity check: `bed_spot_count − blocked_beds − current_occupants − active_room_locks >= 1`. If 0 → return error "Room is no longer available. Please try a different code or proceed without one."
 3. Complete purchase (existing logic unchanged).
 4. Update attendee: set `room_id = confirmedRoomId`, `room_status = 'Selected'`.
 5. Release room lock (delete from `locks`).
@@ -1492,12 +1503,46 @@ Room Leads see their code in three places:
 
 ---
 
+### 6.2b Venue vs Basic Event Rooms
+
+The EP chooses between two ways to provide a Room Matrix for an event. The choice is mutually exclusive — only one may be enabled per event.
+
+**The distinction:** Venue is a reusable location object that may optionally contain a Room Matrix. Basic Event Rooms is a Room Matrix tied directly to one event and not reusable. Both enable the same Room Selection workflow for attendees when rooms are present.
+
+**Venue module (`module_config.venue`):**
+- A reusable location object that stores venue contact details, POC, and an optional Room Matrix.
+- The EP assigns the Venue in Event Settings; assigning a venue automatically enables this module.
+- Room Matrix is managed in `/ep/venues/[venue-id]` (shared across all events that use this venue), or inline from `/ep/events/[event-id]/venue`.
+- If the Venue has no rooms, the Room Selection workflow is unavailable for the event.
+- Event dashboard shows the **Venue card** when this module is enabled.
+- Rooms are stored in the `rooms` table with `venue_id` set.
+
+**Basic Event Rooms module (`module_config.room_selection`):**
+- An event-specific Room Matrix — rooms belong to this event only and cannot be reused.
+- No Venue object is required. The EP adds rooms directly from `/ep/events/[event-id]/rooms`.
+- Same CSV import, manual entry, blocking, reservation, and room open group functionality as Venue rooms.
+- If no rooms have been added, the Room Selection workflow is unavailable for the event.
+- Event dashboard shows the **Basic Event Rooms card** when this module is enabled.
+- Rooms are stored in the `rooms` table with `event_id` set.
+
+**Enabling/disabling:**
+- Controlled via `module_config` (the Modules Configuration page). Enabling one auto-disables the other (mutex enforced client-side and server-side).
+- Assigning a venue in Event Settings automatically enables the Venue module and disables Basic Event Rooms.
+- The EP may switch between the two post-creation from the Modules page.
+
+**Downstream compatibility:**
+- "Room Selection" refers to the attendee-facing workflow of browsing and selecting rooms. This workflow is available whenever a Room Matrix is present — regardless of which module provides it.
+- All attendee-facing room features (Roommate Finder, room selection, room applications, lock-in, attendance slip) function identically regardless of which module provides the rooms.
+- They reference rooms by `rooms.id` only — they do not differentiate between `venue_id`-scoped and `event_id`-scoped rooms.
+- `event_room_config` (blocking, reservation, room open group) references `room_id` directly and works for both.
+
+---
+
 ### 6.3 Room Selection Module
 
 **Prerequisites:**
-- Event must have an associated Venue
-- Venue must have an associated Room Matrix
-- Room Selection module must be enabled by the Event Promoter
+- Either the Venue module or the Basic Event Rooms module must be enabled by the Event Promoter
+- The active module must have at least one room in its Room Matrix: rooms added to the event directly (Basic Event Rooms, at `/ep/events/[event-id]/rooms`) or rooms present on the assigned Venue (Venue module, managed at `/ep/events/[event-id]/venue` or `/ep/venues/[venue-id]`)
 
 **Activation:** Event Promoter transitions Event status to "Rooms Open."
 
@@ -1610,6 +1655,19 @@ The action available on each card differs by role:
 **Additional Requirements:**
 - Area Lead label — Event Promoter can assign an "Area Lead" label to a `UserVolunteerSignup` record for organizational purposes; this is a data field, not a platform role
 
+**CSV Bulk Import:**
+EPs can bulk-import volunteer shifts via CSV upload on the volunteer management page. A downloadable template is provided at `/templates/volunteer-shifts-import-template.csv`.
+
+| Column | Required | Format |
+|---|---|---|
+| `Shift Name` | Yes | Text |
+| `Date` | Yes | `YYYY-MM-DD` |
+| `Start Time` | Yes | `HH:mm` (24-hr) |
+| `Duration (minutes)` | Yes | Integer ≥ 1 |
+| `Capacity` | Yes | Integer ≥ 1 |
+
+Invalid rows are skipped and reported; valid rows are imported immediately. The import panel appears next to the "+ Add Shift" button and collapses after use.
+
 ---
 
 ### 6.5 Schedule Module
@@ -1633,6 +1691,23 @@ The Schedule Module is recreated within the SD Platform. The existing standalone
 - `volunteer_shift_date_time` — date and time of volunteer shifts
 
 > **Note:** The volunteer-specific optional fields are required if the Event Promoter wants the Schedule → Volunteer module integration to function for that activity.
+
+**CSV Bulk Import:**
+EPs can bulk-import schedule activities via CSV upload on the schedule management page. A downloadable template is provided at `/templates/schedule-import-template.csv`.
+
+| Column | Required | Format | Notes |
+|---|---|---|---|
+| `Activity Name` | Yes | Text | |
+| `Date` | Yes | `YYYY-MM-DD` | |
+| `Start Time` | Yes | `HH:mm` (24-hr) | |
+| `Duration (minutes)` | Yes | Integer ≥ 1 | |
+| `Description` | Yes | Text | |
+| `Volunteers Requested` | No | `Yes`/`No`/`Y`/`N`/`TRUE`/`FALSE`/`1`/`0` | Defaults to No if blank |
+| `Volunteers Needed` | Conditional | Integer ≥ 1 | Required when Volunteers Requested = Yes |
+| `Shift Duration (minutes)` | Conditional | Integer ≥ 1 | Required when Volunteers Requested = Yes |
+| `Shift Start Time` | No | `HH:mm` (24-hr) | Falls back to activity Start Time if blank |
+
+Invalid rows are skipped and reported; valid rows are imported immediately. The import panel appears next to the "+ Add Activity" button and collapses after use.
 
 ---
 
@@ -1686,7 +1761,25 @@ The existing badge-maker codebase is absorbed as-is into the platform as the Bad
 - Central management page for all event-related actions
 - Module statuses shown as cards (Application, Waiver, Ticket, Room, Volunteer, Badge, etc.)
 - Cards indicate current status and any pending user action
+- Only modules currently `open` or `closed` per `opens_at_status` gating are shown; `not_yet_open` modules are hidden
+- `closed` modules remain visible but read-only (labeled "read-only", CTA removed)
 - Click module card → module management page
+
+**Event Detail View** (`/events/[event-id]` for unenrolled users):
+- When a non-enrolled user navigates to an event page, they see the Event Detail view instead of being redirected to browse
+- Shows: event title, dates, location, description, and status badge
+- If the Application module is currently open: "Apply now →" CTA links to the application page
+- If the Application module is not enabled (or not required) and the Ticketing module is currently open: "Get your ticket →" CTA links to the ticket page
+- If neither Application nor Ticketing is open: "Stay tuned — registration for this event will be opening soon."
+- Schedule is always rendered inline on this view when the Schedule module is open or closed — no redirect required; all authenticated users may view the schedule regardless of attendee status
+- The browse page always links all events to `/events/[event-id]`; the hub handles routing based on enrollment state and module availability
+
+**Enrollment model:**
+- An `event_attendees` record is created the first time a user completes a qualifying enrollment action — never on page visit alone
+- **Application module**: record created inside `submitApplication()` when the user submits their application for the first time
+- **Ticketing module** (when Application is not in use): record created inside `purchaseTicket()` when the user completes their first ticket purchase
+- Until enrolled, users may view the Schedule and the Event Detail View; all other module pages redirect to the hub if no attendee record exists
+- Draft saves (`saveDraft()`) do not create an attendee record — the application form accepts input but responses are not persisted until submission
 
 ---
 
@@ -2071,17 +2164,14 @@ The recommended AI-assisted development workflow is a "layer cake" approach:
 
 ### Seed Accounts
 
-| Role | Email | Password |
-|---|---|---|
-| System Administrator | `admin@test.local` | `Admin1234!` |
-| Event Promoter | `promoter@test.local` | `Promo1234!` |
-| User — Room Lead | `user1@test.local` | `User1234!` |
-| User — Roommate | `user2@test.local` | `User1234!` |
-| User — Roommate | `user3@test.local` | `User1234!` |
-| User — Volunteer ticket | `user4@test.local` | `User1234!` |
-| User — no ticket yet | `user5@test.local` | `User1234!` |
+| Role | Email | Password | Seed State |
+|---|---|---|---|
+| System Administrator | `admin@test.local` | `Admin1234!` | — |
+| Event Promoter | `promoter@test.local` | `Promo1234!` | owns both test events |
+| User | `user1@test.local` | `User1234!` | not enrolled in any event — use to walk the full workflow end-to-end |
+| User | `user2@test.local` | `User1234!` | not enrolled in any event — use to walk the full workflow end-to-end |
 
-All user accounts have `date_of_birth` set to 30 years before the current date (valid age). `roommate_finder_hidden` is false for all users except user3 (set to true, to verify anonymous display).
+All user accounts have `date_of_birth` set to 30 years before the current date (valid age).
 
 ### Seed Venue
 
@@ -2120,9 +2210,9 @@ After running `npm run seed`, walk through these flows in order:
 
 1. **User registration** — Create a new account with a valid DOB; verify email verification is required; attempt registration with a DOB under 21 and verify rejection.
 
-2. **User login** — Log in as `user5`; verify the portal landing page shows the Full Test Event card.
+2. **User login** — Log in as `user1`; verify the portal landing page shows no event cards (user is unenrolled). Navigate to the Full Test Event; verify the Event Detail View is shown (not the attendee hub).
 
-3. **Ticket purchase** — As `user5`, purchase a Room Lead ticket on the Full Test Event; verify room selection becomes accessible in the portal after purchase.
+3. **Enrollment via Application** — As `user1`, navigate to the Full Test Event while Application module is open; verify "Apply now →" CTA is shown; submit the application form; verify an `event_attendees` row is now created and the hub switches to the enrolled view. **Enrollment via Ticketing** — As `user2`, navigate to the Minimal Test Event (ticketing only); verify "Get your ticket →" CTA is shown; complete purchase; verify attendee record is created and the hub shows the enrolled view.
 
 4. **Module gating** — As `user3` (Roommate ticket, no room selected), attempt to access the Volunteer signup page; verify it is gated until prerequisites are met per the event's workflow configuration.
 

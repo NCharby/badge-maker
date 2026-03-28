@@ -9,6 +9,7 @@ export interface TicketTypeInput {
   price: string           // string from form; parsed to decimal
   available_count: string // empty string = unlimited (null)
   room_lead: boolean
+  roommate_codes_enabled: boolean
   volunteer_hours_required: string
   room_required_at_purchase: boolean
 }
@@ -23,6 +24,7 @@ function parseTicketTypeInput(data: TicketTypeInput):
         price: number
         available_count: number | null
         room_lead: boolean
+        roommate_codes_enabled: boolean
         volunteer_hours_required: number
         room_required_at_purchase: boolean
       }
@@ -45,6 +47,9 @@ function parseTicketTypeInput(data: TicketTypeInput):
     return { error: 'Volunteer hours must be 0 or greater.' }
   }
 
+  // roommate_codes_enabled is only meaningful when room_lead = true; force false otherwise
+  const roommate_codes_enabled = data.room_lead ? data.roommate_codes_enabled : false
+
   return {
     error: null,
     values: {
@@ -53,6 +58,7 @@ function parseTicketTypeInput(data: TicketTypeInput):
       price,
       available_count,
       room_lead: data.room_lead,
+      roommate_codes_enabled,
       volunteer_hours_required,
       room_required_at_purchase: data.room_required_at_purchase,
     },
@@ -73,6 +79,7 @@ export async function createTicketType(
 
   const parsed = parseTicketTypeInput(data)
   if (parsed.error) return { error: parsed.error }
+  if (!('values' in parsed)) return { error: 'Invalid input.' }
 
   const { error } = await supabase.from('ticket_types').insert({ event_id: eventId, ...parsed.values })
   if (error) return { error: error.message }
@@ -96,6 +103,7 @@ export async function updateTicketType(
 
   const parsed = parseTicketTypeInput(data)
   if (parsed.error) return { error: parsed.error }
+  if (!('values' in parsed)) return { error: 'Invalid input.' }
 
   const { error } = await supabase
     .from('ticket_types').update(parsed.values).eq('id', ticketTypeId).eq('event_id', eventId)

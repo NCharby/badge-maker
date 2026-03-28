@@ -111,6 +111,7 @@ function LoginForm() {
           <label style={{ fontSize: '13px', fontWeight: 500 }}>Password</label>
           <Link
             href="/reset-password"
+            tabIndex={-1}
             style={{ fontSize: '13px', color: 'var(--sd-green)', textDecoration: 'none' }}
           >
             Forgot your password?

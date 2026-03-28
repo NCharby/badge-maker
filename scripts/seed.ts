@@ -12,11 +12,11 @@
  * Seed accounts:
  *   admin@test.local     / Admin1234!  — System Administrator
  *   promoter@test.local  / Promo1234!  — Event Promoter
- *   user1@test.local     / User1234!   — Room Lead (ticket + completed order)
- *   user2@test.local     / User1234!   — Roommate (ticket + completed order)
- *   user3@test.local     / User1234!   — Roommate, roommate_finder_hidden=true
- *   user4@test.local     / User1234!   — Volunteer ticket holder
- *   user5@test.local     / User1234!   — No ticket yet
+ *   user1@test.local     / User1234!   — User (not enrolled in any event)
+ *   user2@test.local     / User1234!   — User (not enrolled in any event)
+ *
+ * No attendee records are pre-seeded. Log in as user1 or user2 and walk through
+ * the full workflow end-to-end (application → ticket → rooms → volunteer → lock).
  */
 
 import { createClient } from '@supabase/supabase-js'
@@ -62,11 +62,8 @@ const dob = dobThirtyYearsAgo()
 const ACCOUNTS = [
   { email: 'admin@test.local',    password: 'Admin1234!', label: 'System Administrator' },
   { email: 'promoter@test.local', password: 'Promo1234!', label: 'Event Promoter' },
-  { email: 'user1@test.local',    password: 'User1234!',  label: 'User — Room Lead' },
-  { email: 'user2@test.local',    password: 'User1234!',  label: 'User — Roommate' },
-  { email: 'user3@test.local',    password: 'User1234!',  label: 'User — Roommate (hidden)' },
-  { email: 'user4@test.local',    password: 'User1234!',  label: 'User — Volunteer ticket' },
-  { email: 'user5@test.local',    password: 'User1234!',  label: 'User — No ticket yet' },
+  { email: 'user1@test.local',    password: 'User1234!',  label: 'User' },
+  { email: 'user2@test.local',    password: 'User1234!',  label: 'User' },
 ] as const
 
 // ── Stable seed UUIDs ─────────────────────────────────────────────────────────
@@ -113,12 +110,6 @@ const SHIFT_A = 'ffffffff-0000-0000-0000-000000000001' // Day 1 10:00 (overlaps 
 const SHIFT_B = 'ffffffff-0000-0000-0000-000000000002' // Day 1 10:30 (overlaps A)
 const SHIFT_C = 'ffffffff-0000-0000-0000-000000000003' // Day 2 14:00
 const SHIFT_D = 'ffffffff-0000-0000-0000-000000000004' // Day 2 17:00 (non-overlapping; A+C+D = 4h)
-
-// Order UUIDs
-const ORDER_U1 = '99999999-0000-0000-0000-000000000001' // user1 Room Lead order
-const ORDER_U2 = '99999999-0000-0000-0000-000000000002' // user2 Roommate order
-const ORDER_U3 = '99999999-0000-0000-0000-000000000003' // user3 Roommate order
-const ORDER_U4 = '99999999-0000-0000-0000-000000000004' // user4 Volunteer order
 
 // ── Phase 1: Badge-maker tables ───────────────────────────────────────────────
 // These tables exist in the current production schema (supabase/schema.sql).
@@ -261,7 +252,7 @@ async function seedPlatformTables(authUserIds: Record<string, string>) {
         role: 'user',
         email: 'user1@test.local',
         date_of_birth: dob,
-        preferred_scene_name: 'RoomLead1',
+        preferred_scene_name: 'TestUser1',
         roommate_finder_hidden: false,
       },
       {
@@ -269,31 +260,7 @@ async function seedPlatformTables(authUserIds: Record<string, string>) {
         role: 'user',
         email: 'user2@test.local',
         date_of_birth: dob,
-        preferred_scene_name: 'Roommate2',
-        roommate_finder_hidden: false,
-      },
-      {
-        id: authUserIds['user3@test.local'],
-        role: 'user',
-        email: 'user3@test.local',
-        date_of_birth: dob,
-        preferred_scene_name: 'Hidden3',
-        roommate_finder_hidden: true,
-      },
-      {
-        id: authUserIds['user4@test.local'],
-        role: 'user',
-        email: 'user4@test.local',
-        date_of_birth: dob,
-        preferred_scene_name: 'Volunteer4',
-        roommate_finder_hidden: false,
-      },
-      {
-        id: authUserIds['user5@test.local'],
-        role: 'user',
-        email: 'user5@test.local',
-        date_of_birth: dob,
-        preferred_scene_name: 'NoTicket5',
+        preferred_scene_name: 'TestUser2',
         roommate_finder_hidden: false,
       },
     ].filter(u => u.id) // skip accounts that failed to create
@@ -332,16 +299,16 @@ async function seedPlatformTables(authUserIds: Record<string, string>) {
     // (Thu Oct 1, Fri Oct 2, Sat Oct 3) for the Full Test Event (Oct 1-5).
     console.log('\n  rooms...')
     const rooms = [
-      { id: ROOM_KS1, venue_id: VENUE_ID, number: 'KS-101', name: 'King Studio',   lodging_type: 'Studio',       bed_type: 'King',         bed_spot_count: 2, min_occupancy: 1, room_group: 'King Studios',   room_daily_rates: [{ date: '2026-10-01', amount: 200.00 }, { date: '2026-10-02', amount: 225.00 }, { date: '2026-10-03', amount: 225.00 }] },
-      { id: ROOM_KS2, venue_id: VENUE_ID, number: 'KS-102', name: 'King Studio',   lodging_type: 'Studio',       bed_type: 'King',         bed_spot_count: 2, min_occupancy: 1, room_group: 'King Studios',   room_daily_rates: [{ date: '2026-10-01', amount: 200.00 }, { date: '2026-10-02', amount: 225.00 }, { date: '2026-10-03', amount: 225.00 }] },
-      { id: ROOM_KS3, venue_id: VENUE_ID, number: 'KS-103', name: 'King Studio',   lodging_type: 'Studio',       bed_type: 'King',         bed_spot_count: 2, min_occupancy: 1, room_group: 'King Studios',   room_daily_rates: [{ date: '2026-10-01', amount: 200.00 }, { date: '2026-10-02', amount: 225.00 }, { date: '2026-10-03', amount: 225.00 }] },
-      { id: ROOM_QD1, venue_id: VENUE_ID, number: 'QD-201', name: 'Queen Double',  lodging_type: 'Suite',        bed_type: 'Queen',        bed_spot_count: 2, min_occupancy: 2, room_group: 'Queen Doubles',  room_daily_rates: [{ date: '2026-10-01', amount: 175.00 }, { date: '2026-10-02', amount: 195.00 }, { date: '2026-10-03', amount: 195.00 }] },
-      { id: ROOM_QD2, venue_id: VENUE_ID, number: 'QD-202', name: 'Queen Double',  lodging_type: 'Suite',        bed_type: 'Queen',        bed_spot_count: 2, min_occupancy: 2, room_group: 'Queen Doubles',  room_daily_rates: [{ date: '2026-10-01', amount: 175.00 }, { date: '2026-10-02', amount: 195.00 }, { date: '2026-10-03', amount: 195.00 }] },
-      { id: ROOM_QD3, venue_id: VENUE_ID, number: 'QD-203', name: 'Queen Double',  lodging_type: 'Suite',        bed_type: 'Queen',        bed_spot_count: 2, min_occupancy: 2, room_group: 'Queen Doubles',  room_daily_rates: [{ date: '2026-10-01', amount: 175.00 }, { date: '2026-10-02', amount: 195.00 }, { date: '2026-10-03', amount: 195.00 }] },
-      { id: ROOM_QD4, venue_id: VENUE_ID, number: 'QD-204', name: 'Queen Double',  lodging_type: 'Suite',        bed_type: 'Queen',        bed_spot_count: 2, min_occupancy: 2, room_group: 'Queen Doubles',  room_daily_rates: [{ date: '2026-10-01', amount: 175.00 }, { date: '2026-10-02', amount: 195.00 }, { date: '2026-10-03', amount: 195.00 }] },
-      { id: ROOM_BK1, venue_id: VENUE_ID, number: 'BK-301', name: 'Bunk Room',     lodging_type: 'Shared',       bed_type: 'Bunk',         bed_spot_count: 4, min_occupancy: 2, room_group: 'Bunk Rooms',     room_daily_rates: [{ date: '2026-10-01', amount: 100.00 }, { date: '2026-10-02', amount: 115.00 }, { date: '2026-10-03', amount: 115.00 }] },
-      { id: ROOM_BK2, venue_id: VENUE_ID, number: 'BK-302', name: 'Bunk Room',     lodging_type: 'Shared',       bed_type: 'Bunk',         bed_spot_count: 4, min_occupancy: 2, room_group: 'Bunk Rooms',     room_daily_rates: [{ date: '2026-10-01', amount: 100.00 }, { date: '2026-10-02', amount: 115.00 }, { date: '2026-10-03', amount: 115.00 }] },
-      { id: ROOM_BK3, venue_id: VENUE_ID, number: 'BK-303', name: 'Bunk Room',     lodging_type: 'Shared',       bed_type: 'Bunk',         bed_spot_count: 4, min_occupancy: 2, room_group: 'Bunk Rooms',     room_daily_rates: [{ date: '2026-10-01', amount: 100.00 }, { date: '2026-10-02', amount: 115.00 }, { date: '2026-10-03', amount: 115.00 }] },
+      { id: ROOM_KS1, venue_id: VENUE_ID, number: 'KS-101', name: 'King Studio',   lodging_type: 'Studio',       bed_type: 'King',         bed_spot_count: 2, min_occupancy: 1, room_group: 'King Studios',   room_daily_rates: [{ date: 'Thursday', amount: 200.00 }, { date: 'Friday', amount: 225.00 }, { date: 'Saturday', amount: 225.00 }] },
+      { id: ROOM_KS2, venue_id: VENUE_ID, number: 'KS-102', name: 'King Studio',   lodging_type: 'Studio',       bed_type: 'King',         bed_spot_count: 2, min_occupancy: 1, room_group: 'King Studios',   room_daily_rates: [{ date: 'Thursday', amount: 200.00 }, { date: 'Friday', amount: 225.00 }, { date: 'Saturday', amount: 225.00 }] },
+      { id: ROOM_KS3, venue_id: VENUE_ID, number: 'KS-103', name: 'King Studio',   lodging_type: 'Studio',       bed_type: 'King',         bed_spot_count: 2, min_occupancy: 1, room_group: 'King Studios',   room_daily_rates: [{ date: 'Thursday', amount: 200.00 }, { date: 'Friday', amount: 225.00 }, { date: 'Saturday', amount: 225.00 }] },
+      { id: ROOM_QD1, venue_id: VENUE_ID, number: 'QD-201', name: 'Queen Double',  lodging_type: 'Suite',        bed_type: 'Queen',        bed_spot_count: 2, min_occupancy: 2, room_group: 'Queen Doubles',  room_daily_rates: [{ date: 'Thursday', amount: 175.00 }, { date: 'Friday', amount: 195.00 }, { date: 'Saturday', amount: 195.00 }] },
+      { id: ROOM_QD2, venue_id: VENUE_ID, number: 'QD-202', name: 'Queen Double',  lodging_type: 'Suite',        bed_type: 'Queen',        bed_spot_count: 2, min_occupancy: 2, room_group: 'Queen Doubles',  room_daily_rates: [{ date: 'Thursday', amount: 175.00 }, { date: 'Friday', amount: 195.00 }, { date: 'Saturday', amount: 195.00 }] },
+      { id: ROOM_QD3, venue_id: VENUE_ID, number: 'QD-203', name: 'Queen Double',  lodging_type: 'Suite',        bed_type: 'Queen',        bed_spot_count: 2, min_occupancy: 2, room_group: 'Queen Doubles',  room_daily_rates: [{ date: 'Thursday', amount: 175.00 }, { date: 'Friday', amount: 195.00 }, { date: 'Saturday', amount: 195.00 }] },
+      { id: ROOM_QD4, venue_id: VENUE_ID, number: 'QD-204', name: 'Queen Double',  lodging_type: 'Suite',        bed_type: 'Queen',        bed_spot_count: 2, min_occupancy: 2, room_group: 'Queen Doubles',  room_daily_rates: [{ date: 'Thursday', amount: 175.00 }, { date: 'Friday', amount: 195.00 }, { date: 'Saturday', amount: 195.00 }] },
+      { id: ROOM_BK1, venue_id: VENUE_ID, number: 'BK-301', name: 'Bunk Room',     lodging_type: 'Shared',       bed_type: 'Bunk',         bed_spot_count: 4, min_occupancy: 2, room_group: 'Bunk Rooms',     room_daily_rates: [{ date: 'Thursday', amount: 100.00 }, { date: 'Friday', amount: 115.00 }, { date: 'Saturday', amount: 115.00 }] },
+      { id: ROOM_BK2, venue_id: VENUE_ID, number: 'BK-302', name: 'Bunk Room',     lodging_type: 'Shared',       bed_type: 'Bunk',         bed_spot_count: 4, min_occupancy: 2, room_group: 'Bunk Rooms',     room_daily_rates: [{ date: 'Thursday', amount: 100.00 }, { date: 'Friday', amount: 115.00 }, { date: 'Saturday', amount: 115.00 }] },
+      { id: ROOM_BK3, venue_id: VENUE_ID, number: 'BK-303', name: 'Bunk Room',     lodging_type: 'Shared',       bed_type: 'Bunk',         bed_spot_count: 4, min_occupancy: 2, room_group: 'Bunk Rooms',     room_daily_rates: [{ date: 'Thursday', amount: 100.00 }, { date: 'Friday', amount: 115.00 }, { date: 'Saturday', amount: 115.00 }] },
     ]
     for (const room of rooms) {
       const { error } = await supabase.from('rooms').upsert(room, { onConflict: 'id' })
@@ -470,7 +437,7 @@ async function seedPlatformTables(authUserIds: Record<string, string>) {
     console.log('\n  ticket_types...')
     const ticketTypes = [
       // Full Test Event
-      { id: TICKET_RL,  event_id: FULL_EVENT_ID,    name: 'Room Lead Pass', description: 'Designates purchaser as Room Lead',              price: 0, room_lead: true,  volunteer_hours_required: 0, room_required_at_purchase: false },
+      { id: TICKET_RL,  event_id: FULL_EVENT_ID,    name: 'Room Lead Pass', description: 'Designates purchaser as Room Lead',              price: 0, room_lead: true,  roommate_codes_enabled: true,  volunteer_hours_required: 0, room_required_at_purchase: false },
       { id: TICKET_RM,  event_id: FULL_EVENT_ID,    name: 'Roommate Pass',  description: 'Standard attendee ticket',                      price: 0, room_lead: false, volunteer_hours_required: 0, room_required_at_purchase: false },
       { id: TICKET_VOL, event_id: FULL_EVENT_ID,    name: 'Volunteer Pass', description: 'Requires 4 hours of volunteer shifts',           price: 0, room_lead: false, volunteer_hours_required: 4, room_required_at_purchase: false },
       // Minimal Test Event
@@ -512,103 +479,9 @@ async function seedPlatformTables(authUserIds: Record<string, string>) {
       else ok(`merchandise: ${m.name}`)
     }
 
-    // ── orders ────────────────────────────────────────────────────────────────
-    // Pre-completed $0 orders for users 1–4 on the Full Test Event.
-    console.log('\n  orders...')
-    const orders = [
-      { id: ORDER_U1, event_id: FULL_EVENT_ID, user_id: authUserIds['user1@test.local'], payment_provider: 'square', status: 'complete', subtotal: 0, amount_refunded: 0, completed_at: new Date().toISOString() },
-      { id: ORDER_U2, event_id: FULL_EVENT_ID, user_id: authUserIds['user2@test.local'], payment_provider: 'square', status: 'complete', subtotal: 0, amount_refunded: 0, completed_at: new Date().toISOString() },
-      { id: ORDER_U3, event_id: FULL_EVENT_ID, user_id: authUserIds['user3@test.local'], payment_provider: 'square', status: 'complete', subtotal: 0, amount_refunded: 0, completed_at: new Date().toISOString() },
-      { id: ORDER_U4, event_id: FULL_EVENT_ID, user_id: authUserIds['user4@test.local'], payment_provider: 'square', status: 'complete', subtotal: 0, amount_refunded: 0, completed_at: new Date().toISOString() },
-    ].filter(o => o.user_id)
-    for (const o of orders) {
-      const { error } = await supabase.from('orders').upsert(o, { onConflict: 'id' })
-      if (error) warn(`orders upsert failed for ${o.id}: ${error.message}`)
-      else ok(`order: ${o.id.slice(0, 8)}... for user ${o.user_id?.slice(0, 8)}...`)
-    }
-
-    // ── order_items ───────────────────────────────────────────────────────────
-    console.log('\n  order_items...')
-    const orderItems = [
-      { order_id: ORDER_U1, item_type: 'ticket', item_id: TICKET_RL,  quantity: 1, unit_price: 0, amount_refunded: 0 },
-      { order_id: ORDER_U2, item_type: 'ticket', item_id: TICKET_RM,  quantity: 1, unit_price: 0, amount_refunded: 0 },
-      { order_id: ORDER_U3, item_type: 'ticket', item_id: TICKET_RM,  quantity: 1, unit_price: 0, amount_refunded: 0 },
-      { order_id: ORDER_U4, item_type: 'ticket', item_id: TICKET_VOL, quantity: 1, unit_price: 0, amount_refunded: 0 },
-    ]
-    for (const oi of orderItems) {
-      const { error } = await supabase.from('order_items').insert(oi)
-      if (error && !error.message.includes('duplicate')) warn(`order_items insert failed: ${error.message}`)
-      else if (!error) ok(`order_item: ${oi.item_type} for order ${oi.order_id.slice(0, 8)}...`)
-    }
-
-    // ── event_attendees ───────────────────────────────────────────────────────
-    console.log('\n  event_attendees...')
-    const attendees = [
-      {
-        event_id: FULL_EVENT_ID,
-        user_id: authUserIds['user1@test.local'],
-        ticket_type_id: TICKET_RL,
-        ticket_status: 'Complete',
-        order_id: ORDER_U1,
-        ticket_purchased_at: new Date().toISOString(),
-        is_room_lead: true,
-        volunteer_hours_required: 0,
-        application_status: 'Approved',
-      },
-      {
-        event_id: FULL_EVENT_ID,
-        user_id: authUserIds['user2@test.local'],
-        ticket_type_id: TICKET_RM,
-        ticket_status: 'Complete',
-        order_id: ORDER_U2,
-        ticket_purchased_at: new Date().toISOString(),
-        is_room_lead: false,
-        volunteer_hours_required: 0,
-        application_status: 'Approved',
-      },
-      {
-        event_id: FULL_EVENT_ID,
-        user_id: authUserIds['user3@test.local'],
-        ticket_type_id: TICKET_RM,
-        ticket_status: 'Complete',
-        order_id: ORDER_U3,
-        ticket_purchased_at: new Date().toISOString(),
-        is_room_lead: false,
-        volunteer_hours_required: 0,
-        application_status: 'Approved',
-      },
-      {
-        event_id: FULL_EVENT_ID,
-        user_id: authUserIds['user4@test.local'],
-        ticket_type_id: TICKET_VOL,
-        ticket_status: 'Complete',
-        order_id: ORDER_U4,
-        ticket_purchased_at: new Date().toISOString(),
-        is_room_lead: false,
-        volunteer_hours_required: 4,
-        application_status: 'Approved',
-      },
-      {
-        event_id: FULL_EVENT_ID,
-        user_id: authUserIds['user5@test.local'],
-        ticket_status: 'Incomplete',
-        is_room_lead: false,
-        volunteer_hours_required: 0,
-        application_status: 'Incomplete',
-      },
-    ].filter(a => a.user_id)
-
-    for (const a of attendees) {
-      const { error } = await supabase
-        .from('event_attendees')
-        .upsert(a, { onConflict: 'event_id,user_id' })
-      if (error) warn(`event_attendees upsert failed for user ${a.user_id?.slice(0, 8)}...: ${error.message}`)
-      else ok(`event_attendee: user ${a.user_id?.slice(0, 8)}... ticket_status=${a.ticket_status}`)
-    }
-
-    // ── application_forms + application_responses ────────────────────────────
-    // Seed a 4-field application form for the Full Test Event, plus responses
-    // for users 1–4 (who are already attendees). user5 has no response (Incomplete).
+    // ── application_forms ─────────────────────────────────────────────────────
+    // Seed a 4-field application form for the Full Test Event.
+    // No responses are pre-seeded — users submit them during the workflow.
     console.log('\n  application_forms...')
     const APP_FORM_ID = 'ffffffff-aaaa-0000-0000-000000000001'
     const AF_FIELD_SCENE  = 'ffffffff-aaaa-0000-0000-000000000011'
@@ -635,66 +508,6 @@ async function seedPlatformTables(authUserIds: Record<string, string>) {
       )
     if (formError) warn(`application_forms upsert failed: ${formError.message}`)
     else ok('application_form: Full Test Event Application')
-
-    console.log('\n  application_responses...')
-    const appResponses = [
-      {
-        event_id: FULL_EVENT_ID,
-        user_id: authUserIds['user1@test.local'],
-        form_id: APP_FORM_ID,
-        responses: {
-          [AF_FIELD_SCENE]: 'RoomLead1',
-          [AF_FIELD_HEARD]: 'Prior event',
-          [AF_FIELD_ACTS]:  ['Social dancing', 'Play parties'],
-          [AF_FIELD_SM]:    { key: 'FetLife', value: 'roomlead1fl' },
-        },
-        submitted_at: new Date().toISOString(),
-      },
-      {
-        event_id: FULL_EVENT_ID,
-        user_id: authUserIds['user2@test.local'],
-        form_id: APP_FORM_ID,
-        responses: {
-          [AF_FIELD_SCENE]: 'Roommate2',
-          [AF_FIELD_HEARD]: 'Friend',
-          [AF_FIELD_ACTS]:  ['Kink education', 'Workshops'],
-          [AF_FIELD_SM]:    { key: 'Twitter', value: '@roommate2' },
-        },
-        submitted_at: new Date().toISOString(),
-      },
-      {
-        event_id: FULL_EVENT_ID,
-        user_id: authUserIds['user3@test.local'],
-        form_id: APP_FORM_ID,
-        responses: {
-          [AF_FIELD_SCENE]: 'Hidden3',
-          [AF_FIELD_HEARD]: 'Social Media',
-          [AF_FIELD_ACTS]:  ['Play parties'],
-          [AF_FIELD_SM]:    null,
-        },
-        submitted_at: new Date().toISOString(),
-      },
-      {
-        event_id: FULL_EVENT_ID,
-        user_id: authUserIds['user4@test.local'],
-        form_id: APP_FORM_ID,
-        responses: {
-          [AF_FIELD_SCENE]: 'Volunteer4',
-          [AF_FIELD_HEARD]: 'Friend',
-          [AF_FIELD_ACTS]:  ['Kink education', 'Social dancing', 'Workshops'],
-          [AF_FIELD_SM]:    null,
-        },
-        submitted_at: new Date().toISOString(),
-      },
-    ].filter(r => r.user_id)
-
-    for (const r of appResponses) {
-      const { error } = await supabase
-        .from('application_responses')
-        .upsert(r, { onConflict: 'event_id,user_id' })
-      if (error) warn(`application_responses upsert failed for user ${r.user_id?.slice(0, 8)}...: ${error.message}`)
-      else ok(`application_response: user ${r.user_id?.slice(0, 8)}...`)
-    }
 
     // ── volunteer_shifts ──────────────────────────────────────────────────────
     // Shift A and B intentionally overlap to test the overlap constraint.
@@ -751,12 +564,12 @@ async function main() {
   console.log('\n========================================================')
   console.log('  Seed complete.')
   console.log('  admin@test.local     / Admin1234!   (System Administrator)')
-  console.log('  promoter@test.local  / Promo1234!   (Event Promoter)')
-  console.log('  user1@test.local     / User1234!    (Room Lead)')
-  console.log('  user2@test.local     / User1234!    (Roommate)')
-  console.log('  user3@test.local     / User1234!    (Roommate, hidden in Roommate Finder)')
-  console.log('  user4@test.local     / User1234!    (Volunteer ticket)')
-  console.log('  user5@test.local     / User1234!    (No ticket)')
+  console.log('  promoter@test.local  / Promo1234!   (Event Promoter — owns Full Test Event and Minimal Test Event)')
+  console.log('  user1@test.local     / User1234!    (User — not enrolled in any event)')
+  console.log('  user2@test.local     / User1234!    (User — not enrolled in any event)')
+  console.log('')
+  console.log('  Log in as user1 or user2 to walk through the full workflow:')
+  console.log('  application → ticket → rooms → volunteer → ready to lock')
   console.log('========================================================\n')
 }
 

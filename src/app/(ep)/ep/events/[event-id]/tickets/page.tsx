@@ -32,7 +32,7 @@ export default async function EpTicketsPage({
 
   const { data: ticketTypes } = await supabase
     .from('ticket_types')
-    .select('id, name, description, price, available_count, room_lead, volunteer_hours_required, room_required_at_purchase')
+    .select('id, name, description, price, available_count, room_lead, roommate_codes_enabled, volunteer_hours_required, room_required_at_purchase')
     .eq('event_id', eventId)
     .order('created_at')
 

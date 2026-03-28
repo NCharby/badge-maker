@@ -2,7 +2,8 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
-import type { ModuleConfig } from '@/types/platform'
+import type { ModuleConfig, WorkflowStatus } from '@/types/platform'
+import { getModuleOpenState, getOpensAtName } from '@/lib/modules'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -20,7 +21,8 @@ function formatDateRange(start: string, end: string): string {
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const d = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T12:00:00')
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function daysUntil(dateStr: string): number {
@@ -28,6 +30,31 @@ function daysUntil(dateStr: string): number {
   now.setHours(0, 0, 0, 0)
   const target = new Date(dateStr)
   return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+function formatDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h > 0 && m > 0) return `${h}h ${m}m`
+  if (h > 0) return `${h}h`
+  return `${m}m`
+}
+
+function formatDayHeader(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  })
+}
+
+function formatTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleTimeString('en-US', {
+    hour: 'numeric', minute: '2-digit',
+  })
+}
+
+function getDayKey(dateStr: string): string {
+  const d = new Date(dateStr)
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
 }
 
 // ─── Module card data ────────────────────────────────────────────────────────
@@ -58,6 +85,7 @@ type AttendeeRow = {
   ticket_purchased_at: string | null
   order_id: string | null
   is_room_lead: boolean
+  roommate_code: string | null
   ticket_types: { name: string }[] | null
 }
 
@@ -68,6 +96,7 @@ type ModuleCard = {
   isRequired: boolean
   isComplete: boolean
   isActionRequired: boolean
+  isClosed: boolean   // read-only state (past closes_at_status)
   statusLabel: string
   statusStyle: { background: string; color: string }
   iconStyle: { background: string }
@@ -84,6 +113,8 @@ function buildModuleCard(
   eventId: string,
   roomLockInDate: string | null,
   eventSlug: string,
+  confirmedVolunteerMinutes: number = 0,
+  isClosed = false,
 ): ModuleCard {
   const { label, icon } = MODULE_META[key]
   const isRequired = config.required
@@ -93,7 +124,7 @@ function buildModuleCard(
   const blue  = { background: 'var(--sd-blue-light)', color: '#1e40af' }
   const red   = { background: '#FEE2E2', color: '#DC2626' }
 
-  const base: Omit<ModuleCard, 'key' | 'label' | 'icon' | 'isRequired'> = {
+  const base: Omit<ModuleCard, 'key' | 'label' | 'icon' | 'isRequired' | 'isClosed'> = {
     isComplete: false,
     isActionRequired: false,
     statusLabel: 'Incomplete',
@@ -102,16 +133,20 @@ function buildModuleCard(
     description: '',
   }
 
+  // Build the card state from attendee data, then strip CTA if module is closed
+  let card: ModuleCard
+
   switch (key) {
     case 'application': {
       const s = attendee.application_status
       const complete = s === 'Approved'
-      const actionReq = !complete && s !== 'Declined' && s !== 'Closed'
-      if (s === 'Approved') return { ...base, key, label, icon, isRequired, isComplete: true, isActionRequired: false, statusLabel: 'Approved', statusStyle: green, iconStyle: { background: 'var(--sd-green-light)' }, description: 'Your application was reviewed and approved.', ctaLabel: 'View responses', ctaHref: `/events/${eventId}/application` }
-      if (s === 'Declined') return { ...base, key, label, icon, isRequired, isComplete: false, isActionRequired: false, statusLabel: 'Declined', statusStyle: red, description: 'Your application was not approved for this event.' }
-      if (s === 'Closed') return { ...base, key, label, icon, isRequired, isComplete: false, isActionRequired: false, statusLabel: 'Closed', statusStyle: gray, description: 'Applications are closed.' }
-      if (s === 'Incomplete') return { ...base, key, label, icon, isRequired, isComplete: false, isActionRequired: actionReq, statusLabel: 'Incomplete', statusStyle: gray, description: 'Complete and submit your application to get approved.', ctaLabel: 'Start application →', ctaHref: `/events/${eventId}/application` }
-      return { ...base, key, label, icon, isRequired, isComplete: false, isActionRequired: actionReq, statusLabel: 'In Review', statusStyle: amber, iconStyle: { background: 'var(--sd-amber-light)' }, description: 'Your application has been submitted and is under review.', ctaLabel: 'View application', ctaHref: `/events/${eventId}/application` }
+      const actionReq = !isClosed && !complete && s !== 'Declined' && s !== 'Closed'
+      if (s === 'Approved') card = { ...base, key, label, icon, isRequired, isClosed, isComplete: true, isActionRequired: false, statusLabel: 'Approved', statusStyle: green, iconStyle: { background: 'var(--sd-green-light)' }, description: 'Your application was reviewed and approved.', ctaLabel: 'View responses', ctaHref: `/events/${eventId}/application` }
+      else if (s === 'Declined') card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: false, statusLabel: 'Declined', statusStyle: red, description: 'Your application was not approved for this event.' }
+      else if (s === 'Closed') card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: false, statusLabel: 'Closed', statusStyle: gray, description: 'Applications are closed.' }
+      else if (s === 'Incomplete') card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: actionReq, statusLabel: 'Incomplete', statusStyle: gray, description: isClosed ? 'Applications are closed.' : 'Complete and submit your application to get approved.', ctaLabel: isClosed ? undefined : 'Start application →', ctaHref: isClosed ? undefined : `/events/${eventId}/application` }
+      else card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: actionReq, statusLabel: 'In Review', statusStyle: amber, iconStyle: { background: 'var(--sd-amber-light)' }, description: 'Your application has been submitted and is under review.', ctaLabel: 'View application', ctaHref: `/events/${eventId}/application` }
+      break
     }
 
     case 'ticketing': {
@@ -120,46 +155,82 @@ function buildModuleCard(
         const name = attendee.ticket_types?.[0]?.name ?? 'Ticket'
         const bought = attendee.ticket_purchased_at ? ` — purchased ${formatDate(attendee.ticket_purchased_at)}` : ''
         const orderId = attendee.order_id ? `Order #${attendee.order_id.slice(0, 8)}` : undefined
-        return { ...base, key, label, icon, isRequired, isComplete: true, isActionRequired: false, statusLabel: 'Complete', statusStyle: green, iconStyle: { background: 'var(--sd-green-light)' }, description: `${name}${bought}`, detail: orderId ? <span style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>{orderId}</span> : undefined }
+        const roommateCode = attendee.roommate_code ?? null
+        const detail = (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {orderId && <span style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>{orderId}</span>}
+            {roommateCode && (
+              <div style={{ marginTop: '4px', padding: '8px 12px', background: '#d1fae5', borderRadius: '6px', border: '1px solid #6ee7b7' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#065f46', display: 'block', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Your Roommate Code
+                </span>
+                <span style={{ fontSize: '15px', fontWeight: 700, color: '#064e3b', fontFamily: 'monospace', letterSpacing: '0.1em' }}>
+                  {roommateCode}
+                </span>
+                <span style={{ fontSize: '11px', color: '#065f46', display: 'block', marginTop: '2px' }}>
+                  Share this with people you want in your room.
+                </span>
+              </div>
+            )}
+          </div>
+        )
+        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: true, isActionRequired: false, statusLabel: 'Complete', statusStyle: green, iconStyle: { background: 'var(--sd-green-light)' }, description: `${name}${bought}`, detail }
+      } else {
+        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: !isClosed, statusLabel: isClosed ? 'Closed' : 'Incomplete', statusStyle: isClosed ? gray : gray, description: isClosed ? 'Ticket sales are closed.' : 'Purchase your ticket to access event modules.', ctaLabel: isClosed ? undefined : 'Get your ticket →', ctaHref: isClosed ? undefined : `/events/${eventId}/ticket` }
       }
-      return { ...base, key, label, icon, isRequired, isComplete: false, isActionRequired: true, statusLabel: 'Incomplete', statusStyle: gray, description: 'Purchase your ticket to access event modules.', ctaLabel: 'Get your ticket →', ctaHref: `/events/${eventId}/ticket` }
+      break
     }
 
     case 'waiver': {
       const s = attendee.waiver_status
-      if (s === 'Completed') return { ...base, key, label, icon, isRequired, isComplete: true, isActionRequired: false, statusLabel: 'Completed', statusStyle: green, iconStyle: { background: 'var(--sd-green-light)' }, description: 'Waiver signed and verified.' }
-      if (s === 'Declined') return { ...base, key, label, icon, isRequired, isComplete: false, isActionRequired: false, statusLabel: 'Declined', statusStyle: red, description: 'You declined to sign the waiver.' }
-      return { ...base, key, label, icon, isRequired, isComplete: false, isActionRequired: true, statusLabel: 'Incomplete', statusStyle: gray, description: 'Sign your event waiver to complete this step.', ctaLabel: 'Sign waiver →' /* Odoo stub — no href yet */ }
+      if (s === 'Completed') card = { ...base, key, label, icon, isRequired, isClosed, isComplete: true, isActionRequired: false, statusLabel: 'Completed', statusStyle: green, iconStyle: { background: 'var(--sd-green-light)' }, description: 'Waiver signed and verified.' }
+      else if (s === 'Declined') card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: false, statusLabel: 'Declined', statusStyle: red, description: 'You declined to sign the waiver.' }
+      else card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: !isClosed, statusLabel: isClosed ? 'Closed' : 'Incomplete', statusStyle: gray, description: isClosed ? 'Waiver signing is closed.' : 'Sign your event waiver to complete this step.', ctaLabel: isClosed ? undefined : 'Sign waiver →' /* Odoo stub */ }
+      break
     }
 
     case 'room_selection': {
       const s = attendee.room_status
       const locked = s === 'Locked In' || s === 'Verified'
-      if (locked) return { ...base, key, label, icon, isRequired, isComplete: true, isActionRequired: false, statusLabel: s, statusStyle: green, iconStyle: { background: 'var(--sd-green-light)' }, description: 'Your room selection is confirmed.', ctaLabel: 'View room details →', ctaHref: `/events/${eventId}/rooms` }
-      if (s === 'Critical Issue') return { ...base, key, label, icon, isRequired, isComplete: false, isActionRequired: true, statusLabel: 'Critical Issue', statusStyle: red, description: 'There is a critical issue with your room. Contact the event promoter.', ctaHref: `/events/${eventId}/rooms` }
-      if (s === 'Selected') {
+      if (locked) card = { ...base, key, label, icon, isRequired, isClosed, isComplete: true, isActionRequired: false, statusLabel: s, statusStyle: green, iconStyle: { background: 'var(--sd-green-light)' }, description: 'Your room selection is confirmed.', ctaLabel: 'View room details →', ctaHref: `/events/${eventId}/rooms` }
+      else if (s === 'Critical Issue') card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: true, statusLabel: 'Critical Issue', statusStyle: red, description: 'There is a critical issue with your room. Contact the event promoter.', ctaHref: `/events/${eventId}/rooms` }
+      else if (s === 'Selected') {
         const days = roomLockInDate ? daysUntil(roomLockInDate) : null
         const deadlineNote = days !== null ? (days > 0 ? `⏰ Lock-in deadline: ${formatDate(roomLockInDate!)} (${days} day${days !== 1 ? 's' : ''} remaining)` : '⏰ Lock-in deadline has passed') : undefined
-        return { ...base, key, label, icon, isRequired, isComplete: false, isActionRequired: true, statusLabel: 'Selected', statusStyle: amber, iconStyle: { background: 'var(--sd-amber-light)' }, description: 'Room selected — awaiting lock-in confirmation.', ctaLabel: 'View room →', ctaHref: `/events/${eventId}/rooms`, detail: deadlineNote ? <span style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>{deadlineNote}</span> : undefined }
+        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: !isClosed, statusLabel: 'Selected', statusStyle: amber, iconStyle: { background: 'var(--sd-amber-light)' }, description: 'Room selected — awaiting lock-in confirmation.', ctaLabel: 'View room →', ctaHref: `/events/${eventId}/rooms`, detail: deadlineNote ? <span style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>{deadlineNote}</span> : undefined }
+      } else {
+        const days = roomLockInDate ? daysUntil(roomLockInDate) : null
+        const deadlineNote = days !== null ? (days > 0 ? `⏰ Lock-in deadline: ${formatDate(roomLockInDate!)} (${days} day${days !== 1 ? 's' : ''} remaining)` : '⏰ Lock-in deadline has passed') : undefined
+        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: !isClosed, statusLabel: isClosed ? 'Closed' : 'Not Selected', statusStyle: isClosed ? gray : amber, iconStyle: { background: isClosed ? '#F3F4F6' : 'var(--sd-amber-light)' }, description: isClosed ? 'Room selection is closed.' : 'Rooms are open! Select your room before the lock-in deadline.', ctaLabel: isClosed ? undefined : 'Browse rooms →', ctaHref: isClosed ? undefined : `/events/${eventId}/rooms`, detail: (!isClosed && deadlineNote) ? <span style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>{deadlineNote}</span> : undefined }
       }
-      // Not Selected
-      const days = roomLockInDate ? daysUntil(roomLockInDate) : null
-      const deadlineNote = days !== null ? (days > 0 ? `⏰ Lock-in deadline: ${formatDate(roomLockInDate!)} (${days} day${days !== 1 ? 's' : ''} remaining)` : '⏰ Lock-in deadline has passed') : undefined
-      return { ...base, key, label, icon, isRequired, isComplete: false, isActionRequired: true, statusLabel: 'Not Selected', statusStyle: amber, iconStyle: { background: 'var(--sd-amber-light)' }, description: 'Rooms are open! Select your room before the lock-in deadline.', ctaLabel: 'Browse rooms →', ctaHref: `/events/${eventId}/rooms`, detail: deadlineNote ? <span style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>{deadlineNote}</span> : undefined }
+      break
     }
 
     case 'volunteering': {
       const req = attendee.volunteer_hours_required
-      const complete = req === 0
-      return { ...base, key, label, icon, isRequired, isComplete: complete, isActionRequired: !complete, statusLabel: complete ? 'No Requirement' : 'Incomplete', statusStyle: complete ? gray : amber, iconStyle: { background: complete ? '#F3F4F6' : 'var(--sd-amber-light)' }, description: `0 of ${req} required hours selected.`, ctaLabel: 'Browse shifts', ctaHref: `/events/${eventId}/volunteer` }
+      if (req === 0) {
+        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: true, isActionRequired: false, statusLabel: 'No Requirement', statusStyle: gray, iconStyle: { background: '#F3F4F6' }, description: 'No volunteer hours required for your ticket.', ctaLabel: 'Browse shifts', ctaHref: `/events/${eventId}/volunteer` }
+      } else {
+        const confirmedHours = confirmedVolunteerMinutes / 60
+        const complete = confirmedVolunteerMinutes >= req * 60
+        const confirmedLabel = confirmedHours % 1 === 0
+          ? `${confirmedHours}h`
+          : `${Math.floor(confirmedHours)}h ${confirmedVolunteerMinutes % 60}m`
+        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: complete, isActionRequired: !complete && !isClosed, statusLabel: complete ? 'Requirement Met' : (isClosed ? 'Closed' : 'Incomplete'), statusStyle: complete ? green : (isClosed ? gray : amber), iconStyle: { background: complete ? 'var(--sd-green-light)' : (isClosed ? '#F3F4F6' : 'var(--sd-amber-light)') }, description: `${confirmedLabel} of ${req}h required hours signed up.`, ctaLabel: complete ? 'View shifts' : (isClosed ? undefined : 'Browse shifts'), ctaHref: `/events/${eventId}/volunteer` }
+      }
+      break
     }
 
     case 'schedule':
-      return { ...base, key, label, icon, isRequired: false, isComplete: true, isActionRequired: false, statusLabel: 'Available', statusStyle: blue, iconStyle: { background: 'var(--sd-blue-light)' }, description: 'View the event schedule and activities.', ctaLabel: 'View schedule →', ctaHref: `/events/${eventId}/schedule` }
+      card = { ...base, key, label, icon, isRequired: false, isClosed, isComplete: true, isActionRequired: false, statusLabel: 'Available', statusStyle: blue, iconStyle: { background: 'var(--sd-blue-light)' }, description: 'View the event schedule and activities.', ctaLabel: 'View schedule →', ctaHref: `/events/${eventId}/schedule` }
+      break
 
     case 'badge':
-      return { ...base, key, label, icon, isRequired, isComplete: false, isActionRequired: false, statusLabel: 'Incomplete', statusStyle: gray, description: 'Create your event badge.', ctaLabel: 'Create badge →', ctaHref: `/${eventSlug}/badge-creator` }
+      card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: false, statusLabel: 'Incomplete', statusStyle: gray, description: 'Create your event badge.', ctaLabel: isClosed ? undefined : 'Create badge →', ctaHref: isClosed ? undefined : `/${eventSlug}/badge-creator` }
+      break
   }
+
+  return card
 }
 
 function getLockStatusStyle(lockStatus: string): { background: string; color: string } {
@@ -178,7 +249,7 @@ export default async function EventAttendeePage({
   const eventId = params['event-id']
 
   const supabase = await createClient()
-  const adminSupabase = await createAdminClient()
+  const adminSupabase = createAdminClient()
 
   const {
     data: { user },
@@ -188,28 +259,230 @@ export default async function EventAttendeePage({
   // Fetch event (admin client — users have no RLS on platform_events; §3)
   const { data: event } = await adminSupabase
     .from('platform_events')
-    .select('id, slug, title, start_date, end_date, location, status, module_config, telegram_group, discord_server, room_lock_in_date')
+    .select('id, slug, title, description, start_date, end_date, location, status, module_config, workflow_statuses, telegram_group, discord_server, room_lock_in_date')
     .eq('id', eventId)
     .single()
 
   if (!event) notFound()
   if (event.status === 'Draft') notFound()
 
-  // Fetch attendee record (user owns their own row)
+  const workflowStatuses = (event.workflow_statuses ?? []) as WorkflowStatus[]
+  const moduleConfig = (event.module_config ?? {}) as Record<string, ModuleConfig | undefined>
+
+  // Fetch attendee record (user owns their own row) — may be null for unenrolled users
   const { data: attendee } = await supabase
     .from('event_attendees')
-    .select('application_status, waiver_status, ticket_status, room_status, lock_status, volunteer_hours_required, ticket_purchased_at, order_id, is_room_lead, ticket_types(name)')
+    .select('application_status, waiver_status, ticket_status, room_status, lock_status, volunteer_hours_required, ticket_purchased_at, order_id, is_room_lead, roommate_code, ticket_types(name)')
     .eq('event_id', eventId)
     .eq('user_id', user.id)
     .single()
 
-  if (!attendee) redirect('/events/browse')
+  // ── Unenrolled user: show Event Detail view ──────────────────────────────
+  if (!attendee) {
+    const appCfg = moduleConfig.application
+    const schCfg = moduleConfig.schedule
+    const appOpen = appCfg ? getModuleOpenState(appCfg, event.status, workflowStatuses) === 'open' : false
+    const schOpen = schCfg ? getModuleOpenState(schCfg, event.status, workflowStatuses) !== 'not_yet_open' : false
 
-  // Build module cards for enabled modules
-  const moduleConfig = (event.module_config ?? {}) as Record<string, ModuleConfig | undefined>
+    type ScheduleActivity = {
+      id: string; name: string; date_time: string
+      duration_minutes: number; description: string
+      volunteers_requested: boolean; volunteer_count: number | null
+    }
+    type ScheduleDay = { key: string; label: string; items: ScheduleActivity[] }
+
+    let scheduleDays: ScheduleDay[] = []
+    if (schOpen) {
+      const { data: activities } = await adminSupabase
+        .from('schedule_activities')
+        .select('id, name, date_time, duration_minutes, description, volunteers_requested, volunteer_count')
+        .eq('event_id', eventId)
+        .order('date_time', { ascending: true })
+      for (const a of activities ?? []) {
+        const key = getDayKey(a.date_time)
+        let day = scheduleDays.find(d => d.key === key)
+        if (!day) {
+          day = { key, label: formatDayHeader(a.date_time), items: [] }
+          scheduleDays.push(day)
+        }
+        day.items.push(a as ScheduleActivity)
+      }
+    }
+
+    return (
+      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '32px 24px' }}>
+        {/* Event header */}
+        <div style={{
+          background: 'var(--sd-card)',
+          border: '1px solid var(--sd-border)',
+          borderRadius: 'var(--sd-radius)',
+          padding: '28px',
+          marginBottom: '24px',
+          boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', marginBottom: event.description ? '16px' : '0' }}>
+            <div>
+              <div style={{ fontSize: '24px', fontWeight: 700, marginBottom: '6px' }}>{event.title}</div>
+              <div style={{ fontSize: '14px', color: 'var(--sd-muted)', display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
+                <span>📅 {formatDateRange(event.start_date, event.end_date)}</span>
+                {event.location && <span>📍 {event.location}</span>}
+                <span>🧑‍💼 Organized by Shiny Dog Productions</span>
+              </div>
+            </div>
+            <span style={{
+              fontSize: '13px', fontWeight: 500, padding: '5px 14px', borderRadius: '99px', whiteSpace: 'nowrap', flexShrink: 0,
+              background: 'var(--sd-green-light)', color: 'var(--sd-green-dark)',
+            }}>
+              {event.status}
+            </span>
+          </div>
+          {event.description && (
+            <p style={{ fontSize: '14px', color: 'var(--sd-muted)', lineHeight: 1.6, marginTop: '16px', marginBottom: 0 }}>
+              {event.description}
+            </p>
+          )}
+        </div>
+
+        {/* CTA card */}
+        <div style={{
+          background: 'var(--sd-card)',
+          border: '1px solid var(--sd-border)',
+          borderRadius: 'var(--sd-radius)',
+          padding: '24px',
+          boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+        }}>
+          {appOpen ? (
+            <>
+              <p style={{ fontSize: '14px', color: 'var(--sd-text)', marginBottom: '16px' }}>
+                Applications are open for this event.
+              </p>
+              <Link
+                href={`/events/${eventId}/application`}
+                style={{
+                  display: 'inline-block',
+                  padding: '10px 22px',
+                  background: 'var(--sd-green)',
+                  color: '#fff',
+                  borderRadius: '7px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                }}
+              >
+                Apply now →
+              </Link>
+            </>
+          ) : (
+            <p style={{ fontSize: '14px', color: 'var(--sd-muted)' }}>
+              Stay tuned — registration for this event will be opening soon.
+            </p>
+          )}
+        </div>
+
+        {/* Inline schedule */}
+        {schOpen && (
+          <div style={{ marginTop: '24px' }}>
+            <div style={{
+              fontSize: '13px', fontWeight: 700, textTransform: 'uppercase',
+              letterSpacing: '0.06em', color: 'var(--sd-muted)', marginBottom: '14px',
+            }}>
+              Event Schedule
+            </div>
+
+            {scheduleDays.length === 0 ? (
+              <p style={{ fontSize: '13px', color: 'var(--sd-muted)' }}>
+                No schedule activities have been added yet.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                {scheduleDays.map(day => (
+                  <div key={day.key}>
+                    <h2 style={{
+                      fontSize: '13px', fontWeight: 700, color: 'var(--sd-muted)',
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                      marginBottom: '12px', paddingBottom: '8px',
+                      borderBottom: '1px solid var(--sd-border)',
+                    }}>
+                      {day.label}
+                    </h2>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {day.items.map(activity => (
+                        <div key={activity.id} style={{
+                          background: 'var(--sd-card)', border: '1px solid var(--sd-border)',
+                          borderRadius: 'var(--sd-radius)', padding: '16px 20px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,.04)',
+                        }}>
+                          <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--sd-text)', marginBottom: '4px' }}>
+                            {activity.name}
+                          </div>
+                          <div style={{ fontSize: '13px', color: 'var(--sd-muted)', display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: activity.description ? '10px' : 0 }}>
+                            <span>{formatTime(activity.date_time)}</span>
+                            <span>·</span>
+                            <span>{formatDuration(activity.duration_minutes)}</span>
+                            {activity.volunteers_requested && activity.volunteer_count && (
+                              <>
+                                <span>·</span>
+                                <span style={{ color: 'var(--sd-green)', fontWeight: 600 }}>
+                                  {activity.volunteer_count} volunteer{activity.volunteer_count !== 1 ? 's' : ''} needed
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          {activity.description && (
+                            <p style={{ fontSize: '13px', color: 'var(--sd-text)', margin: 0, lineHeight: 1.5 }}>
+                              {activity.description}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Enrolled user ────────────────────────────────────────────────────────
+
+  // Fetch confirmed volunteer minutes for the volunteer card progress display
+  const { data: confirmedSignupRows } = await supabase
+    .from('user_volunteer_signups')
+    .select('shift_id')
+    .eq('event_id', eventId)
+    .eq('user_id', user.id)
+    .eq('status', 'confirmed')
+
+  let confirmedVolunteerMinutes = 0
+  if (confirmedSignupRows && confirmedSignupRows.length > 0) {
+    const { data: confirmedShifts } = await supabase
+      .from('volunteer_shifts')
+      .select('duration_minutes')
+      .in('id', confirmedSignupRows.map(r => r.shift_id))
+    confirmedVolunteerMinutes = (confirmedShifts ?? []).reduce((sum, s) => sum + s.duration_minutes, 0)
+  }
+
+  // Build module cards — only for modules that are open or closed (not not_yet_open)
   const cards: ModuleCard[] = MODULE_ORDER
-    .filter(key => moduleConfig[key]?.enabled)
-    .map(key => buildModuleCard(key, moduleConfig[key]!, attendee as unknown as AttendeeRow, eventId, event.room_lock_in_date ?? null, event.slug))
+    .filter(key => {
+      const cfg = moduleConfig[key]
+      if (!cfg?.enabled) return false
+      const state = getModuleOpenState(cfg, event.status, workflowStatuses)
+      return state !== 'not_yet_open'
+    })
+    .map(key => {
+      const cfg = moduleConfig[key]!
+      const state = getModuleOpenState(cfg, event.status, workflowStatuses)
+      return buildModuleCard(
+        key, cfg, attendee as unknown as AttendeeRow,
+        eventId, event.room_lock_in_date ?? null, event.slug,
+        confirmedVolunteerMinutes,
+        state === 'closed',
+      )
+    })
 
   const requiredCards = cards.filter(c => c.isRequired)
   const completedRequired = requiredCards.filter(c => c.isComplete).length
@@ -217,6 +490,19 @@ export default async function EventAttendeePage({
   const progressPct = totalRequired > 0 ? Math.round((completedRequired / totalRequired) * 100) : 100
   const allRequiredComplete = completedRequired === totalRequired
   const lockStatus: string = (attendee as unknown as AttendeeRow).lock_status
+
+  // Determine if any modules are not yet open (for informational note)
+  const notYetOpenLabels: string[] = MODULE_ORDER
+    .filter(key => {
+      const cfg = moduleConfig[key]
+      if (!cfg?.enabled) return false
+      return getModuleOpenState(cfg, event.status, workflowStatuses) === 'not_yet_open'
+    })
+    .map(key => {
+      const cfg = moduleConfig[key]!
+      const opensAt = getOpensAtName(cfg, workflowStatuses)
+      return opensAt ? `${MODULE_META[key].label} (opens at: ${opensAt})` : MODULE_META[key].label
+    })
 
   // Server action for Ready to Lock
   async function handleReadyToLock() {
@@ -235,6 +521,9 @@ export default async function EventAttendeePage({
 
   const lockStatusStyle = getLockStatusStyle(lockStatus)
   const canLock = allRequiredComplete && lockStatus === 'Unlocked'
+  // Lock section is only relevant once the event has moved past Published.
+  // At Published, no modules are open and users cannot yet be active attendees.
+  const showLockSection = event.status !== 'Published'
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '32px 24px' }}>
@@ -320,6 +609,29 @@ export default async function EventAttendeePage({
         )}
       </div>
 
+      {/* No open modules yet */}
+      {cards.length === 0 && notYetOpenLabels.length > 0 && (
+        <div style={{
+          background: 'var(--sd-card)',
+          border: '1px solid var(--sd-border)',
+          borderRadius: 'var(--sd-radius)',
+          padding: '24px',
+          marginBottom: '24px',
+          boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+        }}>
+          <p style={{ fontSize: '14px', color: 'var(--sd-muted)', marginBottom: '12px' }}>
+            No modules are currently open for this event.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {notYetOpenLabels.map((label, i) => (
+              <span key={i} style={{ fontSize: '13px', color: 'var(--sd-muted)' }}>
+                ⏳ {label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Module grid */}
       {cards.length > 0 && (
         <div
@@ -339,6 +651,7 @@ export default async function EventAttendeePage({
                 borderRadius: 'var(--sd-radius)',
                 padding: '20px',
                 boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+                opacity: card.isClosed && !card.isComplete ? 0.75 : 1,
               }}
             >
               {/* Card header */}
@@ -348,6 +661,9 @@ export default async function EventAttendeePage({
                     {card.icon}
                   </div>
                   <span style={{ fontSize: '14px', fontWeight: 600 }}>{card.label}</span>
+                  {card.isClosed && (
+                    <span style={{ fontSize: '11px', color: 'var(--sd-muted)', fontStyle: 'italic' }}>read-only</span>
+                  )}
                 </div>
                 <span
                   style={{
@@ -410,8 +726,8 @@ export default async function EventAttendeePage({
         </div>
       )}
 
-      {/* Lock section */}
-      <div
+      {/* Lock section — hidden until event moves past Published */}
+      {showLockSection && <div
         style={{
           background: 'var(--sd-card)',
           border: '1px solid var(--sd-border)',
@@ -497,7 +813,7 @@ export default async function EventAttendeePage({
             )}
           </form>
         )}
-      </div>
+      </div>}
     </div>
   )
 }

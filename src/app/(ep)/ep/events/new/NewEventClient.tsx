@@ -38,13 +38,23 @@ export default function NewEventClient() {
   const [endDate, setEndDate] = useState('')
   const [location, setLocation] = useState('')
   const [modules, setModules] = useState({
+    venue: false,
     application: false,
+    waiver: false,
+    room_selection: false,
     volunteering: false,
     schedule: false,
+    badge: false,
   })
 
   function toggleModule(key: keyof typeof modules) {
-    setModules(prev => ({ ...prev, [key]: !prev[key] }))
+    setModules(prev => {
+      const next = { ...prev, [key]: !prev[key] }
+      // venue and room_selection are mutually exclusive
+      if (key === 'venue'          && next.venue)          next.room_selection = false
+      if (key === 'room_selection' && next.room_selection) next.venue = false
+      return next
+    })
   }
 
   function handleSubmit() {
@@ -149,29 +159,64 @@ export default function NewEventClient() {
 
         <div>
           <div style={{ ...labelStyle, marginBottom: '10px' }}>Modules</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: 'var(--sd-muted)', cursor: 'not-allowed' }}>
-              <input type="checkbox" checked disabled style={{ accentColor: 'var(--sd-purple)' }} />
-              Ticketing <span style={{ fontSize: '11px' }}>(required)</span>
-            </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* Ticketing — always required */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+              <input type="checkbox" checked disabled style={{ accentColor: 'var(--sd-purple)', marginTop: '2px', flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: '13px', color: 'var(--sd-muted)', fontWeight: 500 }}>
+                  Ticketing <span style={{ fontSize: '11px' }}>(required)</span>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px' }}>
+                  Sell or distribute tickets to attendees.
+                </div>
+              </div>
+            </div>
+
             {([
-              { key: 'application', label: 'Application' },
-              { key: 'volunteering', label: 'Volunteering' },
-              { key: 'schedule', label: 'Schedule' },
-            ] as const).map(({ key, label }) => (
-              <label
-                key={key}
-                style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: 'var(--sd-text)', cursor: 'pointer' }}
-              >
+              { key: 'application',  label: 'Application', desc: 'Require attendees to fill out an application form before purchasing a ticket.' },
+              { key: 'waiver',       label: 'Waiver',      desc: 'Collect signed waivers via Odoo. A waiver template must be configured separately.' },
+              { key: 'volunteering', label: 'Volunteering',desc: 'Create volunteer shifts and let attendees sign up. Ticket types can require minimum hours.' },
+              { key: 'schedule',     label: 'Schedule',    desc: 'Publish an event schedule visible to attendees.' },
+              { key: 'badge',        label: 'Badge',       desc: 'Enable the badge maker so attendees can create a personalized event badge.' },
+            ] as const).map(({ key, label, desc }) => (
+              <label key={key} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   checked={modules[key]}
                   onChange={() => toggleModule(key)}
-                  style={{ accentColor: 'var(--sd-purple)' }}
+                  style={{ accentColor: 'var(--sd-purple)', marginTop: '2px', flexShrink: 0, cursor: 'pointer' }}
                 />
-                {label}
+                <div>
+                  <div style={{ fontSize: '13px', color: 'var(--sd-text)', fontWeight: 500 }}>{label}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px' }}>{desc}</div>
+                </div>
               </label>
             ))}
+
+            {/* Room setup — choose one. Venue and Room Selection are mutually exclusive. */}
+            <div style={{ borderTop: '1px solid var(--sd-border)', paddingTop: '10px', marginTop: '2px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--sd-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>
+                Room Setup — choose one
+              </div>
+              {([
+                { key: 'venue',          label: 'Venue',              desc: 'A reusable location object with optional contact details. Add a Room Matrix to the venue to enable room selection for attendees. Assign the specific venue in Event Settings after creation.' },
+                { key: 'room_selection', label: 'Basic Event Rooms', desc: 'An event-specific Room Matrix tied to this event only — not reusable across events. Add rooms after creation to enable room selection for attendees.' },
+              ] as const).map(({ key, label, desc }) => (
+                <label key={key} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', marginBottom: '10px' }}>
+                  <input
+                    type="checkbox"
+                    checked={modules[key]}
+                    onChange={() => toggleModule(key)}
+                    style={{ accentColor: 'var(--sd-purple)', marginTop: '2px', flexShrink: 0, cursor: 'pointer' }}
+                  />
+                  <div>
+                    <div style={{ fontSize: '13px', color: 'var(--sd-text)', fontWeight: 500 }}>{label}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px' }}>{desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
           </div>
         </div>
 

@@ -14,7 +14,7 @@ export default async function EventSettingsPage({
 
   const { data: event } = await supabase
     .from('platform_events')
-    .select('id, title, description, start_date, end_date, location, status')
+    .select('id, title, description, start_date, end_date, location, status, venue_id')
     .eq('id', eventId)
     .eq('owner_id', user.id)
     .single()
@@ -27,6 +27,13 @@ export default async function EventSettingsPage({
       </div>
     )
   }
+
+  const { data: venues } = await supabase
+    .from('venues')
+    .select('id, name')
+    .eq('owner_id', user.id)
+    .eq('status', 'active')
+    .order('name', { ascending: true })
 
   return (
     <div style={{ maxWidth: '640px', margin: '0 auto', padding: '2rem 1.5rem' }}>
@@ -53,7 +60,9 @@ export default async function EventSettingsPage({
           start_date: event.start_date,
           end_date: event.end_date,
           location: event.location ?? '',
+          venue_id: event.venue_id ?? '',
         }}
+        venues={venues ?? []}
       />
     </div>
   )

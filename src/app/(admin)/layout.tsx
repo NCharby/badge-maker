@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import AdminNav from '@/components/nav/AdminNav'
+import AppNav from '@/components/nav/AppNav'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -24,7 +24,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--sd-bg)' }}>
-      <AdminNav user={platformUser} />
+      <AppNav user={platformUser} />
       <main>{children}</main>
     </div>
   )

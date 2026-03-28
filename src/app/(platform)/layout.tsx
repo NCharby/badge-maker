@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import UserNav from '@/components/nav/UserNav'
+import AppNav from '@/components/nav/AppNav'
 
 export default async function PlatformLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -20,7 +20,7 @@ export default async function PlatformLayout({ children }: { children: React.Rea
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--sd-bg)' }}>
-      <UserNav user={platformUser} />
+      <AppNav user={platformUser} />
       <main>{children}</main>
     </div>
   )
