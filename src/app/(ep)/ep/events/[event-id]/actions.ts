@@ -35,5 +35,8 @@ export async function updateEventStatus(
 
   revalidatePath(`/ep/events/${eventId}`)
   revalidatePath('/ep/dashboard')
+  // Invalidate the entire user-facing event subtree so all module pages (application,
+  // ticket, volunteer, schedule, rooms, etc.) immediately reflect the new status.
+  revalidatePath(`/events/${eventId}`, 'layout')
   return { success: true }
 }

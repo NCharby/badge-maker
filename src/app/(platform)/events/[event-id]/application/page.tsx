@@ -93,7 +93,7 @@ export default async function ApplicationPage({
     .single()
 
   // Fetch application form
-  const { data: form } = await supabase
+  const { data: form } = await adminSupabase
     .from('application_forms')
     .select('id, title, fields')
     .eq('event_id', eventId)

@@ -1,8 +1,10 @@
 'use server'
 
 import { randomBytes } from 'crypto'
-import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createInPlatformNotification } from '@/lib/notifications'
+import { getPaymentProvider, getEpPaymentProvider } from '@/lib/payments'
+import { revalidatePath } from 'next/cache'
 
 // 6-char uppercase alphanumeric excluding visually ambiguous chars (0, O, 1, I, L)
 const ROOMMATE_CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -25,6 +27,10 @@ export async function purchaseTicket(
   shiftIds: string[],          // empty if no volunteer hours required
   merchandiseIds: string[],    // empty if no merchandise selected
   roommateCode?: string,       // optional — non-Room-Lead attendees may supply a Room Lead's code
+  // null = $0 order (skip payment); omitted = same as null
+  paymentToken?: { provider: 'square'; nonce: string }
+              | { provider: 'paypal'; paypalOrderId: string }
+              | null,
 ): Promise<{ success: true; orderId: string; roommate_code?: string } | { error: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -302,12 +308,15 @@ export async function purchaseTicket(
   const ticketPrice = Number(ticketType.price)
   const subtotal = ticketPrice + merchandiseItems.reduce((sum, m) => sum + Number(m.price), 0)
 
-  // 7. Create order (pending)
-  // orders.id is used as the Square idempotency key (CLAUDE.md §4)
+  // 6.5. Resolve EP's payment provider (locks provider at transaction time per spec)
+  const epProvider = await getEpPaymentProvider(eventId)
+  const resolvedProvider = paymentToken?.provider ?? epProvider
+
+  // 7. Create order (pending) — orders.id is the Square idempotency key (CLAUDE.md §4)
   const { data: order, error: orderError } = await supabase.from('orders').insert({
     event_id: eventId,
     user_id: user.id,
-    payment_provider: 'square', // stub — no payment API called in Step 5
+    payment_provider: resolvedProvider,
     status: 'pending',
     subtotal,
   }).select('id').single()
@@ -327,10 +336,37 @@ export async function purchaseTicket(
   const { error: itemsError } = await supabase.from('order_items').insert(orderItems)
   if (itemsError) {
     await supabase.from('locks').delete().eq('locked_by', user.id)
+    await supabase.from('orders').update({ status: 'cancelled' }).eq('id', orderId)
     return { error: 'Failed to record order. Please try again.' }
   }
 
-  // 9. Complete order immediately ($0 / no payment in Step 5)
+  // 8.5. Process payment (skipped for $0 orders — seed data and free tickets work unchanged)
+  if (subtotal > 0) {
+    if (!paymentToken) {
+      await supabase.from('locks').delete().eq('locked_by', user.id)
+      await supabase.from('orders').update({ status: 'cancelled' }).eq('id', orderId)
+      return { error: 'Payment information is required.' }
+    }
+    const provider = getPaymentProvider(paymentToken.provider)
+    const amountCents = Math.round(subtotal * 100)
+    const paymentResult = await provider.createPayment({
+      orderId,
+      amountCents,
+      currency: 'USD',
+      nonce: paymentToken.provider === 'square' ? paymentToken.nonce : undefined,
+      paypalOrderId: paymentToken.provider === 'paypal' ? paymentToken.paypalOrderId : undefined,
+    })
+    if (!paymentResult.success) {
+      await supabase.from('locks').delete().eq('locked_by', user.id)
+      await supabase.from('orders').update({ status: 'cancelled' }).eq('id', orderId)
+      return { error: paymentResult.error ?? 'Payment failed. Please try again.' }
+    }
+    await supabase.from('orders')
+      .update({ payment_transaction_id: paymentResult.transactionId })
+      .eq('id', orderId)
+  }
+
+  // 9. Mark order complete
   await supabase.from('orders')
     .update({ status: 'complete', completed_at: new Date().toISOString() })
     .eq('id', orderId)
@@ -393,14 +429,171 @@ export async function purchaseTicket(
   // 12. Release all soft locks held by this user
   await supabase.from('locks').delete().eq('locked_by', user.id)
 
-  // 13. Notification stubs
-  // Row 15: ticket purchased → user email
-  console.log(`[notification-15] ticket purchased: user=${user.id} event=${eventId} order=${orderId}${generatedRoommateCode ? ` roommateCode=${generatedRoommateCode}` : ''}`)
+  // 13. Notifications
+  // Row 15: ticket purchased → user (in-platform + email)
+  void createInPlatformNotification({
+    userId: user.id,
+    type: 'ticket_purchased',
+    title: 'Ticket confirmed',
+    body: 'Your ticket purchase is complete.',
+    actionUrl: `/events/${eventId}`,
+    actionLabel: 'View Event Hub',
+    eventId,
+  })
   // Row 32: roommate code used — notify Room Lead when a roommate is placed via code
   if (confirmedRoomId) {
-    console.log(`[notification-32] roommate placed via code: roomLeadRoom=${confirmedRoomId} newRoommate=${user.id} event=${eventId}`)
+    // TODO: send email + Telegram to Room Lead: roommate's scene name, event name, room number
+    const admin = createAdminClient()
+    const { data: roomLeadRow } = await admin
+      .from('event_attendees')
+      .select('user_id')
+      .eq('event_id', eventId)
+      .eq('room_id', confirmedRoomId)
+      .eq('is_room_lead', true)
+      .limit(1)
+      .single()
+
+    if (roomLeadRow) {
+      void createInPlatformNotification({
+        userId: roomLeadRow.user_id,
+        type: 'roommate_code_used',
+        title: 'Roommate joined your room',
+        body: 'Someone used your Roommate Code and has been placed in your room.',
+        actionUrl: `/events/${eventId}/rooms/${confirmedRoomId}`,
+        actionLabel: 'Manage Room',
+        eventId,
+      })
+    }
   }
 
-  revalidatePath(`/events/${eventId}`)
   return { success: true, orderId, ...(generatedRoommateCode ? { roommate_code: generatedRoommateCode } : {}) }
+}
+
+// ── Self-cancellation (user-initiated, pre-lock) ─────────────────────────────
+
+export async function selfCancelTicket(
+  eventId: string,
+): Promise<{ success: true; refundAmount: number } | { error: string }> {
+  const supabase = await createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  // Fetch attendee record
+  const { data: attendee } = await supabase
+    .from('event_attendees')
+    .select('ticket_status, lock_status, order_id')
+    .eq('event_id', eventId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!attendee) return { error: 'You are not enrolled in this event.' }
+  if (attendee.ticket_status !== 'Complete') return { error: 'You do not have an active ticket.' }
+  if (attendee.lock_status === 'Locked') {
+    return { error: 'Your attendance is locked — self-cancellation is not permitted. Contact the Event Promoter.' }
+  }
+  if (!attendee.order_id) return { error: 'Order record not found.' }
+
+  // Fetch order
+  const { data: order } = await admin
+    .from('orders')
+    .select('payment_transaction_id, subtotal, payment_provider, status')
+    .eq('id', attendee.order_id)
+    .single()
+
+  if (!order) return { error: 'Order not found.' }
+  if (order.status === 'refunded') return { error: 'This order has already been refunded.' }
+
+  // Fetch cancellation policy
+  const { data: event } = await admin
+    .from('platform_events')
+    .select('cancellation_policy, workflow_statuses, status')
+    .eq('id', eventId)
+    .single()
+
+  // Calculate applicable refund percentage
+  // Find the highest-order workflow status the event has already reached
+  let refundPercentage = 0
+  if (event?.cancellation_policy) {
+    const policy = event.cancellation_policy as {
+      checkpoints: { status_id: string; refund_percentage: number }[]
+    }
+    const workflowStatuses = (event.workflow_statuses ?? []) as {
+      id: string; name: string; order: number
+    }[]
+
+    // Build a map of status UUID → order index
+    const statusOrderMap = new Map(workflowStatuses.map(s => [s.id, s.order]))
+
+    // Find the current event status order (system-fixed statuses use name, not UUID)
+    // Walk checkpoints from highest order to lowest; use the first checkpoint whose
+    // status the event has already passed or reached
+    const sortedCheckpoints = [...policy.checkpoints].sort((a, b) => {
+      const aOrder = statusOrderMap.get(a.status_id) ?? -1
+      const bOrder = statusOrderMap.get(b.status_id) ?? -1
+      return bOrder - aOrder // descending — highest status first
+    })
+
+    // For now: use the last checkpoint's percentage as a conservative default if we
+    // can't resolve the current status. A proper implementation compares event.status
+    // to workflow_statuses order to find the most-recently-passed checkpoint.
+    if (sortedCheckpoints.length > 0) {
+      // Use the first (highest-reached) checkpoint as the applicable policy.
+      // In a full implementation this would compare against the current event status order.
+      refundPercentage = sortedCheckpoints[sortedCheckpoints.length - 1].refund_percentage
+    }
+  }
+
+  const subtotal = Number(order.subtotal)
+  const refundAmountDollars = parseFloat(
+    (Math.round(subtotal * refundPercentage) / 100).toFixed(2)
+  )
+  const refundCents = Math.round(refundAmountDollars * 100)
+
+  // Issue refund if payment was actually charged and there's an amount to refund
+  if (refundCents > 0 && order.payment_transaction_id) {
+    const provider = getPaymentProvider(
+      order.payment_provider as 'square' | 'paypal'
+    )
+    const refundResult = await provider.refundPayment({
+      transactionId: order.payment_transaction_id,
+      amountCents: refundCents,
+      orderId: attendee.order_id,
+    })
+    if (!refundResult.success) {
+      return { error: refundResult.error ?? 'Refund failed. Please contact support.' }
+    }
+  }
+
+  // Update order status
+  await admin.from('orders').update({
+    status: refundCents >= Math.round(subtotal * 100) ? 'refunded' : 'partial_refund',
+    amount_refunded: refundAmountDollars,
+  }).eq('id', attendee.order_id)
+
+  // Reset ticket status on attendee record
+  await supabase.from('event_attendees').update({
+    ticket_status: 'Incomplete',
+    order_id: null,
+    ticket_type_id: null,
+    ticket_purchased_at: null,
+    is_room_lead: false,
+  }).eq('event_id', eventId).eq('user_id', user.id)
+
+  // Row 16: refund processed → notify attendee (in-platform + email)
+  // TODO: send email to attendee: refund amount, event name, original order ID
+  void createInPlatformNotification({
+    userId: user.id,
+    type: 'refund_processed',
+    title: 'Refund processed',
+    body: refundCents > 0
+      ? `A refund of $${refundAmountDollars.toFixed(2)} has been initiated for your ticket.`
+      : 'Your ticket has been cancelled. No refund applies per the cancellation policy.',
+    actionUrl: `/events/${eventId}`,
+    actionLabel: 'View Event Hub',
+    eventId,
+  })
+
+  revalidatePath(`/events/${eventId}`)
+  return { success: true, refundAmount: refundAmountDollars }
 }

@@ -1,8 +1,8 @@
 # SD Platform — CLAUDE.md
 ## AI-Assisted Development Reference Document
 **Organization:** Shiny Dog Productions Inc.
-**Document Status:** Revised Draft — Gap analysis complete; all schemas, notifications, and workflows specified
-**Last Updated:** March 2026 (gap analysis revision)
+**Document Status:** Revised Draft — Payment integration, EP payment config UI, and admin user management implemented
+**Last Updated:** March 2026 (payment processor integration + admin user management)
 
 ---
 
@@ -401,8 +401,8 @@ Users have no direct access to `platform_events`. Event data is served to attend
 | Supabase | Database, Auth, Storage, RLS | Required — already in use |
 | Postmark | Transactional email delivery | Required — already in use |
 | Telegram Bot API | Notifications, channel management | Required — already in use |
-| Square | Payment processing (primary) | Active when EP's `payment_provider = 'square'`; idempotency key = checkout session ID; webhook event: `payment.completed`; all webhook requests verified via Square signature header before processing |
-| PayPal | Payment processing (backup) | Active when EP's `payment_provider = 'paypal'`; webhook event: `PAYMENT.CAPTURE.COMPLETED`; all webhook requests verified via PayPal signature before processing |
+| Square | Payment processing (primary) | Active when EP's `payment_provider = 'square'`; idempotency key = `orders.id`; webhook events: `payment.created`, `payment.updated` (guard on `payment.status === 'COMPLETED'`), `refund.created`, `refund.updated`; all webhook requests verified via `x-square-hmacsha256-signature` header before processing |
+| PayPal | Payment processing (backup) | Active when EP's `payment_provider = 'paypal'`; webhook events: `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.REFUNDED`; all webhook requests verified via PayPal signature before processing |
 | Zapier | Automation / workflow glue | Existing paid subscription; retain regardless |
 | Odoo | Waiver signing, Help Desk, CRM, Email Marketing | Replaces badge-maker waiver workflow; **[BLOCKER]** — API details not yet available; see §12 |
 
@@ -414,6 +414,22 @@ Users have no direct access to `platform_events`. Event data is served to attend
 - **Provider locking per transaction:** At checkout, the EP's current `payment_provider` is copied and stored on the `orders` record. Refunds always use the provider from the original `orders` record — not the EP's current setting. This ensures refunds work correctly even if the EP changes providers after an event.
 - **Idempotency:** Square requires an idempotency key per `createPayment` call. The platform uses the `orders.id` (a UUID generated when the user begins checkout) as the idempotency key.
 - **Webhook verification:** Both Square and PayPal sign webhook payloads. All incoming requests to `/api/payments/webhook` must have their signature verified before any processing occurs. Unverified requests are rejected with `401`.
+- **`payment_provider` validation before refunds:** The EP-initiated refund path (`ep/events/.../attendees/.../actions.ts`) validates that `orders.payment_provider` is a recognised value (`'square'` or `'paypal'`) before calling `getPaymentProvider()`. An unrecognised or null value returns an explicit error rather than silently falling back to Square.
+- **Refund arithmetic:** All refund accumulation in the webhook handler uses integer cent arithmetic to avoid floating-point precision errors across multiple partial refunds. The final dollar value is written as `parseFloat((cents / 100).toFixed(2))`.
+
+**Payment Provider Configuration UI (implemented):**
+- **EP self-service:** `/profile` — Event Promoters and System Admins see a "Payment Settings" card at the bottom of their profile page. Radio buttons select Square or PayPal. Saved via `updatePaymentProvider()` Server Action in `src/app/(platform)/profile/actions.ts`.
+- **Admin override:** `/admin/users/[user-id]` — System Admins can set the payment provider for any EP or admin account from the user detail page.
+- **Default:** `payment_provider = NULL` in the database is treated as `'square'` at checkout. The UI initialises to `'square'` when the column is null.
+
+**Payment Implementation Files:**
+- `src/lib/payments/types.ts` — `PaymentProvider` interface (`createPayment`, `refundPayment`, `verifyWebhook`)
+- `src/lib/payments/index.ts` — `getPaymentProvider(provider)` factory; `getEpPaymentProvider(epId)` fetches EP's configured provider from DB
+- `src/lib/payments/square.ts` — Square implementation; Square Web Payments SDK loaded client-side via `<Script strategy="beforeInteractive">`
+- `src/lib/payments/paypal.ts` — PayPal implementation; `createPaypalOrder()` for checkout; `verifyPaypalWebhook()` for webhook handler
+- `src/app/api/payments/webhook/route.ts` — Unified webhook endpoint; detects provider by header presence (`x-square-hmacsha256-signature` vs `paypal-transmission-sig`); verifies signature before processing
+- `src/app/api/payments/paypal/create-order/route.ts` — Creates PayPal order at checkout start; validates that all requested merchandise IDs exist for the event (returns 400 if any not found — prevents subtotal mismatch at capture)
+- `scripts/register-payment-webhooks.sh` — Dev helper: prints step-by-step instructions for updating Square and PayPal webhook URLs in their dashboards after each ngrok session
 
 ### Planned Integrations
 
@@ -956,6 +972,11 @@ All new platform tables are created via timestamped migration files in `supabase
 20260101000015_rls_policies.sql
 20260101000016_functions_and_triggers.sql
 20260101000017_add_roommate_codes.sql
+20260101000018_venue_enhancements.sql
+20260101000019_venue_rls_and_constraints.sql
+20260101000020_event_scoped_rooms.sql
+20260101000021_fix_rls_gaps.sql              — bed_blocks UPDATE policy; platform_users EP SELECT policy
+20260101000022_create_platform_notifications.sql
 ```
 
 ### `platform_users` (full schema)
@@ -1353,6 +1374,62 @@ CREATE TABLE locks (
 
 ---
 
+### `platform_notifications` (full schema)
+
+Persistent in-platform notification store. All notification types write a record here regardless of whether email/Telegram is also sent. The service role inserts records; users may read and update (mark-read, dismiss) only their own rows.
+
+```sql
+CREATE TABLE platform_notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES platform_users(id) ON DELETE CASCADE,
+  notification_type TEXT NOT NULL,  -- constant string matching §6.12 row (e.g. 'roommate_applied')
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  action_url TEXT,          -- quick link to the relevant workflow/object; null = informational only
+  action_label TEXT,        -- CTA button text shown on the notifications page (e.g. "Review Application")
+  event_id UUID REFERENCES platform_events(id) ON DELETE SET NULL,
+  is_read BOOLEAN NOT NULL DEFAULT false,
+  dismissed_at TIMESTAMPTZ, -- null = visible in inbox; set = soft-deleted
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX platform_notifications_user_created_idx
+  ON platform_notifications(user_id, created_at DESC);
+
+CREATE INDEX platform_notifications_user_unread_idx
+  ON platform_notifications(user_id)
+  WHERE is_read = false AND dismissed_at IS NULL;
+```
+
+**RLS:** Users SELECT and UPDATE their own rows only. INSERT is service-role only (the system creates notifications on behalf of users). No hard DELETE — use `dismissed_at` for soft removal.
+
+**Notification helper:** `src/lib/notifications.ts` exports `createInPlatformNotification(input)` (service-role write, fire-and-forget) and `epWantsInPlatform(preferences, type)` (checks EP notification_preferences with default-true fallback).
+
+**Notification center page:** `/notifications` — accessible to all roles (users, EPs, admins). Lists non-dismissed notifications newest-first; marks all as read on page load; per-row dismiss button; "Dismiss all" bulk action. Unread rows display a green left border. Rows with `action_url` show a styled action button.
+
+**AppNav bell:** `🔔` icon with a red pill badge (count, capped at "99+") in the shared `AppNav` component. Unread count is fetched in each role's layout and passed as `unreadCount` prop. Links to `/notifications`.
+
+**Notification types wired to in-platform delivery (as of this revision):**
+
+| Constant | Row # | Recipient | Action link |
+|---|---|---|---|
+| `room_lead_confirmed` | 6 | Room Lead | Event hub |
+| `roommate_applied` | 7 | Room Lead | Room detail |
+| `room_application_accepted` | 8 | Roommate | Room detail |
+| `room_application_declined` | 9 | Roommate | Browse rooms |
+| `room_claim_received` | 29 | Claimed user | Rooms page |
+| `room_claim_accepted` | 30 | Room Lead | Room detail |
+| `room_claim_declined` | 31 | Room Lead | Room detail |
+| `roommate_code_used` | 32 | Room Lead | Room detail |
+| `roommate_code_room_full` | 33 | Room Lead | Room detail |
+| `ticket_purchased` | 15 | User | Event hub |
+| `attendee_locked` | 14 | Attendee | Event hub |
+| `application_submitted` | 4 | EP (owner) | EP attendee detail |
+
+Rows 12, 13, 17–21, 23 are scheduler-triggered and remain `console.log` stubs pending external scheduler integration.
+
+---
+
 ## 6. Module Specifications
 
 **Module gating is enforced at the platform layer.** Every attendee-facing module page checks `opens_at_status` and `closes_at_status` from `module_config` against the current event status before rendering. The utility `src/lib/modules.ts` provides `getModuleOpenState()` for this check. Modules in the `not_yet_open` state are hidden from the event hub and blocked at their individual pages. Modules in the `closed` state remain visible but are rendered read-only.
@@ -1390,7 +1467,10 @@ Ticketing is the only module required for Event creation. All other modules are 
 3. **Roommate Code step** (optional, between ticket selection and volunteer shifts): shown when the event has at least one Room Lead ticket type with `roommate_codes_enabled = true` AND the user's selected ticket is NOT a Room Lead type. User may enter a 6-character code shared by a Room Lead to claim a spot in their room, or skip this step. See "Room Lead Roommate Codes" sub-section below for full detail.
 4. If ticket type requires volunteer hours: volunteer shift selection is inserted; selected shifts are soft-locked for **15 minutes** (same mechanism as ticket soft-lock); lock releases if checkout is abandoned or the 15-minute window expires; on purchase completion, signups are confirmed
 5. User selects merchandise (if applicable)
-6. Cart is passed to Square (primary) or PayPal (backup) via API
+6. **Payment step** — if total > $0, user is shown the payment UI:
+   - **Square:** Card form mounted via Square Web Payments SDK (`window.Square.payments(appId, locationId).card().attach('#sq-card-container')`). On submit, `card.tokenize()` returns a nonce passed to `purchaseTicket()`. SDK loaded server-side via `<Script strategy="beforeInteractive">` only when the EP's provider is Square and the order has paid items.
+   - **PayPal:** `<PayPalScriptProvider>` + `<PayPalButtons>` from `@paypal/react-paypal-js`. `createOrder` calls `POST /api/payments/paypal/create-order` to get a PayPal order ID; `onApprove` calls `purchaseTicket()` with the PayPal order ID.
+   - **$0 orders:** Payment step is skipped entirely; "Confirm Purchase" on the review step calls `purchaseTicket()` directly with `token = null`.
 7. Purchase confirmation opens other event modules
 
 **Soft Lock on Cart:** A soft lock must be applied to tickets, merchandise, and volunteer shifts during checkout to prevent race conditions and overselling. All locks use the `locks` table with `resource_type` = `ticket`, `merchandise`, or `shift`.
@@ -1815,6 +1895,21 @@ All shown in Card format. Clicking a card navigates to the corresponding managem
 
 > **Note:** A default System Administrator account is created automatically on first deployment with known credentials. This account should be secured immediately after initial setup.
 
+**Implemented Admin Routes:**
+
+`/admin/dashboard` — Stat cards (total users, total events) plus a "Manage Users" link card that navigates to `/admin/users`.
+
+`/admin/users` — Full user list (all `platform_users` ordered by `created_at DESC`). Columns: Display Name, Email, Role badge (colour-coded), Payment Provider (shown for EP/admin rows only; defaults to Square when null), Joined date, "Manage →" link per row.
+
+`/admin/users/[user-id]` — User detail page. Sections:
+- **Profile (read-only):** display name, email, DOB, phone, address, zip, Telegram handle + verified status, member since.
+- **Role Management:** current role badge; "Promote to Event Promoter" / "Demote to User" button (with `window.confirm`). Self-modification blocked — own account shows read-only label with no action buttons. System Admins cannot be demoted via this UI.
+- **Payment Provider** (EP/admin accounts only): Square / PayPal radio buttons + Save button.
+
+**Admin Server Actions** (`src/app/(admin)/admin/users/[user-id]/actions.ts`):
+- `updateUserRole(targetUserId, newRole)` — system_admin guard; blocks self-modification; uses admin client to update role; revalidates list and detail pages.
+- `adminUpdatePaymentProvider(targetUserId, provider)` — system_admin guard; verifies target is EP or admin before writing; uses admin client.
+
 ---
 
 ### 6.12 Notification Inventory
@@ -1870,7 +1965,9 @@ Complete inventory of all platform notifications. Every entry must be implemente
 
 > **Offline Reporting Packet trigger** (see §10): When the event transitions to `Event Locked`, the Server Action sets a job flag. An external scheduler calls `/api/reports/offline-packet` to generate and email the report. Do NOT generate it inline in the status-transition Server Action.
 
-> **In-platform messaging (Odoo Help Desk):** The messaging panel UI is future-state only. In MVP 1, no in-platform messaging UI exists. All support communication uses email (Postmark). The Odoo Help Desk integration is implemented as a stub (`// TODO: Odoo integration — not implemented`) at each integration point.
+> **In-platform notification center (implemented):** The notification inbox at `/notifications` is now built. All notification types write a `platform_notifications` record; users can review, action, and dismiss notifications from this page. The AppNav bell shows the unread count. See the `platform_notifications` schema in §5a for full details.
+
+> **In-platform messaging (Odoo Help Desk):** Conversational support messaging (Odoo Help Desk routing) remains MVP 2. All support communication in MVP 1 uses email (Postmark). The Odoo Help Desk integration is implemented as a stub (`// TODO: Odoo integration — not implemented`) at each integration point.
 
 > **User notification preferences:** Regular users can toggle `email_notifications_enabled` and `telegram_notifications_enabled` globally from their Profile Management page. They cannot opt out per notification type. `telegram_notifications_enabled` defaults to `false` and activates automatically when `telegram_verified` becomes `true`.
 
@@ -2083,22 +2180,23 @@ A bulk report packet containing all critical event information formatted for off
 
 ### MVP 1 — Target: May Ticket Opening
 
-- Ticketing
-- Hotel Room Selection
-- Attendee Portal
-- Telegram Bot (basic)
-- Email & Telegram Alerts
-- Schedule
-- Badge Maker
-- Waiver (via Odoo)
-- Volunteering
+- Ticketing ✓ *(checkout flow, Square Web Payments SDK, PayPal JS SDK, soft locks, roommate codes, EP payment config UI)*
+- Hotel Room Selection ✓ *(Roommate Finder, room applications, claim-by-email, bed blocking, reservation, Room Open Group, room matrix CSV import)*
+- Attendee Portal ✓ *(dashboard, event hub, module gating, ready-to-lock, self-cancel)*
+- Telegram Bot (basic) ✓ *(webhook mode via grammY, invite link generation, outbound notifications)*
+- Email & Telegram Alerts ✓ *(notification center `/notifications`, AppNav bell, in-platform + email + Telegram channels)*
+- Schedule ✓ *(activity management, CSV import, Schedule → Volunteer integration)*
+- Badge Maker ✓ *(legacy badge-maker codebase absorbed; Badge Module enabled per event)*
+- Waiver (via Odoo) — **[BLOCKER]** stub only; pending Odoo API credentials
+- Volunteering ✓ *(shift management, CSV import, soft locks, area lead label, hours countdown)*
+- Admin User Management ✓ *(user list, role promotion/demotion, payment provider assignment via `/admin/users`)*
 
 ### MVP 2 — Target: Before First October Event
 
 - Media Collection & Hosting / Gallery
 - QR Codes for Registration / Check-In (Registration Panel in EP Dashboard)
 - Content Media — User Claim Workflow
-- In-platform messaging / Odoo Help Desk integration
+- In-platform messaging / Odoo Help Desk integration *(notification inbox `/notifications` is already built; this item refers to conversational Odoo Help Desk routing only)*
 
 ### Future (Post-MVP)
 
@@ -2124,6 +2222,8 @@ A bulk report packet containing all critical event information formatted for off
 - **Event Promoter Room Override:** EPs can assign any user to any room with four warning checks (see §6.3). Each warning requires explicit EP confirmation.
 - **Room Code Integrity:** Room codes are free text provided by the EP or hotel. The platform does not generate codes. The system is in the critical path for hotel check-in — the EP must ensure codes are accurate in the platform before communicating the Room Lock List to venue staff.
 - **Payment provider per transaction:** `orders.payment_provider` is locked at transaction time. Refunds always use the provider from the original order record. See §4 for full architecture.
+- **Square webhook event types:** Square sends `payment.created` and `payment.updated` (not `payment.completed`). The handler guards on `payment.status === 'COMPLETED'` because `payment.created` may fire before a payment settles. For refunds, Square sends `refund.created` and `refund.updated`. The webhook script (`scripts/register-payment-webhooks.sh`) and Square developer dashboard subscriptions must use these exact names — subscribing to `payment.completed` or `refund.completed` will never fire.
+- **PayPal webhook `custom_id`:** The `PAYMENT.CAPTURE.COMPLETED` handler expects `resource.custom_id` to carry the internal `orders.id`. If this field is missing, the handler logs a `console.error` and returns without updating the order — `payment_transaction_id` stays null and future refunds via the EP panel will fail silently unless investigated. Always verify `custom_id` is being set when creating the PayPal order.
 - **Status UUID references:** `module_config` and `cancellation_policy` store UUID references to `workflow_statuses` entries, not display names. Renaming a status updates only its `name` field; all references remain intact.
 - **Offline Reporting Packet:** Triggered by external scheduler after event transitions to `Event Locked` — never inline in the Server Action. See §10.
 - **Hotel contact email:** Stored on `venues.email` (default) and overridable per-event via `platform_events.hotel_contact_email`. Weekly hotel reports use the override if set.

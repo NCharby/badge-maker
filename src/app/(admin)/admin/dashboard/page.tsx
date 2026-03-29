@@ -57,6 +57,30 @@ export default async function AdminDashboardPage() {
           </div>
         ))}
       </div>
+
+      <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--sd-text)', marginBottom: '1rem' }}>
+        Management
+      </h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem' }}>
+        <a
+          href="/admin/users"
+          style={{
+            display: 'block',
+            background: 'var(--sd-card)',
+            border: '1px solid var(--sd-border)',
+            borderRadius: 'var(--sd-radius)',
+            padding: '1.25rem 1.5rem',
+            textDecoration: 'none',
+            color: 'var(--sd-text)',
+          }}
+        >
+          <div style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>👤</div>
+          <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Manage Users</div>
+          <div style={{ fontSize: '0.825rem', color: 'var(--sd-muted)' }}>
+            View all users, assign Event Promoter role, manage payment providers.
+          </div>
+        </a>
+      </div>
     </div>
   )
 }

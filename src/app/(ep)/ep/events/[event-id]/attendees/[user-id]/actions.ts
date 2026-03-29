@@ -1,7 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createInPlatformNotification } from '@/lib/notifications'
+import { getPaymentProvider } from '@/lib/payments'
 
 export async function updateApplicationStatus(
   eventId: string,
@@ -41,9 +43,35 @@ export async function updateApplicationStatus(
   }
 
   if (action === 'revoke_and_refund') {
-    // TODO: call refund API for order attendee.order_id — not yet implemented (Step 6)
-    console.log(`[TODO] initiate refund for order ${attendee.order_id}`)
-    // Mark ticket cancelled
+    if (attendee.order_id) {
+      const admin = createAdminClient()
+      const { data: order } = await admin
+        .from('orders')
+        .select('payment_transaction_id, subtotal, payment_provider')
+        .eq('id', attendee.order_id)
+        .single()
+
+      if (order?.payment_transaction_id) {
+        if (!order.payment_provider || !['square', 'paypal'].includes(order.payment_provider)) {
+          return { error: 'Cannot process refund: payment provider on this order is not recognized.' }
+        }
+        const provider = getPaymentProvider(order.payment_provider as 'square' | 'paypal')
+        const amountCents = Math.round(Number(order.subtotal) * 100)
+        const refundResult = await provider.refundPayment({
+          transactionId: order.payment_transaction_id,
+          amountCents,
+          orderId: attendee.order_id,
+        })
+        if (!refundResult.success) {
+          return { error: refundResult.error ?? 'Refund failed. Please try again or process the refund manually.' }
+        }
+        await admin
+          .from('orders')
+          .update({ status: 'refunded', amount_refunded: order.subtotal })
+          .eq('id', attendee.order_id)
+      }
+    }
+    // Reset ticket status regardless of whether a payment refund was needed
     await supabase
       .from('event_attendees')
       .update({ ticket_status: 'Incomplete', order_id: null })
@@ -59,7 +87,43 @@ export async function updateApplicationStatus(
     .eq('user_id', targetUserId)
   if (error) return { error: error.message }
 
-  // TODO: send notification to user on Approved/Declined — Step 12
+  // Row 14: user locked by EP → notify attendee (in-platform + email + Telegram)
+  // TODO: send email + Telegram to attendee: event name, confirmation
+  if (newStatus === 'Locked') {
+    void createInPlatformNotification({
+      userId: targetUserId,
+      type: 'attendee_locked',
+      title: 'Your attendance has been locked',
+      body: 'The Event Promoter has locked your attendance. No further changes can be made.',
+      actionUrl: `/events/${eventId}`,
+      actionLabel: 'View Event Hub',
+      eventId,
+    })
+  }
+
+  // Application approved/declined → notify attendee (in-platform + email + Telegram)
+  // TODO: send email + Telegram to attendee: event name, next steps
+  if (newStatus === 'Approved') {
+    void createInPlatformNotification({
+      userId: targetUserId,
+      type: 'application_approved',
+      title: 'Your application has been approved',
+      body: 'The Event Promoter has approved your application. Check your event hub for next steps.',
+      actionUrl: `/events/${eventId}`,
+      actionLabel: 'View Event Hub',
+      eventId,
+    })
+  } else if (newStatus === 'Declined') {
+    void createInPlatformNotification({
+      userId: targetUserId,
+      type: 'application_declined',
+      title: 'Your application was not approved',
+      body: 'The Event Promoter has reviewed your application and was unable to approve it at this time.',
+      actionUrl: `/events/${eventId}`,
+      actionLabel: 'View Event Hub',
+      eventId,
+    })
+  }
 
   revalidatePath(`/ep/events/${eventId}/attendees/${targetUserId}`)
   revalidatePath(`/ep/events/${eventId}/attendees`)

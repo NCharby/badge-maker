@@ -48,6 +48,33 @@ export async function updateProfile(data: ProfileUpdateData) {
   return { success: true }
 }
 
+export async function updatePaymentProvider(provider: 'square' | 'paypal') {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const { data: platformUser } = await supabase
+    .from('platform_users')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  if (!platformUser || !['event_promoter', 'system_admin'].includes(platformUser.role)) {
+    return { error: 'Access denied.' }
+  }
+
+  const { error } = await supabase
+    .from('platform_users')
+    .update({ payment_provider: provider })
+    .eq('id', user.id)
+
+  if (error) return { error: error.message }
+  revalidatePath('/profile')
+  return { success: true }
+}
+
 export async function requestEmailChange(newEmail: string) {
   const supabase = await createClient()
   const { error } = await supabase.auth.updateUser({ email: newEmail })

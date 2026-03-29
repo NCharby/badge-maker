@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect, useRef } from 'react'
+import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js'
 import { purchaseTicket } from './actions'
 import { validateRoommateCode } from './validateRoommateCode'
 
@@ -45,12 +46,29 @@ interface RoomInfo {
   nightlyTotal: number | null
 }
 
+// Square Web Payments SDK type shims (SDK loaded via Script tag, not npm)
+interface SquareCard {
+  attach(selector: string): Promise<void>
+  tokenize(): Promise<{ status: string; token?: string; errors?: Array<{ message: string }> }>
+  destroy(): void
+}
+interface SquarePaymentsInstance {
+  card(): Promise<SquareCard>
+}
+interface SquareSDK {
+  payments(appId: string, locationId: string): Promise<SquarePaymentsInstance>
+}
+
 interface Props {
   eventId: string
   ticketTypes: TicketType[]
   merchandise: MerchandiseItem[]
   volunteerShifts: VolunteerShift[]
   hasRoommateCodeFeature: boolean  // true if any Room Lead ticket type has roommate_codes_enabled
+  paymentProvider: 'square' | 'paypal'
+  squareAppId: string
+  squareLocationId: string
+  paypalClientId: string
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -91,7 +109,7 @@ function shiftsOverlapCheck(ids: string[], shifts: VolunteerShift[]): boolean {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-type Step = 'ticket' | 'roommate_code' | 'shifts' | 'merch' | 'review' | 'success'
+type Step = 'ticket' | 'roommate_code' | 'shifts' | 'merch' | 'review' | 'payment' | 'success'
 
 export default function TicketCheckoutClient({
   eventId,
@@ -99,6 +117,10 @@ export default function TicketCheckoutClient({
   merchandise,
   volunteerShifts,
   hasRoommateCodeFeature,
+  paymentProvider,
+  squareAppId,
+  squareLocationId,
+  paypalClientId,
 }: Props) {
   const [step, setStep] = useState<Step>('ticket')
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
@@ -118,6 +140,13 @@ export default function TicketCheckoutClient({
   // Code returned to Room Lead after purchase (for success screen)
   const [purchasedRoommateCode, setPurchasedRoommateCode] = useState<string | undefined>()
 
+  // Square card state
+  const squareCardRef = useRef<SquareCard | null>(null)
+  const [squareInitError, setSquareInitError] = useState('')
+
+  // PayPal pending state (PayPal callbacks can't use startTransition)
+  const [isPaypalPending, setIsPaypalPending] = useState(false)
+
   const selectedTicket = ticketTypes.find(t => t.id === selectedTicketId)
 
   // Merchandise items eligible for the selected ticket type
@@ -125,6 +154,9 @@ export default function TicketCheckoutClient({
     if (!m.ticket_type_restriction || m.ticket_type_restriction.length === 0) return true
     return selectedTicketId !== null && m.ticket_type_restriction.includes(selectedTicketId)
   })
+
+  const selectedMerchItems = selectedMerchIds.map(id => eligibleMerch.find(m => m.id === id)).filter(Boolean) as MerchandiseItem[]
+  const total = (selectedTicket ? Number(selectedTicket.price) : 0) + selectedMerchItems.reduce((s, m) => s + Number(m.price), 0)
 
   // Show roommate code step when: feature is enabled AND selected ticket is NOT a Room Lead ticket
   const showRoommateCodeStep =
@@ -211,30 +243,109 @@ export default function TicketCheckoutClient({
     nextStep()
   }
 
+  // Shared purchase finalizer — called with null for $0 orders, or a payment token
+  async function doFinalizePurchase(
+    token: { provider: 'square'; nonce: string } | { provider: 'paypal'; paypalOrderId: string } | null
+  ) {
+    if (!selectedTicketId) return
+    const result = await purchaseTicket(
+      eventId,
+      selectedTicketId,
+      selectedShiftIds,
+      selectedMerchIds,
+      confirmedRoomCode ?? undefined,
+      token,
+    )
+    if ('error' in result) {
+      setError(result.error)
+    } else {
+      setOrderId(result.orderId)
+      setPurchasedRoommateCode(result.roommate_code)
+      setStep('success')
+    }
+  }
+
+  // $0 order confirmation — skips payment step
   function handleConfirm() {
     if (!selectedTicketId) return
     setError('')
-    startTransition(async () => {
-      const result = await purchaseTicket(
-        eventId,
-        selectedTicketId,
-        selectedShiftIds,
-        selectedMerchIds,
-        confirmedRoomCode ?? undefined,
-      )
-      if ('error' in result) {
-        setError(result.error)
-      } else {
-        setOrderId(result.orderId)
-        setPurchasedRoommateCode(result.roommate_code)
-        setStep('success')
+    startTransition(() => doFinalizePurchase(null))
+  }
+
+  // Square card initialization when the payment step mounts
+  useEffect(() => {
+    if (step !== 'payment' || paymentProvider !== 'square') return
+    let mounted = true
+    setSquareInitError('')
+    squareCardRef.current = null
+
+    async function initCard() {
+      try {
+        const sq = (window as unknown as { Square?: SquareSDK }).Square
+        if (!sq) {
+          if (mounted) setSquareInitError('Payment SDK not loaded. Please refresh the page and try again.')
+          return
+        }
+        const payments = await sq.payments(squareAppId, squareLocationId)
+        const card = await payments.card()
+        await card.attach('#sq-card-container')
+        if (mounted) squareCardRef.current = card
+      } catch {
+        if (mounted) setSquareInitError('Failed to load card form. Please refresh and try again.')
       }
+    }
+    initCard()
+
+    return () => {
+      mounted = false
+      if (squareCardRef.current) {
+        squareCardRef.current.destroy()
+        squareCardRef.current = null
+      }
+    }
+  }, [step, paymentProvider, squareAppId, squareLocationId])
+
+  // Square pay handler — tokenizes the card then finalizes purchase
+  function handleSquarePay() {
+    setError('')
+    startTransition(async () => {
+      if (!squareCardRef.current) {
+        setError('Card form not ready. Please wait a moment and try again.')
+        return
+      }
+      const tokenResult = await squareCardRef.current.tokenize()
+      if (tokenResult.status !== 'OK' || !tokenResult.token) {
+        const msg = tokenResult.errors?.[0]?.message ?? 'Card verification failed. Please check your card details.'
+        setError(msg)
+        return
+      }
+      await doFinalizePurchase({ provider: 'square', nonce: tokenResult.token })
     })
   }
 
-  // ── Total ─────────────────────────────────────────────────────────────────────
-  const selectedMerchItems = selectedMerchIds.map(id => eligibleMerch.find(m => m.id === id)).filter(Boolean) as MerchandiseItem[]
-  const total = (selectedTicket ? Number(selectedTicket.price) : 0) + selectedMerchItems.reduce((s, m) => s + Number(m.price), 0)
+  // PayPal: create a server-side order before the popup opens
+  async function paypalCreateOrder(): Promise<string> {
+    const res = await fetch('/api/payments/paypal/create-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventId,
+        ticketTypeId: selectedTicketId,
+        merchandiseIds: selectedMerchIds,
+      }),
+    })
+    const data = await res.json()
+    if (!data.id) throw new Error(data.error ?? 'Failed to create PayPal order')
+    return data.id as string
+  }
+
+  // PayPal: called after buyer approves the order in the popup
+  async function paypalOnApprove(data: { orderID: string }) {
+    setIsPaypalPending(true)
+    setError('')
+    await doFinalizePurchase({ provider: 'paypal', paypalOrderId: data.orderID })
+    setIsPaypalPending(false)
+  }
 
   // ── Empty state ───────────────────────────────────────────────────────────────
   if (ticketTypes.length === 0) {
@@ -550,6 +661,12 @@ export default function TicketCheckoutClient({
 
   // ── Step 4: Review & confirm ──────────────────────────────────────────────────
   if (step === 'review' && selectedTicket) {
+    // $0 order → confirm directly; paid order → go to payment step
+    const reviewAction = total > 0
+      ? () => { setError(''); setStep('payment') }
+      : handleConfirm
+    const reviewLabel = total > 0 ? 'Continue to Payment →' : 'Confirm Purchase'
+
     return card(
       <>
         <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '16px' }}>Review Your Order</h2>
@@ -606,7 +723,91 @@ export default function TicketCheckoutClient({
           <p style={{ fontSize: '12px', color: 'var(--sd-red)', marginBottom: '12px' }}>{error}</p>
         )}
 
-        {navRow('Back', 'Confirm Purchase', false, handleConfirm)}
+        {navRow('Back', reviewLabel, false, reviewAction)}
+      </>
+    )
+  }
+
+  // ── Step 5: Payment ───────────────────────────────────────────────────────────
+  if (step === 'payment') {
+    return card(
+      <>
+        <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '4px' }}>Payment</h2>
+        <p style={{ fontSize: '13px', color: 'var(--sd-muted)', marginBottom: '24px' }}>
+          Total due: <strong style={{ color: 'var(--sd-text)' }}>{formatPrice(total)}</strong>
+        </p>
+
+        {/* ── Square card form ── */}
+        {paymentProvider === 'square' && (
+          <>
+            {squareInitError ? (
+              <p style={{ fontSize: '13px', color: 'var(--sd-red)', marginBottom: '16px' }}>{squareInitError}</p>
+            ) : (
+              // Square SDK injects the card form into this div
+              <div id="sq-card-container" style={{ marginBottom: '20px', minHeight: '89px' }} />
+            )}
+            {error && (
+              <p style={{ fontSize: '12px', color: 'var(--sd-red)', marginBottom: '12px' }}>{error}</p>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                onClick={() => { setError(''); setStep('review') }}
+                disabled={isPending}
+                style={{ padding: '8px 16px', borderRadius: '7px', border: '1px solid var(--sd-border)', background: 'none', color: 'var(--sd-muted)', fontSize: '13px', cursor: 'pointer' }}
+              >
+                ← Back
+              </button>
+              <button
+                onClick={handleSquarePay}
+                disabled={isPending || !!squareInitError}
+                style={{
+                  padding: '9px 20px', borderRadius: '7px', border: 'none',
+                  background: isPending || !!squareInitError ? '#E5E7EB' : 'var(--sd-green)',
+                  color: isPending || !!squareInitError ? 'var(--sd-muted)' : '#fff',
+                  fontSize: '13px', fontWeight: 600,
+                  cursor: isPending || !!squareInitError ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {isPending ? 'Processing…' : `Pay ${formatPrice(total)}`}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── PayPal buttons ── */}
+        {paymentProvider === 'paypal' && (
+          <>
+            {error && (
+              <p style={{ fontSize: '12px', color: 'var(--sd-red)', marginBottom: '12px' }}>{error}</p>
+            )}
+            {isPaypalPending && (
+              <p style={{ fontSize: '13px', color: 'var(--sd-muted)', textAlign: 'center', marginBottom: '16px' }}>
+                Processing payment…
+              </p>
+            )}
+            <PayPalScriptProvider options={{ clientId: paypalClientId, currency: 'USD', intent: 'capture' }}>
+              <PayPalButtons
+                style={{ layout: 'vertical', shape: 'rect' }}
+                disabled={isPaypalPending}
+                createOrder={paypalCreateOrder}
+                onApprove={paypalOnApprove}
+                onError={(err) => {
+                  console.error('[PayPal] onError:', err)
+                  setError('PayPal encountered an error. Please try again.')
+                }}
+              />
+            </PayPalScriptProvider>
+            <div style={{ marginTop: '12px' }}>
+              <button
+                onClick={() => { setError(''); setStep('review') }}
+                disabled={isPaypalPending}
+                style={{ padding: '8px 16px', borderRadius: '7px', border: '1px solid var(--sd-border)', background: 'none', color: 'var(--sd-muted)', fontSize: '13px', cursor: 'pointer' }}
+              >
+                ← Back to review
+              </button>
+            </div>
+          </>
+        )}
       </>
     )
   }

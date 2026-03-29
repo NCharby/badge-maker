@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createInPlatformNotification } from '@/lib/notifications'
 
 export type ValidateRoommateCodeResult =
   | { valid: false; reason: 'invalid_code' | 'room_not_selected' | 'room_full' }
@@ -97,8 +98,28 @@ export async function validateRoommateCode(
     (activeLockCount ?? 0)
 
   if (availableSpots <= 0) {
-    // Notification row 33: Room Lead notified their room is full (stub)
-    console.log(`[notification-33] room_full code attempt: roomLeadUserId=${leadAttendee.user_id} eventId=${eventId} roomNumber=${room.number}`)
+    // Notification row 33: Room Lead notified their room is full — dedup within 1 hour
+    // TODO: send email + Telegram to Room Lead: event name, room number
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { count: recentCount } = await admin
+      .from('platform_notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', leadAttendee.user_id)
+      .eq('notification_type', 'roommate_code_room_full')
+      .eq('event_id', eventId)
+      .gte('created_at', oneHourAgo)
+
+    if ((recentCount ?? 0) === 0) {
+      void createInPlatformNotification({
+        userId: leadAttendee.user_id,
+        type: 'roommate_code_room_full',
+        title: 'Roommate Code attempt — room full',
+        body: `Someone tried to use your Roommate Code but your room is currently full.`,
+        actionUrl: `/events/${eventId}/rooms/${roomId}`,
+        actionLabel: 'Manage Room',
+        eventId,
+      })
+    }
     return { valid: false, reason: 'room_full' }
   }
 

@@ -4,6 +4,8 @@ import Link from 'next/link'
 import RoomFinderClient from './RoomFinderClient'
 import InvitationBanner from './InvitationBanner'
 import type { RoomFinderCard, PendingInvitation, MyApplication, IncomingApplication, AttendeeRoomState } from './actions'
+import type { WorkflowStatus, ModuleConfig } from '@/types/platform'
+import { getModuleOpenState } from '@/lib/modules'
 
 export default async function RoomsPage({
   params,
@@ -21,10 +23,18 @@ export default async function RoomsPage({
   // Fetch event (users have no RLS on platform_events)
   const { data: event } = await admin
     .from('platform_events')
-    .select('id, slug, title, start_date, end_date, room_lock_in_date')
+    .select('id, slug, title, start_date, end_date, room_lock_in_date, status, module_config, workflow_statuses')
     .eq('id', eventId)
     .single()
   if (!event) notFound()
+
+  // Gate on room module open state (room_selection = Basic Event Rooms; venue = Venue module)
+  const moduleConfig = (event.module_config ?? {}) as Record<string, ModuleConfig | undefined>
+  const workflowStatuses = (event.workflow_statuses ?? []) as WorkflowStatus[]
+  const roomCfg = moduleConfig.room_selection ?? moduleConfig.venue
+  if (!roomCfg?.enabled) redirect(`/events/${eventId}`)
+  const roomModuleState = getModuleOpenState(roomCfg, event.status, workflowStatuses)
+  if (roomModuleState === 'not_yet_open') redirect(`/events/${eventId}`)
 
   // Fetch attendee record
   const { data: attendee } = await supabase

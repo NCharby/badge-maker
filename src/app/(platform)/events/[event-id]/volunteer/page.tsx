@@ -42,6 +42,7 @@ export default async function VolunteerPage({
   // Check volunteering module open state
   const workflowStatuses = (event.workflow_statuses ?? []) as WorkflowStatus[]
   const volCfg = (event.module_config as Record<string, { enabled?: boolean; required?: boolean; opens_at_status?: string | null; closes_at_status?: string | null } | undefined> | null)?.volunteering
+  if (!volCfg?.enabled) redirect(`/events/${eventId}`)
   let volModuleState: ModuleOpenState = 'open'
   if (volCfg?.enabled) {
     volModuleState = getModuleOpenState(

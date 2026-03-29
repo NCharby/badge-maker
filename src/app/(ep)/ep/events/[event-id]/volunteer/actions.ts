@@ -237,10 +237,10 @@ export async function toggleAreaLead(
   if (!user) return { error: 'Not authenticated.' }
   if (!await verifyEpOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
 
-  // Verify the signup belongs to a shift in this event
+  // Verify the signup belongs to a shift in this event; fetch user_id for notifications
   const { data: signup } = await admin
     .from('user_volunteer_signups')
-    .select('shift_id')
+    .select('shift_id, user_id')
     .eq('id', signupId)
     .single()
 
@@ -248,7 +248,7 @@ export async function toggleAreaLead(
 
   const { data: shift } = await admin
     .from('volunteer_shifts')
-    .select('id')
+    .select('id, name')
     .eq('id', signup.shift_id)
     .eq('event_id', eventId)
     .single()
@@ -261,6 +261,14 @@ export async function toggleAreaLead(
     .eq('id', signupId)
 
   if (error) return { error: error.message }
+
+  // Row 27 / Row 28: area lead assigned/removed → notify volunteer (Email + Telegram)
+  // TODO: send email + Telegram to volunteer: shift name, event name, assigned/removed message
+  if (isLead) {
+    console.log(`[TODO] row 27: area lead assigned — user ${signup.user_id}, shift "${shift.name}", event ${eventId}`)
+  } else {
+    console.log(`[TODO] row 28: area lead removed — user ${signup.user_id}, shift "${shift.name}", event ${eventId}`)
+  }
 
   revalidatePath(`/ep/events/${eventId}/volunteer`)
   return { success: true }

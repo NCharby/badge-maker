@@ -1,6 +1,7 @@
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import Script from 'next/script'
 import TicketCheckoutClient from './TicketCheckoutClient'
 import type { WorkflowStatus } from '@/types/platform'
 import { getModuleOpenState, getOpensAtName } from '@/lib/modules'
@@ -44,6 +45,20 @@ export default async function TicketPage({
   // Check ticketing module open state
   const workflowStatuses = (event.workflow_statuses ?? []) as WorkflowStatus[]
   const ticketingCfg = (event.module_config as Record<string, { enabled?: boolean; required?: boolean; opens_at_status?: string | null; closes_at_status?: string | null } | undefined> | null)?.ticketing
+  if (!ticketingCfg?.enabled) {
+    return (
+      <div style={{ maxWidth: '640px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+        <div style={{ marginBottom: '1.5rem' }}>
+          <Link href={`/events/${eventId}`} style={{ fontSize: '13px', color: 'var(--sd-green)', textDecoration: 'none' }}>
+            ← {event.title}
+          </Link>
+        </div>
+        <p style={{ fontSize: '14px', color: 'var(--sd-muted)' }}>
+          Ticketing is not available for this event.
+        </p>
+      </div>
+    )
+  }
   if (ticketingCfg?.enabled) {
     const moduleState = getModuleOpenState(
       { enabled: true, required: ticketingCfg.required ?? true, opens_at_status: ticketingCfg.opens_at_status ?? null, closes_at_status: ticketingCfg.closes_at_status ?? null },
@@ -201,22 +216,51 @@ export default async function TicketPage({
     volunteerShifts = (shifts ?? []) as typeof volunteerShifts
   }
 
+  // Fetch EP's payment provider — stored on the EP's platform_users record
+  const { data: epProviderRow } = await adminSupabase
+    .from('platform_events')
+    .select('owner_id, platform_users!owner_id(payment_provider)')
+    .eq('id', eventId)
+    .single()
+  const epPaymentProvider =
+    (epProviderRow?.platform_users as { payment_provider?: string | null } | null)
+      ?.payment_provider === 'paypal' ? 'paypal' : 'square'
+
+  const squareAppId = process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID ?? ''
+  const squareLocationId = process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID ?? ''
+  const paypalClientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID ?? ''
+  const squareScriptSrc = process.env.SQUARE_ENVIRONMENT === 'production'
+    ? 'https://web.squarecdn.com/v1/square.js'
+    : 'https://sandbox.web.squarecdn.com/v1/square.js'
+
+  // Determine if any ticket type has a non-zero price (for deciding whether to load payment SDK)
+  const hasPaidTickets = (ticketTypes ?? []).some(t => Number(t.price) > 0)
+
   return (
-    <div style={{ maxWidth: '640px', margin: '0 auto', padding: '2rem 1.5rem' }}>
-      {backLink}
-      <h1 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '4px' }}>
-        Get Your Ticket
-      </h1>
-      <p style={{ fontSize: '13px', color: 'var(--sd-muted)', marginBottom: '24px' }}>
-        {event.title}
-      </p>
-      <TicketCheckoutClient
-        eventId={eventId}
-        ticketTypes={(ticketTypes ?? []) as Parameters<typeof TicketCheckoutClient>[0]['ticketTypes']}
-        merchandise={(merchandise ?? []) as Parameters<typeof TicketCheckoutClient>[0]['merchandise']}
-        volunteerShifts={volunteerShifts}
-        hasRoommateCodeFeature={hasRoommateCodeFeature}
-      />
-    </div>
+    <>
+      {epPaymentProvider === 'square' && hasPaidTickets && (
+        <Script src={squareScriptSrc} strategy="beforeInteractive" />
+      )}
+      <div style={{ maxWidth: '640px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+        {backLink}
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '4px' }}>
+          Get Your Ticket
+        </h1>
+        <p style={{ fontSize: '13px', color: 'var(--sd-muted)', marginBottom: '24px' }}>
+          {event.title}
+        </p>
+        <TicketCheckoutClient
+          eventId={eventId}
+          ticketTypes={(ticketTypes ?? []) as Parameters<typeof TicketCheckoutClient>[0]['ticketTypes']}
+          merchandise={(merchandise ?? []) as Parameters<typeof TicketCheckoutClient>[0]['merchandise']}
+          volunteerShifts={volunteerShifts}
+          hasRoommateCodeFeature={hasRoommateCodeFeature}
+          paymentProvider={epPaymentProvider}
+          squareAppId={squareAppId}
+          squareLocationId={squareLocationId}
+          paypalClientId={paypalClientId}
+        />
+      </div>
+    </>
   )
 }

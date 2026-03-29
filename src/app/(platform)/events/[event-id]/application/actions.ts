@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createInPlatformNotification, epWantsInPlatform } from '@/lib/notifications'
 
 export async function saveDraft(
   eventId: string,
@@ -62,6 +63,10 @@ export async function submitApplication(
     .eq('user_id', user.id)
     .single()
 
+  // Track whether this is a re-submission (attendee already submitted before)
+  // Incomplete / In Progress = never submitted; any other status = previously submitted
+  const isResubmission = !!attendee && !['Incomplete', 'In Progress'].includes(attendee.application_status)
+
   if (!attendee) {
     // First submission — create the attendee record. Submitting an application IS the enrollment action.
     const { error: enrollError } = await admin
@@ -94,8 +99,37 @@ export async function submitApplication(
     .eq('user_id', user.id)
   if (statusError) return { error: statusError.message }
 
-  // TODO: send notification — row 4 (application submitted → EP)
-  console.log(`[notification] application submitted: user=${user.id} event=${eventId}`)
+  // Row 4 (first submit) / Row 5 (re-submit) → notify EP (configurable; default true)
+  // TODO: send email / Telegram to EP per their notification_preferences
+  const notificationType = isResubmission ? 'application_updated' : 'application_submitted'
+  const { data: eventRow } = await admin
+    .from('platform_events')
+    .select('owner_id')
+    .eq('id', eventId)
+    .single()
+
+  if (eventRow) {
+    const { data: epProfile } = await admin
+      .from('platform_users')
+      .select('notification_preferences')
+      .eq('id', eventRow.owner_id)
+      .single()
+
+    const prefs = epProfile?.notification_preferences as Record<string, { in_platform?: boolean }> | null
+    if (epWantsInPlatform(prefs, notificationType)) {
+      void createInPlatformNotification({
+        userId: eventRow.owner_id,
+        type: notificationType,
+        title: isResubmission ? 'Application updated' : 'Application submitted',
+        body: isResubmission
+          ? 'An attendee has updated and re-submitted their application.'
+          : 'An attendee has submitted their application.',
+        actionUrl: `/ep/events/${eventId}/attendees/${user.id}`,
+        actionLabel: 'Review Application',
+        eventId,
+      })
+    }
+  }
 
   revalidatePath(`/events/${eventId}/application`)
   revalidatePath(`/events/${eventId}`)

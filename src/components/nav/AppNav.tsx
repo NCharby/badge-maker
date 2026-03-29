@@ -8,9 +8,10 @@ interface AppNavProps {
     email: string
     role: string
   } | null
+  unreadCount?: number
 }
 
-export default function AppNav({ user }: AppNavProps) {
+export default function AppNav({ user, unreadCount = 0 }: AppNavProps) {
   const role = user?.role ?? 'user'
   const displayName = user ? getDisplayName(user) : ''
   const initials = displayName.slice(0, 2).toUpperCase()
@@ -97,6 +98,31 @@ export default function AppNav({ user }: AppNavProps) {
         </Link>
         <Link href="/dashboard" style={{ color: linkColor, textDecoration: 'none', fontSize: '0.9rem' }}>
           My Attendee Events
+        </Link>
+        <Link
+          href="/notifications"
+          title="Notifications"
+          style={{ position: 'relative', color: linkColor, textDecoration: 'none', display: 'flex', alignItems: 'center' }}
+        >
+          <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>🔔</span>
+          {unreadCount > 0 && (
+            <span style={{
+              position: 'absolute',
+              top: '-6px',
+              right: '-8px',
+              background: 'var(--sd-red)',
+              color: '#fff',
+              fontSize: '10px',
+              fontWeight: 700,
+              lineHeight: 1,
+              padding: '2px 5px',
+              borderRadius: '999px',
+              minWidth: '16px',
+              textAlign: 'center',
+            }}>
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </Link>
         <Link href="/profile" title={displayName}>
           <div

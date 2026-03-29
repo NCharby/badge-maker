@@ -2,6 +2,7 @@
 
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { createInPlatformNotification } from '@/lib/notifications'
 
 // ── Shared types ────────────────────────────────────────────────────────────
 
@@ -103,7 +104,15 @@ export async function selectRoom(
 
   // Notification row 6 — Room Lead confirms room selection
   // TODO: send email to Room Lead: event name, room number, room type, check-in/out date
-  console.log(`[notification-6] Room Lead confirmed room: userId=${user.id} roomId=${roomId} eventId=${eventId}`)
+  void createInPlatformNotification({
+    userId: user.id,
+    type: 'room_lead_confirmed',
+    title: 'Room selected',
+    body: 'You have claimed your room. Your selection is now visible in the Roommate Finder.',
+    actionUrl: `/events/${eventId}`,
+    actionLabel: 'View Event Hub',
+    eventId,
+  })
 
   revalidatePath(`/events/${eventId}/rooms`)
 }
@@ -160,10 +169,8 @@ export async function applyForRoom(
   if (insertError) return { error: 'Failed to submit application. Please try again.' }
 
   // Notification row 7 — Roommate applies for bed spot
-  // TODO: send email + Telegram + in-platform to Room Lead: applicant scene name, event name, room/spot
-  console.log(`[notification-7] Roommate applied: applicantUserId=${user.id} roomId=${roomId} eventId=${eventId}`)
-
-  // Lookup Room Lead for notification (admin — cross-user read)
+  // TODO: send email + Telegram to Room Lead: applicant scene name, event name, room/spot
+  // Lookup Room Lead for in-platform notification (admin — cross-user read)
   const { data: roomLead } = await admin
     .from('event_attendees')
     .select('user_id')
@@ -175,7 +182,15 @@ export async function applyForRoom(
     .single()
 
   if (roomLead) {
-    console.log(`[notification-7] Room Lead to notify: userId=${roomLead.user_id}`)
+    void createInPlatformNotification({
+      userId: roomLead.user_id,
+      type: 'roommate_applied',
+      title: 'Roommate application',
+      body: 'Someone has applied for a spot in your room.',
+      actionUrl: `/events/${eventId}/rooms/${roomId}`,
+      actionLabel: 'Manage Room',
+      eventId,
+    })
   }
 
   revalidatePath(`/events/${eventId}/rooms`)
@@ -295,8 +310,16 @@ export async function claimRoommateByEmail(
   if (insertError) return { error: 'Failed to send invitation. Please try again.' }
 
   // Notification row 29 — Room Lead claims user by email
-  // TODO: send email + Telegram + in-platform to claimed user: Room Lead scene name, room name/number, event name, "Accept or decline in your portal"
-  console.log(`[notification-29] Room Lead claimed by email: roomLeadUserId=${user.id} targetUserId=${targetUser.id} roomId=${roomId} eventId=${eventId}`)
+  // TODO: send email + Telegram to claimed user: Room Lead scene name, room name/number, event name
+  void createInPlatformNotification({
+    userId: targetUser.id,
+    type: 'room_claim_received',
+    title: 'Room invitation',
+    body: 'A Room Lead has invited you to join their room. Accept or decline in your portal.',
+    actionUrl: `/events/${eventId}/rooms`,
+    actionLabel: 'Accept or Decline',
+    eventId,
+  })
 
   revalidatePath(`/events/${eventId}/rooms`)
   revalidatePath(`/events/${eventId}/rooms/${roomId}`)
@@ -415,13 +438,29 @@ export async function acceptApplication(
     for (const other of otherPending) {
       // Notification row 9 — room application declined (superseded)
       // TODO: send email + Telegram to applicant: event name
-      console.log(`[notification-9] Application superseded: applicantUserId=${other.applicant_user_id} roomId=${application.room_id} eventId=${eventId}`)
+      void createInPlatformNotification({
+        userId: other.applicant_user_id,
+        type: 'room_application_declined',
+        title: 'Room application not accepted',
+        body: 'Your room application was not accepted — another applicant was selected for this spot.',
+        actionUrl: `/events/${eventId}/rooms`,
+        actionLabel: 'Browse Rooms',
+        eventId,
+      })
     }
   }
 
   // Notification row 8 — room application accepted
   // TODO: send email + Telegram to accepted roommate: event name, room number, room type
-  console.log(`[notification-8] Application accepted: applicantUserId=${application.applicant_user_id} roomId=${application.room_id} eventId=${eventId}`)
+  void createInPlatformNotification({
+    userId: application.applicant_user_id,
+    type: 'room_application_accepted',
+    title: 'Room application accepted',
+    body: 'Your room application was accepted. You have been placed in the room.',
+    actionUrl: `/events/${eventId}/rooms/${application.room_id}`,
+    actionLabel: 'View Room',
+    eventId,
+  })
 
   revalidatePath(`/events/${eventId}/rooms`)
   revalidatePath(`/events/${eventId}/rooms/${application.room_id}`)
@@ -469,7 +508,15 @@ export async function declineApplication(
 
   // Notification row 9 — room application declined
   // TODO: send email + Telegram to applicant: event name
-  console.log(`[notification-9] Application declined: applicantUserId=${application.applicant_user_id} roomId=${application.room_id} eventId=${eventId}`)
+  void createInPlatformNotification({
+    userId: application.applicant_user_id,
+    type: 'room_application_declined',
+    title: 'Room application declined',
+    body: 'Your room application was declined.',
+    actionUrl: `/events/${eventId}/rooms`,
+    actionLabel: 'Browse Rooms',
+    eventId,
+  })
 
   revalidatePath(`/events/${eventId}/rooms`)
   revalidatePath(`/events/${eventId}/rooms/${application.room_id}`)
@@ -570,8 +617,27 @@ export async function acceptInvitation(
     .neq('id', applicationId)
 
   // Notification row 30 — claimed user accepts Room Lead's claim
-  // TODO: send email + in-platform to Room Lead: accepted user's scene name, event name, room number
-  console.log(`[notification-30] Roommate accepted invitation: acceptedUserId=${user.id} roomId=${roomId} eventId=${eventId}`)
+  // TODO: send email to Room Lead: accepted user's scene name, event name, room number
+  const { data: roomLeadRow } = await admin
+    .from('event_attendees')
+    .select('user_id')
+    .eq('event_id', eventId)
+    .eq('room_id', roomId)
+    .eq('is_room_lead', true)
+    .limit(1)
+    .single()
+
+  if (roomLeadRow) {
+    void createInPlatformNotification({
+      userId: roomLeadRow.user_id,
+      type: 'room_claim_accepted',
+      title: 'Roommate accepted your invitation',
+      body: 'Someone accepted your room invitation and has been placed in your room.',
+      actionUrl: `/events/${eventId}/rooms/${roomId}`,
+      actionLabel: 'Manage Room',
+      eventId,
+    })
+  }
 
   revalidatePath(`/events/${eventId}/rooms`)
   revalidatePath(`/events/${eventId}/rooms/${roomId}`)
@@ -584,6 +650,7 @@ export async function declineInvitation(
   eventId: string,
 ): Promise<{ error?: string } | void> {
   const supabase = await createClient()
+  const admin = createAdminClient()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated.' }
@@ -605,8 +672,27 @@ export async function declineInvitation(
     .eq('id', applicationId)
 
   // Notification row 31 — claimed user declines Room Lead's claim
-  // TODO: send email + in-platform to Room Lead: declined user's scene name, event name
-  console.log(`[notification-31] Roommate declined invitation: declinedUserId=${user.id} roomId=${application.room_id} eventId=${eventId}`)
+  // TODO: send email to Room Lead: declined user's scene name, event name
+  const { data: roomLeadDeclineRow } = await admin
+    .from('event_attendees')
+    .select('user_id')
+    .eq('event_id', eventId)
+    .eq('room_id', application.room_id)
+    .eq('is_room_lead', true)
+    .limit(1)
+    .single()
+
+  if (roomLeadDeclineRow) {
+    void createInPlatformNotification({
+      userId: roomLeadDeclineRow.user_id,
+      type: 'room_claim_declined',
+      title: 'Roommate declined your invitation',
+      body: 'Someone declined your room invitation.',
+      actionUrl: `/events/${eventId}/rooms/${application.room_id}`,
+      actionLabel: 'Manage Room',
+      eventId,
+    })
+  }
 
   revalidatePath(`/events/${eventId}/rooms`)
 }

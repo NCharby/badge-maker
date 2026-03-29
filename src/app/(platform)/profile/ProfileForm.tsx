@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { PlatformUser, getDisplayName } from '@/types/platform'
-import { updateProfile, requestEmailChange } from './actions'
+import { updateProfile, requestEmailChange, updatePaymentProvider } from './actions'
 
 const SOCIAL_PLATFORMS = ['Fetlife', 'Discord', 'Bluesky', 'Twitter / X', 'Instagram', 'Recon'] as const
 
@@ -118,6 +118,28 @@ export default function ProfileForm({ user }: { user: PlatformUser }) {
   const [roommateHidden, setRoommateHidden] = useState(user.roommate_finder_hidden)
   const [emailNotifs, setEmailNotifs] = useState(user.email_notifications_enabled)
   const [telegramNotifs, setTelegramNotifs] = useState(user.telegram_notifications_enabled)
+
+  // Payment provider (EP/admin only)
+  const isEpOrAdmin = user.role === 'event_promoter' || user.role === 'system_admin'
+  const [paymentProvider, setPaymentProvider] = useState<'square' | 'paypal'>(
+    user.payment_provider ?? 'square'
+  )
+  const [isPaymentPending, startPaymentTransition] = useTransition()
+  const [paymentSaveStatus, setPaymentSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [paymentSaveError, setPaymentSaveError] = useState('')
+
+  function handlePaymentSave() {
+    setPaymentSaveStatus('idle')
+    startPaymentTransition(async () => {
+      const result = await updatePaymentProvider(paymentProvider)
+      if (result.error) {
+        setPaymentSaveStatus('error')
+        setPaymentSaveError(result.error)
+      } else {
+        setPaymentSaveStatus('success')
+      }
+    })
+  }
 
   // Email change flow
   const [emailChangeMode, setEmailChangeMode] = useState(false)
@@ -800,6 +822,90 @@ export default function ProfileForm({ user }: { user: PlatformUser }) {
             </button>
           </div>
         </div>
+
+        {/* Payment Settings — EP / admin only */}
+        {isEpOrAdmin && (
+          <div style={cardStyle}>
+            <div style={sectionHeaderStyle}>Payment Settings</div>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '10px' }}>
+                Active Payment Processor
+              </label>
+              {(['square', 'paypal'] as const).map(p => (
+                <label
+                  key={p}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '10px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="payment_provider"
+                    value={p}
+                    checked={paymentProvider === p}
+                    onChange={() => setPaymentProvider(p)}
+                    style={{ accentColor: 'var(--sd-green)', width: '16px', height: '16px' }}
+                  />
+                  {p === 'square' ? 'Square' : 'PayPal'}
+                </label>
+              ))}
+              <p style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '4px' }}>
+                Applies to all events you manage. Square is the active processor for MVP 1.
+              </p>
+            </div>
+            {paymentSaveStatus === 'success' && (
+              <div
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '7px',
+                  fontSize: '13px',
+                  border: '1px solid #6EE7B7',
+                  background: 'var(--sd-green-light)',
+                  color: 'var(--sd-green-dark)',
+                  marginBottom: '10px',
+                }}
+              >
+                ✓ Payment settings saved.
+              </div>
+            )}
+            {paymentSaveStatus === 'error' && (
+              <div
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '7px',
+                  fontSize: '13px',
+                  border: '1px solid #FCA5A5',
+                  background: 'var(--sd-red-light)',
+                  color: '#991b1b',
+                  marginBottom: '10px',
+                }}
+              >
+                {paymentSaveError || 'Something went wrong. Please try again.'}
+              </div>
+            )}
+            <button
+              onClick={handlePaymentSave}
+              disabled={isPaymentPending}
+              style={{
+                padding: '9px 20px',
+                borderRadius: '7px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: isPaymentPending ? 'not-allowed' : 'pointer',
+                border: 'none',
+                background: isPaymentPending ? 'var(--sd-muted)' : 'var(--sd-green)',
+                color: '#fff',
+              }}
+            >
+              {isPaymentPending ? 'Saving…' : 'Save Payment Settings'}
+            </button>
+          </div>
+        )}
 
         {/* Save */}
         <div style={{ paddingBottom: '8px' }}>
