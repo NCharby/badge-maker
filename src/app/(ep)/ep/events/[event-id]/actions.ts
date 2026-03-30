@@ -27,9 +27,14 @@ export async function updateEventStatus(
     return { error: 'Invalid status.' }
   }
 
+  const updatePayload: Record<string, unknown> = { status: newStatus }
+  if (newStatus === 'Event Locked') {
+    updatePayload.pending_offline_report = true
+  }
+
   const { error } = await supabase
     .from('platform_events')
-    .update({ status: newStatus })
+    .update(updatePayload)
     .eq('id', eventId)
   if (error) return { error: error.message }
 

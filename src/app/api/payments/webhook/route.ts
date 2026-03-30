@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 }
 
 async function handleSquareEvent(rawBody: string) {
-  let event: { type?: string; data?: { object?: { payment?: { id?: string; reference_id?: string; status?: string }; refund?: { payment_id?: string; amount_money?: { amount?: number } } } } }
+  let event: { type?: string; data?: { object?: { payment?: { id?: string; reference_id?: string; status?: string }; refund?: { id?: string; payment_id?: string; amount_money?: { amount?: number } } } } }
 
   try {
     event = JSON.parse(rawBody)
@@ -65,16 +65,19 @@ async function handleSquareEvent(rawBody: string) {
   // Square sends refund.created and refund.updated (not refund.completed)
   if (event.type === 'refund.created' || event.type === 'refund.updated') {
     const refund = event.data?.object?.refund
-    if (!refund?.payment_id) return
+    if (!refund?.payment_id || !refund?.id) return
 
     // Find the order by payment_transaction_id and update refund status
     const { data: order } = await admin
       .from('orders')
-      .select('id, subtotal, amount_refunded')
+      .select('id, subtotal, amount_refunded, processed_refund_ids')
       .eq('payment_transaction_id', refund.payment_id)
       .single()
 
     if (!order) return
+
+    // Idempotency guard — Square delivers webhooks at-least-once; skip if already applied
+    if ((order.processed_refund_ids ?? []).includes(refund.id)) return
 
     // Keep arithmetic in integer cents to avoid floating-point precision errors
     const refundedAmountCents = refund.amount_money?.amount ?? 0
@@ -88,6 +91,7 @@ async function handleSquareEvent(rawBody: string) {
       .update({
         amount_refunded: newAmountRefunded,
         status: isFullRefund ? 'refunded' : 'partial_refund',
+        processed_refund_ids: [...(order.processed_refund_ids ?? []), refund.id],
       })
       .eq('id', order.id)
   }

@@ -2,6 +2,7 @@
 
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createInPlatformNotification } from '@/lib/notifications'
+import { sendTelegramMessage } from '@/lib/telegram/send'
 
 export type ValidateRoommateCodeResult =
   | { valid: false; reason: 'invalid_code' | 'room_not_selected' | 'room_full' }
@@ -99,26 +100,38 @@ export async function validateRoommateCode(
 
   if (availableSpots <= 0) {
     // Notification row 33: Room Lead notified their room is full — dedup within 1 hour
-    // TODO: send email + Telegram to Room Lead: event name, room number
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-    const { count: recentCount } = await admin
-      .from('platform_notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', leadAttendee.user_id)
-      .eq('notification_type', 'roommate_code_room_full')
-      .eq('event_id', eventId)
-      .gte('created_at', oneHourAgo)
+    const [{ count: recentCount }, { data: eventRowFull }, { data: roomLeadTg33 }] = await Promise.all([
+      admin
+        .from('platform_notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', leadAttendee.user_id)
+        .eq('notification_type', 'roommate_code_room_full')
+        .eq('event_id', eventId)
+        .gte('created_at', oneHourAgo),
+      admin.from('platform_events').select('title').eq('id', eventId).single(),
+      admin
+        .from('platform_users')
+        .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
+        .eq('id', leadAttendee.user_id)
+        .single(),
+    ])
 
     if ((recentCount ?? 0) === 0) {
+      const row33Body = `Someone tried to use your Roommate Code for ${eventRowFull?.title ?? 'the event'} but your room is currently full.`
       void createInPlatformNotification({
         userId: leadAttendee.user_id,
         type: 'roommate_code_room_full',
         title: 'Roommate Code attempt — room full',
-        body: `Someone tried to use your Roommate Code but your room is currently full.`,
+        body: row33Body,
         actionUrl: `/events/${eventId}/rooms/${roomId}`,
         actionLabel: 'Manage Room',
         eventId,
       })
+      // Row 33: Telegram to Room Lead
+      if (roomLeadTg33?.telegram_handle && roomLeadTg33.telegram_verified && roomLeadTg33.telegram_notifications_enabled) {
+        void sendTelegramMessage(roomLeadTg33.telegram_handle, row33Body)
+      }
     }
     return { valid: false, reason: 'room_full' }
   }

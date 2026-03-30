@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { PlatformUser, getDisplayName } from '@/types/platform'
-import { updateProfile, requestEmailChange, updatePaymentProvider } from './actions'
+import { updateProfile, requestEmailChange, updatePaymentProvider, sendTelegramVerificationCode, verifyTelegramCode } from './actions'
 
 const SOCIAL_PLATFORMS = ['Fetlife', 'Discord', 'Bluesky', 'Twitter / X', 'Instagram', 'Recon'] as const
 
@@ -137,6 +137,40 @@ export default function ProfileForm({ user }: { user: PlatformUser }) {
         setPaymentSaveError(result.error)
       } else {
         setPaymentSaveStatus('success')
+      }
+    })
+  }
+
+  // Telegram verification flow
+  const [telegramCodeSent, setTelegramCodeSent] = useState(false)
+  const [telegramCodeInput, setTelegramCodeInput] = useState('')
+  const [telegramVerifyError, setTelegramVerifyError] = useState('')
+  const [telegramVerifySuccess, setTelegramVerifySuccess] = useState(false)
+  const [isTelegramSendPending, startTelegramSendTransition] = useTransition()
+  const [isTelegramVerifyPending, startTelegramVerifyTransition] = useTransition()
+
+  function handleSendTelegramCode() {
+    setTelegramVerifyError('')
+    startTelegramSendTransition(async () => {
+      const result = await sendTelegramVerificationCode()
+      if (result.error) {
+        setTelegramVerifyError(result.error)
+      } else {
+        setTelegramCodeSent(true)
+      }
+    })
+  }
+
+  function handleVerifyTelegramCode() {
+    setTelegramVerifyError('')
+    startTelegramVerifyTransition(async () => {
+      const result = await verifyTelegramCode(telegramCodeInput)
+      if (result.error) {
+        setTelegramVerifyError(result.error)
+      } else {
+        setTelegramVerifySuccess(true)
+        setTelegramCodeSent(false)
+        setTelegramCodeInput('')
       }
     })
   }
@@ -684,7 +718,7 @@ export default function ProfileForm({ user }: { user: PlatformUser }) {
               Stored without @. The platform uses this to send you Telegram notifications.
             </p>
           </div>
-          {telegramHandle && !user.telegram_verified && (
+          {telegramHandle && !user.telegram_verified && !telegramVerifySuccess && (
             <div
               style={{
                 padding: '10px 14px',
@@ -695,21 +729,76 @@ export default function ProfileForm({ user }: { user: PlatformUser }) {
                 color: '#92400e',
               }}
             >
-              <strong>Handle not yet verified.</strong> The Telegram bot will send you a one-time
+              <strong>Handle not yet verified.</strong> The platform bot will send you a 6-digit
               confirmation code.{' '}
               <button
+                onClick={handleSendTelegramCode}
+                disabled={isTelegramSendPending}
                 style={{
                   background: 'none',
                   border: 'none',
-                  cursor: 'pointer',
+                  cursor: isTelegramSendPending ? 'not-allowed' : 'pointer',
                   color: '#92400e',
                   fontSize: '13px',
                   textDecoration: 'underline',
                   padding: 0,
                 }}
               >
-                Re-send verification code
+                {isTelegramSendPending ? 'Sending…' : telegramCodeSent ? 'Re-send code' : 'Send verification code'}
               </button>
+              {telegramCodeSent && (
+                <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '12px' }}>
+                    Code sent to <strong>@{telegramHandle.replace(/^@/, '')}</strong>. Make sure you have started a chat with @ShinyDogEventsBot first.
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      style={{ ...inputStyle, width: '120px', background: '#fff' }}
+                      type="text"
+                      maxLength={6}
+                      value={telegramCodeInput}
+                      onChange={e => setTelegramCodeInput(e.target.value.replace(/\D/g, ''))}
+                      placeholder="000000"
+                    />
+                    <button
+                      onClick={handleVerifyTelegramCode}
+                      disabled={isTelegramVerifyPending || telegramCodeInput.length !== 6}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '7px',
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        cursor: (isTelegramVerifyPending || telegramCodeInput.length !== 6) ? 'not-allowed' : 'pointer',
+                        border: 'none',
+                        background: (isTelegramVerifyPending || telegramCodeInput.length !== 6) ? '#D1D5DB' : '#92400e',
+                        color: '#fff',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {isTelegramVerifyPending ? 'Verifying…' : 'Verify'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {telegramVerifyError && (
+                <div style={{ marginTop: '6px', fontSize: '12px', color: '#991b1b' }}>
+                  {telegramVerifyError}
+                </div>
+              )}
+            </div>
+          )}
+          {telegramVerifySuccess && (
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: '7px',
+                fontSize: '13px',
+                border: '1px solid #6EE7B7',
+                background: 'var(--sd-green-light)',
+                color: 'var(--sd-green-dark)',
+              }}
+            >
+              Telegram handle verified! You will now receive Telegram notifications.
             </div>
           )}
         </div>

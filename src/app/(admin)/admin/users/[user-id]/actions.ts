@@ -48,6 +48,10 @@ export async function adminUpdatePaymentProvider(
   targetUserId: string,
   provider: 'square' | 'paypal'
 ) {
+  if (!['square', 'paypal'].includes(provider)) {
+    return { error: 'Invalid payment provider.' }
+  }
+
   const { error } = await getAdminUser()
   if (error) return { error }
 

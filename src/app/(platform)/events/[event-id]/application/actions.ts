@@ -104,16 +104,27 @@ export async function submitApplication(
   const notificationType = isResubmission ? 'application_updated' : 'application_submitted'
   const { data: eventRow } = await admin
     .from('platform_events')
-    .select('owner_id')
+    .select('owner_id, title')
     .eq('id', eventId)
     .single()
 
   if (eventRow) {
-    const { data: epProfile } = await admin
-      .from('platform_users')
-      .select('notification_preferences')
-      .eq('id', eventRow.owner_id)
-      .single()
+    const [{ data: epProfile }, { data: applicantProfile }] = await Promise.all([
+      admin
+        .from('platform_users')
+        .select('notification_preferences')
+        .eq('id', eventRow.owner_id)
+        .single(),
+      admin
+        .from('platform_users')
+        .select('preferred_scene_name, email')
+        .eq('id', user.id)
+        .single(),
+    ])
+
+    const attendeeDisplayName = applicantProfile?.preferred_scene_name?.trim()
+      || (applicantProfile?.email?.split('@')[0] ?? 'An attendee')
+    const eventTitle = eventRow.title ?? 'the event'
 
     const prefs = epProfile?.notification_preferences as Record<string, { in_platform?: boolean }> | null
     if (epWantsInPlatform(prefs, notificationType)) {
@@ -122,8 +133,8 @@ export async function submitApplication(
         type: notificationType,
         title: isResubmission ? 'Application updated' : 'Application submitted',
         body: isResubmission
-          ? 'An attendee has updated and re-submitted their application.'
-          : 'An attendee has submitted their application.',
+          ? `${attendeeDisplayName} updated and re-submitted their application for ${eventTitle}.`
+          : `${attendeeDisplayName} submitted an application for ${eventTitle}.`,
         actionUrl: `/ep/events/${eventId}/attendees/${user.id}`,
         actionLabel: 'Review Application',
         eventId,

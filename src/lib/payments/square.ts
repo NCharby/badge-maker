@@ -1,4 +1,4 @@
-import { Client, Environment } from 'square'
+import { SquareClient, SquareEnvironment } from 'square'
 import crypto from 'crypto'
 import type {
   PaymentProvider,
@@ -9,13 +9,13 @@ import type {
   VerifyWebhookParams,
 } from './types'
 
-function getClient(): Client {
-  return new Client({
-    accessToken: process.env.SQUARE_ACCESS_TOKEN,
+function getClient(): SquareClient {
+  return new SquareClient({
+    token: process.env.SQUARE_ACCESS_TOKEN,
     environment:
       process.env.SQUARE_ENVIRONMENT === 'production'
-        ? Environment.Production
-        : Environment.Sandbox,
+        ? SquareEnvironment.Production
+        : SquareEnvironment.Sandbox,
   })
 }
 
@@ -27,16 +27,15 @@ export const squareProvider: PaymentProvider = {
     nonce,
   }: CreatePaymentParams): Promise<PaymentResult> {
     try {
-      const { paymentsApi } = getClient()
-      const response = await paymentsApi.createPayment({
+      const client = getClient()
+      const response = await client.payments.create({
         sourceId: nonce!,
         idempotencyKey: orderId, // orders.id is the idempotency key per spec (CLAUDE.md §4)
         amountMoney: { amount: BigInt(amountCents), currency },
         locationId: process.env.SQUARE_LOCATION_ID!,
         referenceId: orderId,
       })
-      const payment = response.result.payment
-      return { success: true, transactionId: payment?.id }
+      return { success: true, transactionId: response.payment?.id }
     } catch (err: unknown) {
       console.error('[square] createPayment error:', err)
       const msg = err instanceof Error ? err.message : 'Square payment failed'
@@ -50,8 +49,8 @@ export const squareProvider: PaymentProvider = {
     orderId,
   }: RefundParams): Promise<RefundResult> {
     try {
-      const { refundsApi } = getClient()
-      await refundsApi.refundPayment({
+      const client = getClient()
+      await client.refunds.refundPayment({
         idempotencyKey: `refund-${orderId}`,
         paymentId: transactionId,
         amountMoney: { amount: BigInt(amountCents), currency: 'USD' },

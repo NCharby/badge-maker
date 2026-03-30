@@ -3,6 +3,8 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { parseCSV } from '@/lib/csv/parseCSV'
+import { createInPlatformNotification } from '@/lib/notifications'
+import { sendTelegramMessage } from '@/lib/telegram/send'
 
 export type ShiftInput = {
   name: string
@@ -262,12 +264,33 @@ export async function toggleAreaLead(
 
   if (error) return { error: error.message }
 
-  // Row 27 / Row 28: area lead assigned/removed → notify volunteer (Email + Telegram)
-  // TODO: send email + Telegram to volunteer: shift name, event name, assigned/removed message
-  if (isLead) {
-    console.log(`[TODO] row 27: area lead assigned — user ${signup.user_id}, shift "${shift.name}", event ${eventId}`)
-  } else {
-    console.log(`[TODO] row 28: area lead removed — user ${signup.user_id}, shift "${shift.name}", event ${eventId}`)
+  // Row 27 / Row 28: area lead assigned/removed → notify volunteer (in-platform + Telegram)
+  const [{ data: eventRowVol }, { data: volunteerTg }] = await Promise.all([
+    admin.from('platform_events').select('title').eq('id', eventId).single(),
+    admin
+      .from('platform_users')
+      .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
+      .eq('id', signup.user_id)
+      .single(),
+  ])
+  const eventTitleVol = eventRowVol?.title ?? 'the event'
+  const notifType = isLead ? 'area_lead_assigned' : 'area_lead_removed'
+  const notifTitle = isLead ? 'Area Lead label assigned' : 'Area Lead label removed'
+  const notifBody = isLead
+    ? `You have been designated as Area Lead for the shift "${shift.name}" at ${eventTitleVol}.`
+    : `The Area Lead label has been removed from your shift "${shift.name}" at ${eventTitleVol}.`
+
+  void createInPlatformNotification({
+    userId: signup.user_id,
+    type: notifType,
+    title: notifTitle,
+    body: notifBody,
+    actionUrl: `/events/${eventId}`,
+    actionLabel: 'View Volunteer Shifts',
+    eventId,
+  })
+  if (volunteerTg?.telegram_handle && volunteerTg.telegram_verified && volunteerTg.telegram_notifications_enabled) {
+    void sendTelegramMessage(volunteerTg.telegram_handle, notifBody)
   }
 
   revalidatePath(`/ep/events/${eventId}/volunteer`)

@@ -67,7 +67,7 @@ export async function GET(
         isActive: event.is_active,
         createdAt: event.created_at,
         updatedAt: event.updated_at,
-        telegram_config: event.telegram_config,
+        // telegram_config intentionally excluded — contains Telegram group IDs
       },
       template: template?.config || null,
     };

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { registerDevUser } from './actions'
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -84,16 +85,46 @@ export default function RegisterPage() {
 
     setLoading(true)
 
-    const supabase = createClient()
-
     // Strip '@' prefix from telegram handle per spec
     const cleanHandle = telegramHandle.replace(/^@/, '').trim() || null
 
-    const { data, error: signUpError } = await supabase.auth.signUp({
+    // Dev path: use admin API to bypass Supabase email format validation and rate limits.
+    // UI gated by NEXT_PUBLIC_DEBUG; server action gated by server-only DEBUG_REGISTRATION_KEY.
+    // Server action creates the user and platform_users row; sign-in happens client-side
+    // using the browser Supabase client (canonical Next.js App Router pattern).
+    if (process.env.NEXT_PUBLIC_DEBUG === 'true') {
+      const result = await registerDevUser({
+        email,
+        password,
+        dob,
+        telegramHandle: cleanHandle,
+        sceneName: sceneName.trim() || null,
+      })
+      if (result?.error) { setLoading(false); setGlobalError(result.error); return }
+      if (result?.success) {
+        const supabase = createClient()
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+        setLoading(false)
+        if (signInError) { setGlobalError(`Account created but sign-in failed: ${signInError.message}`); return }
+        router.push('/dashboard')
+      }
+      return
+    }
+
+    const supabase = createClient()
+
+    // Production path: signUp with user_metadata; platform_users row created in auth/callback
+    // after email confirmation (see src/app/auth/callback/route.ts).
+    const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${location.origin}/auth/callback`,
+        data: {
+          date_of_birth: dob,
+          telegram_handle: cleanHandle,
+          preferred_scene_name: sceneName.trim() || null,
+        },
       },
     })
 
@@ -101,24 +132,6 @@ export default function RegisterPage() {
       setGlobalError(signUpError.message)
       setLoading(false)
       return
-    }
-
-    // Create platform_users record (RLS allows auth.uid() = id on INSERT)
-    if (data.user) {
-      const { error: profileError } = await supabase.from('platform_users').insert({
-        id: data.user.id,
-        email,
-        date_of_birth: dob,
-        telegram_handle: cleanHandle,
-        preferred_scene_name: sceneName.trim() || null,
-        role: 'user',
-      })
-
-      if (profileError) {
-        setGlobalError('Account created but profile setup failed. Please contact support.')
-        setLoading(false)
-        return
-      }
     }
 
     setLoading(false)

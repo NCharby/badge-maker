@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { ConfirmationPage } from '@/components/pages/ConfirmationPage';
@@ -76,7 +77,9 @@ export default async function EventConfirmationPage({ params }: EventConfirmatio
 
         {/* Confirmation Content */}
         <div className="max-w-4xl mx-auto">
-          <ConfirmationPage eventSlug={eventSlug} />
+          <Suspense fallback={null}>
+            <ConfirmationPage eventSlug={eventSlug} />
+          </Suspense>
         </div>
       </div>
     </div>

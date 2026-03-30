@@ -14,7 +14,7 @@ const openSans = Open_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'Badge Maker',
+  title: 'SD Platform',
   description: 'Create your conference badge with a live preview',
 }
 

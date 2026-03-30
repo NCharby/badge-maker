@@ -92,7 +92,6 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
       // Check if email has already been sent for this badge using cookie
       // Cookie is specific to badge_id so users can still receive emails for different badges
       if (emailCookies.hasEmailBeenSent(badgeData.id)) {
-        console.log('Email already sent for badge:', badgeData.id);
         setEmailStatus('sent');
         return;
       }
@@ -125,12 +124,9 @@ export function ConfirmationPage({ eventSlug }: ConfirmationPageProps) {
           
           setEmailStatus('sent');
         } else {
-          const errorData = await response.json();
-          console.error('Email sending failed:', errorData);
           setEmailStatus('failed');
         }
-      } catch (error) {
-        console.error('Error sending confirmation email:', error);
+      } catch {
         setEmailStatus('failed');
       }
     };

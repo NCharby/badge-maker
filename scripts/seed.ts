@@ -6,20 +6,35 @@
  * WARNING: Development and staging environments ONLY.
  * NEVER run against the production database.
  *
- * Phase 1 — Badge-maker tables (runs immediately; these tables exist in production schema)
- * Phase 2 — Platform tables (requires platform migrations to be applied)
+ * The script asks two questions before doing anything:
  *
- * Seed accounts:
- *   admin@test.local     / Admin1234!  — System Administrator
- *   promoter@test.local  / Promo1234!  — Event Promoter
- *   user1@test.local     / User1234!   — User (not enrolled in any event)
- *   user2@test.local     / User1234!   — User (not enrolled in any event)
+ *   Q1 — Create EP and basic users?
+ *        Yes: creates promoter@test.local, user1@test.local, user2@test.local
+ *        No:  only admin@test.local is created — use this when you want to test
+ *             the full account registration flow from scratch
  *
- * No attendee records are pre-seeded. Log in as user1 or user2 and walk through
- * the full workflow end-to-end (application → ticket → rooms → volunteer → lock).
+ *   Q2 — Seed sample data? (only asked if Q1 is Yes)
+ *        Yes: creates venue, rooms, platform events, ticket types, merchandise,
+ *             application form, volunteer shifts, and room blocks
+ *        No:  accounts only, no event data
+ *
+ * admin@test.local / Admin1234! is always created regardless of answers.
  */
 
+import * as readline from 'readline'
 import { createClient } from '@supabase/supabase-js'
+
+// ── Interactive prompt helper ─────────────────────────────────────────────────
+function ask(question: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+    rl.question(`  ${question} [y/N] `, (answer) => {
+      rl.close()
+      const normalized = answer.trim().toLowerCase()
+      resolve(normalized === 'y' || normalized === 'yes')
+    })
+  })
+}
 
 // ── Validate environment ─────────────────────────────────────────────────────
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -59,8 +74,9 @@ function fail(msg: string, err?: unknown): never {
 
 const dob = dobThirtyYearsAgo()
 
-const ACCOUNTS = [
-  { email: 'admin@test.local',    password: 'Admin1234!', label: 'System Administrator' },
+const ADMIN_ACCOUNT = { email: 'admin@test.local', password: 'Admin1234!', label: 'System Administrator' } as const
+
+const EXTRA_ACCOUNTS = [
   { email: 'promoter@test.local', password: 'Promo1234!', label: 'Event Promoter' },
   { email: 'user1@test.local',    password: 'User1234!',  label: 'User' },
   { email: 'user2@test.local',    password: 'User1234!',  label: 'User' },
@@ -111,75 +127,26 @@ const SHIFT_B = 'ffffffff-0000-0000-0000-000000000002' // Day 1 10:30 (overlaps 
 const SHIFT_C = 'ffffffff-0000-0000-0000-000000000003' // Day 2 14:00
 const SHIFT_D = 'ffffffff-0000-0000-0000-000000000004' // Day 2 17:00 (non-overlapping; A+C+D = 4h)
 
-// ── Phase 1: Badge-maker tables ───────────────────────────────────────────────
+// ── Phase 1: Auth accounts + badge-maker tables ───────────────────────────────
 // These tables exist in the current production schema (supabase/schema.sql).
 
-async function seedBadgeMakerTables() {
-  section('Phase 1: Badge-Maker Tables')
-
-  // ── Template ────────────────────────────────────────────────────────────────
-  console.log('\n  Templates...')
-  const { error: templateError } = await supabase.from('templates').upsert(
-    {
-      id: 'badge-maker-default',
-      name: 'Badge Maker Default',
-      description: 'Default badge template',
-      config: {
-        dimensions: { width: 3.5, height: 2.25 },
-        layout: {
-          imagePosition: { x: 0.25, y: 0.5, width: 0.4, height: 0.4, aspectRatio: 1 },
-          textPositions: {
-            badge_name:   { x: 0.7, y: 0.3, width: 0.25, align: 'left' },
-            email:        { x: 0.7, y: 0.5, width: 0.25, align: 'left' },
-            social_media: { x: 0.7, y: 0.7, width: 0.25, align: 'left' },
-          },
-          fonts:  { badge_name: 'Inter', email: 'Inter', social_media: 'Inter' },
-          colors: { background: '#ffffff', text: '#1f2937', accent: '#3b82f6' },
-        },
-        imageRequirements: { aspectRatio: 1, minWidth: 300, minHeight: 300, format: 'square' },
-      },
-      is_active: true,
-    },
-    { onConflict: 'id' }
-  )
-  if (templateError) fail('Failed to upsert default template', templateError)
-  ok('Default template upserted')
-
-  // ── Badge-maker events ───────────────────────────────────────────────────────
-  // Note: This is the badge-maker `events` table — NOT platform_events.
-  console.log('\n  Badge-maker events...')
-  for (const event of [
-    {
-      slug: 'test-full-event',
-      name: 'Full Test Event',
-      description: 'All modules enabled (badge-maker entry)',
-      start_date: '2026-10-01',
-      end_date: '2026-10-05',
-      is_active: true,
-      template_id: 'badge-maker-default',
-    },
-    {
-      slug: 'test-minimal-event',
-      name: 'Minimal Test Event',
-      description: 'Ticketing only (badge-maker entry)',
-      start_date: '2026-11-01',
-      end_date: '2026-11-03',
-      is_active: true,
-      template_id: 'badge-maker-default',
-    },
-  ]) {
-    const { error } = await supabase.from('events').upsert(event, { onConflict: 'slug' })
-    if (error) fail(`Failed to upsert badge-maker event: ${event.slug}`, error)
-    ok(`Badge-maker event: ${event.slug}`)
-  }
+async function seedBadgeMakerTables(createAllUsers: boolean, seedData: boolean) {
+  section('Phase 1: Auth Accounts' + (seedData ? ' + Badge-Maker Tables' : ''))
 
   // ── Auth accounts ────────────────────────────────────────────────────────────
   console.log('\n  Auth accounts...')
   const authUserIds: Record<string, string> = {}
 
-  for (const account of ACCOUNTS) {
-    const { data: existing } = await supabase.auth.admin.listUsers()
-    const found = existing?.users?.find(u => u.email === account.email)
+  const accountsToCreate = [
+    ADMIN_ACCOUNT,
+    ...(createAllUsers ? EXTRA_ACCOUNTS : []),
+  ]
+
+  // Fetch existing users once to avoid repeated listUsers calls
+  const { data: existingUsers } = await supabase.auth.admin.listUsers()
+
+  for (const account of accountsToCreate) {
+    const found = existingUsers?.users?.find(u => u.email === account.email)
 
     if (found) {
       warn(`Already exists, skipping: ${account.email}`)
@@ -201,6 +168,62 @@ async function seedBadgeMakerTables() {
     ok(`Created: ${account.email} (${account.label})`)
   }
 
+  // ── Badge-maker template + events (only needed for sample data) ──────────────
+  if (seedData) {
+    console.log('\n  Templates...')
+    const { error: templateError } = await supabase.from('templates').upsert(
+      {
+        id: 'badge-maker-default',
+        name: 'Badge Maker Default',
+        description: 'Default badge template',
+        config: {
+          dimensions: { width: 3.5, height: 2.25 },
+          layout: {
+            imagePosition: { x: 0.25, y: 0.5, width: 0.4, height: 0.4, aspectRatio: 1 },
+            textPositions: {
+              badge_name:   { x: 0.7, y: 0.3, width: 0.25, align: 'left' },
+              email:        { x: 0.7, y: 0.5, width: 0.25, align: 'left' },
+              social_media: { x: 0.7, y: 0.7, width: 0.25, align: 'left' },
+            },
+            fonts:  { badge_name: 'Inter', email: 'Inter', social_media: 'Inter' },
+            colors: { background: '#ffffff', text: '#1f2937', accent: '#3b82f6' },
+          },
+          imageRequirements: { aspectRatio: 1, minWidth: 300, minHeight: 300, format: 'square' },
+        },
+        is_active: true,
+      },
+      { onConflict: 'id' }
+    )
+    if (templateError) fail('Failed to upsert default template', templateError)
+    ok('Default template upserted')
+
+    console.log('\n  Badge-maker events...')
+    for (const event of [
+      {
+        slug: 'test-full-event',
+        name: 'Full Test Event',
+        description: 'All modules enabled (badge-maker entry)',
+        start_date: '2026-10-01',
+        end_date: '2026-10-05',
+        is_active: true,
+        template_id: 'badge-maker-default',
+      },
+      {
+        slug: 'test-minimal-event',
+        name: 'Minimal Test Event',
+        description: 'Ticketing only (badge-maker entry)',
+        start_date: '2026-11-01',
+        end_date: '2026-11-03',
+        is_active: true,
+        template_id: 'badge-maker-default',
+      },
+    ]) {
+      const { error } = await supabase.from('events').upsert(event, { onConflict: 'slug' })
+      if (error) fail(`Failed to upsert badge-maker event: ${event.slug}`, error)
+      ok(`Badge-maker event: ${event.slug}`)
+    }
+  }
+
   ok('Phase 1 complete.')
   return authUserIds
 }
@@ -209,7 +232,7 @@ async function seedBadgeMakerTables() {
 // Requires platform migrations to be applied (supabase db push).
 // Gracefully skips if platform_users table does not exist.
 
-async function seedPlatformTables(authUserIds: Record<string, string>) {
+async function seedPlatformTables(authUserIds: Record<string, string>, createAllUsers: boolean, seedData: boolean) {
   section('Phase 2: Platform Tables (requires platform migrations)')
 
   try {
@@ -222,14 +245,14 @@ async function seedPlatformTables(authUserIds: Record<string, string>) {
     if (tableCheckError) {
       warn('Platform tables not yet available.')
       warn('Apply platform migrations first:')
-      warn('  supabase db push')
+      warn('  npx supabase db push')
       warn('Skipping Phase 2.')
       return
     }
 
     // ── platform_users ────────────────────────────────────────────────────────
     console.log('\n  platform_users...')
-    const platformUsers = [
+    const allPlatformUsers = [
       {
         id: authUserIds['admin@test.local'],
         role: 'system_admin',
@@ -238,39 +261,46 @@ async function seedPlatformTables(authUserIds: Record<string, string>) {
         preferred_scene_name: 'Admin',
         roommate_finder_hidden: false,
       },
-      {
-        id: authUserIds['promoter@test.local'],
-        role: 'event_promoter',
-        email: 'promoter@test.local',
-        date_of_birth: dob,
-        preferred_scene_name: 'Promoter',
-        roommate_finder_hidden: false,
-        payment_provider: 'square',
-      },
-      {
-        id: authUserIds['user1@test.local'],
-        role: 'user',
-        email: 'user1@test.local',
-        date_of_birth: dob,
-        preferred_scene_name: 'TestUser1',
-        roommate_finder_hidden: false,
-      },
-      {
-        id: authUserIds['user2@test.local'],
-        role: 'user',
-        email: 'user2@test.local',
-        date_of_birth: dob,
-        preferred_scene_name: 'TestUser2',
-        roommate_finder_hidden: false,
-      },
+      ...(createAllUsers ? [
+        {
+          id: authUserIds['promoter@test.local'],
+          role: 'event_promoter',
+          email: 'promoter@test.local',
+          date_of_birth: dob,
+          preferred_scene_name: 'Promoter',
+          roommate_finder_hidden: false,
+          payment_provider: 'square',
+        },
+        {
+          id: authUserIds['user1@test.local'],
+          role: 'user',
+          email: 'user1@test.local',
+          date_of_birth: dob,
+          preferred_scene_name: 'TestUser1',
+          roommate_finder_hidden: false,
+        },
+        {
+          id: authUserIds['user2@test.local'],
+          role: 'user',
+          email: 'user2@test.local',
+          date_of_birth: dob,
+          preferred_scene_name: 'TestUser2',
+          roommate_finder_hidden: false,
+        },
+      ] : []),
     ].filter(u => u.id) // skip accounts that failed to create
 
-    for (const u of platformUsers) {
+    for (const u of allPlatformUsers) {
       const { error } = await supabase
         .from('platform_users')
         .upsert(u, { onConflict: 'id' })
       if (error) warn(`platform_users upsert failed for ${u.email}: ${error.message}`)
       else ok(`platform_user: ${u.email} (${u.role})`)
+    }
+
+    if (!seedData) {
+      ok('Phase 2 complete.')
+      return
     }
 
     // ── venue ─────────────────────────────────────────────────────────────────
@@ -556,20 +586,38 @@ async function main() {
   console.log('========================================================')
   console.log(`  Supabase URL: ${supabaseUrl}`)
   console.log(`  Test user DOB: ${dob} (30 years ago)`)
-  console.log('\n  WARNING: Development only. NEVER run against production.\n')
+  console.log('\n  WARNING: Development only. NEVER run against production.')
+  console.log('\n  admin@test.local / Admin1234! is always created.\n')
 
-  const authUserIds = await seedBadgeMakerTables()
-  await seedPlatformTables(authUserIds)
+  const createAllUsers = await ask('Create EP and basic test users? (promoter, user1, user2)')
+  const seedData = createAllUsers
+    ? await ask('Seed sample data? (venue, rooms, events, ticket types, shifts, etc.)')
+    : false
+
+  if (!createAllUsers) {
+    console.log('\n  Skipping EP and basic users — only admin will be created.')
+    console.log('  Register new accounts through the UI to test the full signup flow.\n')
+  }
+  if (createAllUsers && !seedData) {
+    console.log('\n  Skipping sample data — accounts only.\n')
+  }
+
+  const authUserIds = await seedBadgeMakerTables(createAllUsers, seedData)
+  await seedPlatformTables(authUserIds, createAllUsers, seedData)
 
   console.log('\n========================================================')
   console.log('  Seed complete.')
-  console.log('  admin@test.local     / Admin1234!   (System Administrator)')
-  console.log('  promoter@test.local  / Promo1234!   (Event Promoter — owns Full Test Event and Minimal Test Event)')
-  console.log('  user1@test.local     / User1234!    (User — not enrolled in any event)')
-  console.log('  user2@test.local     / User1234!    (User — not enrolled in any event)')
-  console.log('')
-  console.log('  Log in as user1 or user2 to walk through the full workflow:')
-  console.log('  application → ticket → rooms → volunteer → ready to lock')
+  console.log('  admin@test.local  / Admin1234!  (System Administrator)')
+  if (createAllUsers) {
+    console.log('  promoter@test.local  / Promo1234!  (Event Promoter)')
+    console.log('  user1@test.local     / User1234!   (User)')
+    console.log('  user2@test.local     / User1234!   (User)')
+  }
+  if (seedData) {
+    console.log('')
+    console.log('  Sample data seeded: Full Test Event + Minimal Test Event')
+    console.log('  Log in as user1 or user2 to walk the full workflow.')
+  }
   console.log('========================================================\n')
 }
 

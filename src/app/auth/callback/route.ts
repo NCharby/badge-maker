@@ -41,7 +41,28 @@ export async function GET(request: Request) {
         }
         return NextResponse.redirect(`${origin}/profile`)
       }
-      // Email confirmation or other — redirect to next
+      // Default path — new signup confirmation. Create platform_users from user_metadata
+      // if the row doesn't exist yet (idempotent: safe to re-visit the confirmation link).
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const admin = createAdminClient()
+        const { data: existing } = await admin
+          .from('platform_users')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle()
+        if (!existing) {
+          const meta = user.user_metadata ?? {}
+          await admin.from('platform_users').insert({
+            id: user.id,
+            email: user.email!,
+            date_of_birth: meta.date_of_birth,
+            telegram_handle: meta.telegram_handle ?? null,
+            preferred_scene_name: meta.preferred_scene_name ?? null,
+            role: 'user',
+          })
+        }
+      }
       return NextResponse.redirect(`${origin}${next}`)
     }
   }

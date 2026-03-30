@@ -76,3 +76,16 @@ export function epWantsInPlatform(
   if (!pref || pref.in_platform === undefined || pref.in_platform === null) return true
   return pref.in_platform
 }
+
+/**
+ * Check whether the Telegram channel is enabled for an EP notification type.
+ *
+ * EP Telegram notifications default to OFF (must be explicitly enabled per type).
+ */
+export function epWantsTelegram(
+  preferences: Record<string, { telegram?: boolean }> | null | undefined,
+  type: string,
+): boolean {
+  if (!preferences) return false
+  return preferences[type]?.telegram === true
+}

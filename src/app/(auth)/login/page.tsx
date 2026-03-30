@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -210,9 +210,7 @@ export default function LoginPage() {
       >
         Sign in to your account
       </h1>
-      <Suspense>
-        <LoginForm />
-      </Suspense>
+      <LoginForm />
       <p
         style={{
           fontSize: '12px',

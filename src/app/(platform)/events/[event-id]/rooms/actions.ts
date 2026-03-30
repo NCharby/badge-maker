@@ -3,6 +3,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { createInPlatformNotification } from '@/lib/notifications'
+import { sendTelegramMessage } from '@/lib/telegram/send'
 
 // ── Shared types ────────────────────────────────────────────────────────────
 
@@ -104,11 +105,13 @@ export async function selectRoom(
 
   // Notification row 6 — Room Lead confirms room selection
   // TODO: send email to Room Lead: event name, room number, room type, check-in/out date
+  const { data: eventRowSelectRoom } = await admin
+    .from('platform_events').select('title').eq('id', eventId).single()
   void createInPlatformNotification({
     userId: user.id,
     type: 'room_lead_confirmed',
     title: 'Room selected',
-    body: 'You have claimed your room. Your selection is now visible in the Roommate Finder.',
+    body: `You have claimed your room for ${eventRowSelectRoom?.title ?? 'the event'}. Your selection is now visible in the Roommate Finder.`,
     actionUrl: `/events/${eventId}`,
     actionLabel: 'View Event Hub',
     eventId,
@@ -170,27 +173,43 @@ export async function applyForRoom(
 
   // Notification row 7 — Roommate applies for bed spot
   // TODO: send email + Telegram to Room Lead: applicant scene name, event name, room/spot
-  // Lookup Room Lead for in-platform notification (admin — cross-user read)
-  const { data: roomLead } = await admin
-    .from('event_attendees')
-    .select('user_id')
-    .eq('event_id', eventId)
-    .eq('room_id', roomId)
-    .eq('is_room_lead', true)
-    .in('room_status', ['Selected', 'Locked In', 'Verified'])
-    .limit(1)
-    .single()
+  // Lookup Room Lead and fetch event title + applicant display name in parallel
+  const [{ data: roomLead }, { data: eventRowApply }, { data: applicantProfile }] = await Promise.all([
+    admin
+      .from('event_attendees')
+      .select('user_id')
+      .eq('event_id', eventId)
+      .eq('room_id', roomId)
+      .eq('is_room_lead', true)
+      .in('room_status', ['Selected', 'Locked In', 'Verified'])
+      .limit(1)
+      .single(),
+    admin.from('platform_events').select('title').eq('id', eventId).single(),
+    admin.from('platform_users').select('preferred_scene_name, email').eq('id', user.id).single(),
+  ])
 
   if (roomLead) {
+    const applicantName = applicantProfile?.preferred_scene_name?.trim()
+      || (applicantProfile?.email?.split('@')[0] ?? 'A user')
+    const applyBody = `${applicantName} has applied for a spot in your room for ${eventRowApply?.title ?? 'the event'}.`
     void createInPlatformNotification({
       userId: roomLead.user_id,
       type: 'roommate_applied',
       title: 'Roommate application',
-      body: 'Someone has applied for a spot in your room.',
+      body: applyBody,
       actionUrl: `/events/${eventId}/rooms/${roomId}`,
       actionLabel: 'Manage Room',
       eventId,
     })
+    // Row 7: Telegram to Room Lead
+    const { data: roomLeadTg } = await admin
+      .from('platform_users')
+      .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
+      .eq('id', roomLead.user_id)
+      .single()
+    if (roomLeadTg?.telegram_handle && roomLeadTg.telegram_verified && roomLeadTg.telegram_notifications_enabled) {
+      void sendTelegramMessage(roomLeadTg.telegram_handle, applyBody)
+    }
   }
 
   revalidatePath(`/events/${eventId}/rooms`)
@@ -310,16 +329,27 @@ export async function claimRoommateByEmail(
   if (insertError) return { error: 'Failed to send invitation. Please try again.' }
 
   // Notification row 29 — Room Lead claims user by email
-  // TODO: send email + Telegram to claimed user: Room Lead scene name, room name/number, event name
+  const [{ data: eventRowClaim }, { data: roomLeadProfile }, { data: targetTg }] = await Promise.all([
+    admin.from('platform_events').select('title').eq('id', eventId).single(),
+    admin.from('platform_users').select('preferred_scene_name, email').eq('id', user.id).single(),
+    admin.from('platform_users').select('telegram_handle, telegram_verified, telegram_notifications_enabled').eq('id', targetUser.id).single(),
+  ])
+  const roomLeadName = roomLeadProfile?.preferred_scene_name?.trim()
+    || (roomLeadProfile?.email?.split('@')[0] ?? 'Your Room Lead')
+  const row29Body = `${roomLeadName} has invited you to join their room for ${eventRowClaim?.title ?? 'the event'}. Accept or decline in your portal.`
   void createInPlatformNotification({
     userId: targetUser.id,
     type: 'room_claim_received',
     title: 'Room invitation',
-    body: 'A Room Lead has invited you to join their room. Accept or decline in your portal.',
+    body: row29Body,
     actionUrl: `/events/${eventId}/rooms`,
     actionLabel: 'Accept or Decline',
     eventId,
   })
+  // Row 29: Telegram to claimed user
+  if (targetTg?.telegram_handle && targetTg.telegram_verified && targetTg.telegram_notifications_enabled) {
+    void sendTelegramMessage(targetTg.telegram_handle, row29Body)
+  }
 
   revalidatePath(`/events/${eventId}/rooms`)
   revalidatePath(`/events/${eventId}/rooms/${roomId}`)
@@ -429,38 +459,61 @@ export async function acceptApplication(
     .eq('status', 'pending')
     .neq('id', applicationId)
 
+  const { data: eventRowAccept } = await admin
+    .from('platform_events').select('title').eq('id', eventId).single()
+  const acceptEventTitle = eventRowAccept?.title ?? 'the event'
+
   if (otherPending && otherPending.length > 0) {
     await admin
       .from('roommate_applications')
       .update({ status: 'superseded', resolved_at: now, resolved_by: user.id })
       .in('id', otherPending.map(a => a.id))
 
+    // Fetch all superseded users' telegram info in one query
+    const { data: supersededTgProfiles } = await admin
+      .from('platform_users')
+      .select('id, telegram_handle, telegram_verified, telegram_notifications_enabled')
+      .in('id', otherPending.map(a => a.applicant_user_id))
+
     for (const other of otherPending) {
       // Notification row 9 — room application declined (superseded)
-      // TODO: send email + Telegram to applicant: event name
+      const row9Body = `Your room application for ${acceptEventTitle} was not accepted — another applicant was selected for this spot.`
       void createInPlatformNotification({
         userId: other.applicant_user_id,
         type: 'room_application_declined',
         title: 'Room application not accepted',
-        body: 'Your room application was not accepted — another applicant was selected for this spot.',
+        body: row9Body,
         actionUrl: `/events/${eventId}/rooms`,
         actionLabel: 'Browse Rooms',
         eventId,
       })
+      const tg = supersededTgProfiles?.find(p => p.id === other.applicant_user_id)
+      if (tg?.telegram_handle && tg.telegram_verified && tg.telegram_notifications_enabled) {
+        void sendTelegramMessage(tg.telegram_handle, row9Body)
+      }
     }
   }
 
   // Notification row 8 — room application accepted
-  // TODO: send email + Telegram to accepted roommate: event name, room number, room type
+  const row8Body = `Your room application for ${acceptEventTitle} was accepted. You have been placed in the room.`
   void createInPlatformNotification({
     userId: application.applicant_user_id,
     type: 'room_application_accepted',
     title: 'Room application accepted',
-    body: 'Your room application was accepted. You have been placed in the room.',
+    body: row8Body,
     actionUrl: `/events/${eventId}/rooms/${application.room_id}`,
     actionLabel: 'View Room',
     eventId,
   })
+  // Row 8: Telegram to accepted roommate
+  const { data: acceptedTg } = await admin
+    .from('platform_users')
+    .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
+    .eq('id', application.applicant_user_id)
+    .single()
+  if (acceptedTg?.telegram_handle && acceptedTg.telegram_verified && acceptedTg.telegram_notifications_enabled) {
+    void sendTelegramMessage(acceptedTg.telegram_handle, row8Body)
+  }
 
   revalidatePath(`/events/${eventId}/rooms`)
   revalidatePath(`/events/${eventId}/rooms/${application.room_id}`)
@@ -507,16 +560,27 @@ export async function declineApplication(
     .eq('id', applicationId)
 
   // Notification row 9 — room application declined
-  // TODO: send email + Telegram to applicant: event name
+  const { data: eventRowDecline } = await admin
+    .from('platform_events').select('title').eq('id', eventId).single()
+  const row9DirectBody = `Your room application for ${eventRowDecline?.title ?? 'the event'} was declined.`
   void createInPlatformNotification({
     userId: application.applicant_user_id,
     type: 'room_application_declined',
     title: 'Room application declined',
-    body: 'Your room application was declined.',
+    body: row9DirectBody,
     actionUrl: `/events/${eventId}/rooms`,
     actionLabel: 'Browse Rooms',
     eventId,
   })
+  // Row 9 direct: Telegram to declined applicant
+  const { data: declinedTg } = await admin
+    .from('platform_users')
+    .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
+    .eq('id', application.applicant_user_id)
+    .single()
+  if (declinedTg?.telegram_handle && declinedTg.telegram_verified && declinedTg.telegram_notifications_enabled) {
+    void sendTelegramMessage(declinedTg.telegram_handle, row9DirectBody)
+  }
 
   revalidatePath(`/events/${eventId}/rooms`)
   revalidatePath(`/events/${eventId}/rooms/${application.room_id}`)
@@ -617,26 +681,41 @@ export async function acceptInvitation(
     .neq('id', applicationId)
 
   // Notification row 30 — claimed user accepts Room Lead's claim
-  // TODO: send email to Room Lead: accepted user's scene name, event name, room number
-  const { data: roomLeadRow } = await admin
-    .from('event_attendees')
-    .select('user_id')
-    .eq('event_id', eventId)
-    .eq('room_id', roomId)
-    .eq('is_room_lead', true)
-    .limit(1)
-    .single()
+  const [{ data: roomLeadRow }, { data: eventRowAcceptInv }, { data: acceptorProfile }] = await Promise.all([
+    admin
+      .from('event_attendees')
+      .select('user_id')
+      .eq('event_id', eventId)
+      .eq('room_id', roomId)
+      .eq('is_room_lead', true)
+      .limit(1)
+      .single(),
+    admin.from('platform_events').select('title').eq('id', eventId).single(),
+    admin.from('platform_users').select('preferred_scene_name, email').eq('id', user.id).single(),
+  ])
 
   if (roomLeadRow) {
+    const acceptedUserName = acceptorProfile?.preferred_scene_name?.trim()
+      || (acceptorProfile?.email?.split('@')[0] ?? 'A user')
+    const row30Body = `${acceptedUserName} accepted your room invitation for ${eventRowAcceptInv?.title ?? 'the event'} and has been placed in your room.`
     void createInPlatformNotification({
       userId: roomLeadRow.user_id,
       type: 'room_claim_accepted',
       title: 'Roommate accepted your invitation',
-      body: 'Someone accepted your room invitation and has been placed in your room.',
+      body: row30Body,
       actionUrl: `/events/${eventId}/rooms/${roomId}`,
       actionLabel: 'Manage Room',
       eventId,
     })
+    // Row 30: Telegram to Room Lead
+    const { data: roomLeadTg30 } = await admin
+      .from('platform_users')
+      .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
+      .eq('id', roomLeadRow.user_id)
+      .single()
+    if (roomLeadTg30?.telegram_handle && roomLeadTg30.telegram_verified && roomLeadTg30.telegram_notifications_enabled) {
+      void sendTelegramMessage(roomLeadTg30.telegram_handle, row30Body)
+    }
   }
 
   revalidatePath(`/events/${eventId}/rooms`)
@@ -672,26 +751,41 @@ export async function declineInvitation(
     .eq('id', applicationId)
 
   // Notification row 31 — claimed user declines Room Lead's claim
-  // TODO: send email to Room Lead: declined user's scene name, event name
-  const { data: roomLeadDeclineRow } = await admin
-    .from('event_attendees')
-    .select('user_id')
-    .eq('event_id', eventId)
-    .eq('room_id', application.room_id)
-    .eq('is_room_lead', true)
-    .limit(1)
-    .single()
+  const [{ data: roomLeadDeclineRow }, { data: eventRowDeclineInv }, { data: declinerProfile }] = await Promise.all([
+    admin
+      .from('event_attendees')
+      .select('user_id')
+      .eq('event_id', eventId)
+      .eq('room_id', application.room_id)
+      .eq('is_room_lead', true)
+      .limit(1)
+      .single(),
+    admin.from('platform_events').select('title').eq('id', eventId).single(),
+    admin.from('platform_users').select('preferred_scene_name, email').eq('id', user.id).single(),
+  ])
 
   if (roomLeadDeclineRow) {
+    const declinedUserName = declinerProfile?.preferred_scene_name?.trim()
+      || (declinerProfile?.email?.split('@')[0] ?? 'A user')
+    const row31Body = `${declinedUserName} declined your room invitation for ${eventRowDeclineInv?.title ?? 'the event'}.`
     void createInPlatformNotification({
       userId: roomLeadDeclineRow.user_id,
       type: 'room_claim_declined',
       title: 'Roommate declined your invitation',
-      body: 'Someone declined your room invitation.',
+      body: row31Body,
       actionUrl: `/events/${eventId}/rooms/${application.room_id}`,
       actionLabel: 'Manage Room',
       eventId,
     })
+    // Row 31: Telegram to Room Lead
+    const { data: roomLeadTg31 } = await admin
+      .from('platform_users')
+      .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
+      .eq('id', roomLeadDeclineRow.user_id)
+      .single()
+    if (roomLeadTg31?.telegram_handle && roomLeadTg31.telegram_verified && roomLeadTg31.telegram_notifications_enabled) {
+      void sendTelegramMessage(roomLeadTg31.telegram_handle, row31Body)
+    }
   }
 
   revalidatePath(`/events/${eventId}/rooms`)

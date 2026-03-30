@@ -5,6 +5,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createInPlatformNotification } from '@/lib/notifications'
 import { getPaymentProvider, getEpPaymentProvider } from '@/lib/payments'
 import { revalidatePath } from 'next/cache'
+import { sendTelegramMessage } from '@/lib/telegram/send'
 
 // 6-char uppercase alphanumeric excluding visually ambiguous chars (0, O, 1, I, L)
 const ROOMMATE_CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -430,20 +431,27 @@ export async function purchaseTicket(
   await supabase.from('locks').delete().eq('locked_by', user.id)
 
   // 13. Notifications
+  // Fetch event title and buyer display name for notification bodies
+  const [{ data: eventRowTicket }, { data: buyerProfile }] = await Promise.all([
+    admin.from('platform_events').select('title').eq('id', eventId).single(),
+    admin.from('platform_users').select('preferred_scene_name, email').eq('id', user.id).single(),
+  ])
+  const ticketEventTitle = eventRowTicket?.title ?? 'the event'
+  const buyerName = buyerProfile?.preferred_scene_name?.trim()
+    || (buyerProfile?.email?.split('@')[0] ?? 'A user')
+
   // Row 15: ticket purchased → user (in-platform + email)
   void createInPlatformNotification({
     userId: user.id,
     type: 'ticket_purchased',
     title: 'Ticket confirmed',
-    body: 'Your ticket purchase is complete.',
+    body: `Your ticket for ${ticketEventTitle} is confirmed.`,
     actionUrl: `/events/${eventId}`,
     actionLabel: 'View Event Hub',
     eventId,
   })
   // Row 32: roommate code used — notify Room Lead when a roommate is placed via code
   if (confirmedRoomId) {
-    // TODO: send email + Telegram to Room Lead: roommate's scene name, event name, room number
-    const admin = createAdminClient()
     const { data: roomLeadRow } = await admin
       .from('event_attendees')
       .select('user_id')
@@ -454,15 +462,25 @@ export async function purchaseTicket(
       .single()
 
     if (roomLeadRow) {
+      const row32Body = `${buyerName} used your Roommate Code and has been placed in your room for ${ticketEventTitle}.`
       void createInPlatformNotification({
         userId: roomLeadRow.user_id,
         type: 'roommate_code_used',
         title: 'Roommate joined your room',
-        body: 'Someone used your Roommate Code and has been placed in your room.',
+        body: row32Body,
         actionUrl: `/events/${eventId}/rooms/${confirmedRoomId}`,
         actionLabel: 'Manage Room',
         eventId,
       })
+      // Row 32: Telegram to Room Lead
+      const { data: roomLeadTg32 } = await admin
+        .from('platform_users')
+        .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
+        .eq('id', roomLeadRow.user_id)
+        .single()
+      if (roomLeadTg32?.telegram_handle && roomLeadTg32.telegram_verified && roomLeadTg32.telegram_notifications_enabled) {
+        void sendTelegramMessage(roomLeadTg32.telegram_handle, row32Body)
+      }
     }
   }
 
@@ -507,7 +525,7 @@ export async function selfCancelTicket(
   // Fetch cancellation policy
   const { data: event } = await admin
     .from('platform_events')
-    .select('cancellation_policy, workflow_statuses, status')
+    .select('cancellation_policy, workflow_statuses, status, title')
     .eq('id', eventId)
     .single()
 
@@ -582,13 +600,14 @@ export async function selfCancelTicket(
 
   // Row 16: refund processed → notify attendee (in-platform + email)
   // TODO: send email to attendee: refund amount, event name, original order ID
+  const cancelEventTitle = event?.title ?? 'the event'
   void createInPlatformNotification({
     userId: user.id,
     type: 'refund_processed',
     title: 'Refund processed',
     body: refundCents > 0
-      ? `A refund of $${refundAmountDollars.toFixed(2)} has been initiated for your ticket.`
-      : 'Your ticket has been cancelled. No refund applies per the cancellation policy.',
+      ? `A refund of $${refundAmountDollars.toFixed(2)} for ${cancelEventTitle} has been initiated.`
+      : `Your ticket for ${cancelEventTitle} has been cancelled. No refund applies per the cancellation policy.`,
     actionUrl: `/events/${eventId}`,
     actionLabel: 'View Event Hub',
     eventId,

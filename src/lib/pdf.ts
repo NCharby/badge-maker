@@ -373,7 +373,7 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
 /**
  * Generate PDF from HTML using Puppeteer
  */
-async function generatePDFFromHTML(htmlContent: string): Promise<Buffer> {
+export async function generatePDFFromHTML(htmlContent: string): Promise<Buffer> {
   // Detect if we're in a Docker environment
   const isDocker = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.NODE_ENV === 'production'
   

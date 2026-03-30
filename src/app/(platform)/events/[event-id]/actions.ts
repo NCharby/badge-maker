@@ -1,8 +1,9 @@
 'use server'
 
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { createInPlatformNotification, epWantsInPlatform } from '@/lib/notifications'
+import { createInPlatformNotification, epWantsInPlatform, epWantsTelegram } from '@/lib/notifications'
 import { revalidatePath } from 'next/cache'
+import { sendTelegramMessage } from '@/lib/telegram/send'
 
 export async function signalReadyToLock(eventId: string) {
   const supabase = await createClient()
@@ -26,7 +27,7 @@ export async function signalReadyToLock(eventId: string) {
   // TODO: send email / Telegram to EP per their notification_preferences
   const { data: eventRow } = await admin
     .from('platform_events')
-    .select('owner_id')
+    .select('owner_id, title')
     .eq('id', eventId)
     .single()
 
@@ -39,7 +40,7 @@ export async function signalReadyToLock(eventId: string) {
         .single(),
       admin
         .from('platform_users')
-        .select('notification_preferences')
+        .select('notification_preferences, telegram_handle, telegram_verified, telegram_notifications_enabled')
         .eq('id', eventRow.owner_id)
         .single(),
     ])
@@ -48,17 +49,28 @@ export async function signalReadyToLock(eventId: string) {
       ? userProfile.preferred_scene_name
       : (userProfile?.email?.split('@')[0] ?? 'An attendee')
 
-    const prefs = epProfile?.notification_preferences as Record<string, { in_platform?: boolean }> | null
+    const prefs = epProfile?.notification_preferences as Record<string, { in_platform?: boolean; telegram?: boolean }> | null
+    const row10Body = `${displayName} is ready to lock their attendance for ${eventRow.title ?? 'the event'}.`
+
     if (epWantsInPlatform(prefs, 'ready_to_lock')) {
       void createInPlatformNotification({
         userId: eventRow.owner_id,
         type: 'ready_to_lock',
         title: 'Attendee ready to lock',
-        body: `${displayName} has signaled they are ready to lock their attendance.`,
+        body: row10Body,
         actionUrl: `/ep/events/${eventId}/attendees/${user.id}`,
         actionLabel: 'Review & Lock',
         eventId,
       })
+    }
+    // Row 10: Telegram to EP (only if EP has telegram enabled for this type in their preferences)
+    if (
+      epWantsTelegram(prefs, 'ready_to_lock') &&
+      epProfile?.telegram_handle &&
+      epProfile.telegram_verified &&
+      epProfile.telegram_notifications_enabled
+    ) {
+      void sendTelegramMessage(epProfile.telegram_handle, row10Body)
     }
   }
 

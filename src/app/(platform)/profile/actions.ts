@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { sendTelegramMessage } from '@/lib/telegram/send'
 
 export type ProfileUpdateData = {
   preferred_scene_name: string
@@ -26,6 +27,16 @@ export async function updateProfile(data: ProfileUpdateData) {
   const cleanHandle = data.telegram_handle.replace(/^@/, '').trim()
   const cleanSocials = data.social_media.filter(s => s.key.trim() && s.value.trim())
 
+  // If the telegram handle changed, reset verification status
+  const { data: current } = await supabase
+    .from('platform_users')
+    .select('telegram_handle, telegram_verified')
+    .eq('id', user.id)
+    .single()
+
+  const handleChanged = cleanHandle !== (current?.telegram_handle ?? '')
+  const resetVerification = handleChanged && current?.telegram_verified
+
   const { error } = await supabase
     .from('platform_users')
     .update({
@@ -39,6 +50,11 @@ export async function updateProfile(data: ProfileUpdateData) {
       roommate_finder_hidden: data.roommate_finder_hidden,
       email_notifications_enabled: data.email_notifications_enabled,
       telegram_notifications_enabled: data.telegram_notifications_enabled,
+      ...(resetVerification ? {
+        telegram_verified: false,
+        telegram_verification_code: null,
+        telegram_verification_expires_at: null,
+      } : {}),
     })
     .eq('id', user.id)
 
@@ -48,7 +64,92 @@ export async function updateProfile(data: ProfileUpdateData) {
   return { success: true }
 }
 
+export async function sendTelegramVerificationCode() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { data: profile } = await supabase
+    .from('platform_users')
+    .select('telegram_handle, telegram_verified')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile?.telegram_handle) {
+    return { error: 'Please save a Telegram handle first.' }
+  }
+  if (profile.telegram_verified) {
+    return { error: 'Your Telegram handle is already verified.' }
+  }
+
+  // Generate 6-digit code
+  const code = Math.floor(100000 + Math.random() * 900000).toString()
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+
+  const { error: updateError } = await supabase
+    .from('platform_users')
+    .update({
+      telegram_verification_code: code,
+      telegram_verification_expires_at: expiresAt,
+    })
+    .eq('id', user.id)
+
+  if (updateError) return { error: updateError.message }
+
+  const result = await sendTelegramMessage(
+    profile.telegram_handle,
+    `Your SD Platform verification code is: <b>${code}</b>\n\nEnter this code on your profile page. It expires in 15 minutes.`,
+  )
+
+  if (!result.success) {
+    return { error: `Could not reach @${profile.telegram_handle} — make sure you have started a conversation with @ShinyDogEventsBot first.` }
+  }
+
+  return { success: true }
+}
+
+export async function verifyTelegramCode(code: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { data: profile } = await supabase
+    .from('platform_users')
+    .select('telegram_verification_code, telegram_verification_expires_at')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile?.telegram_verification_code) {
+    return { error: 'No verification code found. Please request a new code.' }
+  }
+  if (!profile.telegram_verification_expires_at || new Date() > new Date(profile.telegram_verification_expires_at)) {
+    return { error: 'Verification code has expired. Please request a new code.' }
+  }
+  if (profile.telegram_verification_code !== code.trim()) {
+    return { error: 'Incorrect code. Please try again.' }
+  }
+
+  const { error: updateError } = await supabase
+    .from('platform_users')
+    .update({
+      telegram_verified: true,
+      telegram_notifications_enabled: true,
+      telegram_verification_code: null,
+      telegram_verification_expires_at: null,
+    })
+    .eq('id', user.id)
+
+  if (updateError) return { error: updateError.message }
+
+  revalidatePath('/profile')
+  return { success: true }
+}
+
 export async function updatePaymentProvider(provider: 'square' | 'paypal') {
+  if (!['square', 'paypal'].includes(provider)) {
+    return { error: 'Invalid payment provider.' }
+  }
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -77,6 +178,8 @@ export async function updatePaymentProvider(provider: 'square' | 'paypal') {
 
 export async function requestEmailChange(newEmail: string) {
   const supabase = await createClient()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) return { error: 'Not authenticated.' }
   const { error } = await supabase.auth.updateUser({ email: newEmail })
   if (error) return { error: error.message }
   return { success: true }

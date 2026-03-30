@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createInPlatformNotification } from '@/lib/notifications'
 import { getPaymentProvider } from '@/lib/payments'
+import { sendTelegramMessage } from '@/lib/telegram/send'
 
 export async function updateApplicationStatus(
   eventId: string,
@@ -19,7 +20,7 @@ export async function updateApplicationStatus(
   // Verify EP owns this event
   const { data: event } = await supabase
     .from('platform_events')
-    .select('id')
+    .select('id, title')
     .eq('id', eventId)
     .eq('owner_id', user.id)
     .single()
@@ -87,42 +88,57 @@ export async function updateApplicationStatus(
     .eq('user_id', targetUserId)
   if (error) return { error: error.message }
 
-  // Row 14: user locked by EP → notify attendee (in-platform + email + Telegram)
-  // TODO: send email + Telegram to attendee: event name, confirmation
+  const eventTitle = event.title ?? 'the event'
+
+  // Fetch target user's telegram info once for all notification sends below
+  const admin = createAdminClient()
+  const { data: targetTg } = await admin
+    .from('platform_users')
+    .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
+    .eq('id', targetUserId)
+    .single()
+  const canTelegram = !!(targetTg?.telegram_handle && targetTg.telegram_verified && targetTg.telegram_notifications_enabled)
+
+  // Row 14: user locked by EP → notify attendee (in-platform + Telegram)
   if (newStatus === 'Locked') {
+    const row14Body = `Your attendance for ${eventTitle} has been locked. No further changes can be made.`
     void createInPlatformNotification({
       userId: targetUserId,
       type: 'attendee_locked',
       title: 'Your attendance has been locked',
-      body: 'The Event Promoter has locked your attendance. No further changes can be made.',
+      body: row14Body,
       actionUrl: `/events/${eventId}`,
       actionLabel: 'View Event Hub',
       eventId,
     })
+    if (canTelegram) void sendTelegramMessage(targetTg!.telegram_handle!, row14Body)
   }
 
-  // Application approved/declined → notify attendee (in-platform + email + Telegram)
-  // TODO: send email + Telegram to attendee: event name, next steps
+  // Application approved/declined → notify attendee (in-platform + Telegram)
   if (newStatus === 'Approved') {
+    const approvedBody = `Your application for ${eventTitle} has been approved. Check your event hub for next steps.`
     void createInPlatformNotification({
       userId: targetUserId,
       type: 'application_approved',
       title: 'Your application has been approved',
-      body: 'The Event Promoter has approved your application. Check your event hub for next steps.',
+      body: approvedBody,
       actionUrl: `/events/${eventId}`,
       actionLabel: 'View Event Hub',
       eventId,
     })
+    if (canTelegram) void sendTelegramMessage(targetTg!.telegram_handle!, approvedBody)
   } else if (newStatus === 'Declined') {
+    const declinedBody = `Your application for ${eventTitle} was not approved at this time.`
     void createInPlatformNotification({
       userId: targetUserId,
       type: 'application_declined',
       title: 'Your application was not approved',
-      body: 'The Event Promoter has reviewed your application and was unable to approve it at this time.',
+      body: declinedBody,
       actionUrl: `/events/${eventId}`,
       actionLabel: 'View Event Hub',
       eventId,
     })
+    if (canTelegram) void sendTelegramMessage(targetTg!.telegram_handle!, declinedBody)
   }
 
   revalidatePath(`/ep/events/${eventId}/attendees/${targetUserId}`)

@@ -281,7 +281,17 @@ export default function TicketCheckoutClient({
 
     async function initCard() {
       try {
-        const sq = (window as unknown as { Square?: SquareSDK }).Square
+        // Poll for the SDK in case the afterInteractive script hasn't finished executing yet
+        let sq = (window as unknown as { Square?: SquareSDK }).Square
+        if (!sq) {
+          let retries = 0
+          while (!sq && retries < 50) {
+            await new Promise(r => setTimeout(r, 100))
+            if (!mounted) return
+            sq = (window as unknown as { Square?: SquareSDK }).Square
+            retries++
+          }
+        }
         if (!sq) {
           if (mounted) setSquareInitError('Payment SDK not loaded. Please refresh the page and try again.')
           return

@@ -233,13 +233,15 @@ export default async function TicketPage({
     ? 'https://web.squarecdn.com/v1/square.js'
     : 'https://sandbox.web.squarecdn.com/v1/square.js'
 
-  // Determine if any ticket type has a non-zero price (for deciding whether to load payment SDK)
-  const hasPaidTickets = (ticketTypes ?? []).some(t => Number(t.price) > 0)
+  // Determine if any purchasable item has a non-zero price (tickets or merchandise)
+  const hasPaidItems =
+    (ticketTypes ?? []).some(t => Number(t.price) > 0) ||
+    (merchandise ?? []).some(m => Number(m.price) > 0)
 
   return (
     <>
-      {epPaymentProvider === 'square' && hasPaidTickets && (
-        <Script src={squareScriptSrc} strategy="beforeInteractive" />
+      {epPaymentProvider === 'square' && hasPaidItems && (
+        <Script src={squareScriptSrc} strategy="afterInteractive" />
       )}
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '2rem 1.5rem' }}>
         {backLink}

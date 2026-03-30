@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { LandingForm } from '@/components/organisms/LandingForm';
@@ -110,7 +111,9 @@ export default async function EventLandingPage({ params }: EventLandingPageProps
 
         {/* Landing Form */}
         <div className="max-w-2xl mx-auto">
-          <LandingForm eventSlug={eventSlug} />
+          <Suspense fallback={null}>
+            <LandingForm eventSlug={eventSlug} />
+          </Suspense>
         </div>
       </div>
     </div>
