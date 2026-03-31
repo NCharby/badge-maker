@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createInPlatformNotification } from '@/lib/notifications'
-import { sendTelegramMessage } from '@/lib/telegram/send'
+import { sendTelegramDM } from '@/lib/telegram/send'
 
 function createAdminClient() {
   return createClient(
@@ -109,14 +109,7 @@ export async function POST(request: NextRequest) {
           actionLabel: 'View Volunteer Shifts',
         })
         // Rows 17–21: Telegram to volunteer
-        const { data: volunteerTg } = await admin
-          .from('platform_users')
-          .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
-          .eq('id', signup.user_id)
-          .single()
-        if (volunteerTg?.telegram_handle && volunteerTg.telegram_verified && volunteerTg.telegram_notifications_enabled) {
-          void sendTelegramMessage(volunteerTg.telegram_handle, body)
-        }
+        void sendTelegramDM(signup.user_id, body)
         sent++
       } catch (err) {
         errors.push(`Signup ${signup.id}: ${err instanceof Error ? err.message : String(err)}`)

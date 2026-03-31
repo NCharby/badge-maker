@@ -77,12 +77,16 @@ export default async function EpEventPage({
           { label: 'Volunteer', href: `/ep/events/${eventId}/volunteer`, icon: '🙋', desc: 'Manage volunteer shifts' },
           { label: 'Schedule', href: `/ep/events/${eventId}/schedule`, icon: '📅', desc: 'Event schedule' },
           { label: 'Badge', href: `/ep/events/${eventId}/badge`, icon: '🎫', desc: 'Badge Maker module' },
+          { label: 'Notifications', href: `/ep/events/${eventId}/notifications`, icon: '🔔', desc: 'Configure Telegram channel notifications' },
+          { label: 'Lock Check', href: `/ep/events/${eventId}/lock-check`, icon: '🔍', desc: 'Review attendee module completion and send reminders' },
         ]
           .filter(item =>
             item.label === 'Event Details' ||
             item.label === 'Workflow' ||
             item.label === 'Modules' ||
             item.label === 'Attendees' ||
+            item.label === 'Notifications' ||
+            item.label === 'Lock Check' ||
             Object.entries(moduleConfig).some(
               ([key, cfg]) => cfg?.enabled && MODULE_LABELS[key] === item.label
             )

@@ -199,7 +199,7 @@ async function processEvent(
   }
 
   // Send email with both attachments
-  const fromEmail = process.env.POSTMARK_FROM_EMAIL ?? 'noreply@shinydog.events'
+  const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'noreply@shinydog.events'
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
   const emailResult = await sendEmail({

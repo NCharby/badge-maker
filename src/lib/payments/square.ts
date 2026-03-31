@@ -31,7 +31,7 @@ export const squareProvider: PaymentProvider = {
       const response = await client.payments.create({
         sourceId: nonce!,
         idempotencyKey: orderId, // orders.id is the idempotency key per spec (CLAUDE.md §4)
-        amountMoney: { amount: BigInt(amountCents), currency },
+        amountMoney: { amount: BigInt(amountCents), currency: currency as never },
         locationId: process.env.SQUARE_LOCATION_ID!,
         referenceId: orderId,
       })

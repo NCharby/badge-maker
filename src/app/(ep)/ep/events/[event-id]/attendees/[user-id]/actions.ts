@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createInPlatformNotification } from '@/lib/notifications'
 import { getPaymentProvider } from '@/lib/payments'
-import { sendTelegramMessage } from '@/lib/telegram/send'
+import { sendTelegramDM } from '@/lib/telegram/send'
 
 export async function updateApplicationStatus(
   eventId: string,
@@ -90,15 +90,6 @@ export async function updateApplicationStatus(
 
   const eventTitle = event.title ?? 'the event'
 
-  // Fetch target user's telegram info once for all notification sends below
-  const admin = createAdminClient()
-  const { data: targetTg } = await admin
-    .from('platform_users')
-    .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
-    .eq('id', targetUserId)
-    .single()
-  const canTelegram = !!(targetTg?.telegram_handle && targetTg.telegram_verified && targetTg.telegram_notifications_enabled)
-
   // Row 14: user locked by EP → notify attendee (in-platform + Telegram)
   if (newStatus === 'Locked') {
     const row14Body = `Your attendance for ${eventTitle} has been locked. No further changes can be made.`
@@ -111,7 +102,7 @@ export async function updateApplicationStatus(
       actionLabel: 'View Event Hub',
       eventId,
     })
-    if (canTelegram) void sendTelegramMessage(targetTg!.telegram_handle!, row14Body)
+    void sendTelegramDM(targetUserId, row14Body)
   }
 
   // Application approved/declined → notify attendee (in-platform + Telegram)
@@ -126,7 +117,7 @@ export async function updateApplicationStatus(
       actionLabel: 'View Event Hub',
       eventId,
     })
-    if (canTelegram) void sendTelegramMessage(targetTg!.telegram_handle!, approvedBody)
+    void sendTelegramDM(targetUserId, approvedBody)
   } else if (newStatus === 'Declined') {
     const declinedBody = `Your application for ${eventTitle} was not approved at this time.`
     void createInPlatformNotification({
@@ -138,7 +129,7 @@ export async function updateApplicationStatus(
       actionLabel: 'View Event Hub',
       eventId,
     })
-    if (canTelegram) void sendTelegramMessage(targetTg!.telegram_handle!, declinedBody)
+    void sendTelegramDM(targetUserId, declinedBody)
   }
 
   revalidatePath(`/ep/events/${eventId}/attendees/${targetUserId}`)

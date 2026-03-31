@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
       }
 
 
-      // Send the confirmation email using Postmark template
+      // Send the confirmation email
       const result = await sendBadgeConfirmationEmailWithTemplate(confirmationData);
 
 

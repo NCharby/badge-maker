@@ -26,7 +26,11 @@ const labelStyle: React.CSSProperties = {
   marginBottom: '6px',
 }
 
-export default function NewEventClient() {
+interface Props {
+  venues: { id: string; name: string }[]
+}
+
+export default function NewEventClient({ venues }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
@@ -36,7 +40,7 @@ export default function NewEventClient() {
   const [description, setDescription] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [location, setLocation] = useState('')
+  const [venueId, setVenueId] = useState('')
   const [modules, setModules] = useState({
     venue: false,
     application: false,
@@ -64,6 +68,7 @@ export default function NewEventClient() {
     if (startDate < today) { setError('Start date cannot be in the past.'); return }
     if (!endDate) { setError('End date is required.'); return }
     if (endDate < startDate) { setError('End date must be on or after start date.'); return }
+    if (modules.venue && !venueId) { setError('Please select a venue, or create one first.'); return }
 
     startTransition(async () => {
       const result = await createEvent({
@@ -71,7 +76,7 @@ export default function NewEventClient() {
         description,
         start_date: startDate,
         end_date: endDate,
-        location,
+        venue_id: modules.venue ? venueId : undefined,
         modules,
       })
       if ('error' in result) {
@@ -148,16 +153,6 @@ export default function NewEventClient() {
         </div>
 
         <div>
-          <label style={labelStyle}>Location</label>
-          <input
-            style={inputStyle}
-            value={location}
-            onChange={e => setLocation(e.target.value)}
-            placeholder="Physical address"
-          />
-        </div>
-
-        <div>
           <div style={{ ...labelStyle, marginBottom: '10px' }}>Modules</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {/* Ticketing — always required */}
@@ -199,23 +194,63 @@ export default function NewEventClient() {
               <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--sd-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>
                 Room Setup — choose one
               </div>
-              {([
-                { key: 'venue',          label: 'Venue',              desc: 'A reusable location object with optional contact details. Add a Room Matrix to the venue to enable room selection for attendees. Assign the specific venue in Event Settings after creation.' },
-                { key: 'room_selection', label: 'Basic Event Rooms', desc: 'An event-specific Room Matrix tied to this event only — not reusable across events. Add rooms after creation to enable room selection for attendees.' },
-              ] as const).map(({ key, label, desc }) => (
-                <label key={key} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', marginBottom: '10px' }}>
-                  <input
-                    type="checkbox"
-                    checked={modules[key]}
-                    onChange={() => toggleModule(key)}
-                    style={{ accentColor: 'var(--sd-purple)', marginTop: '2px', flexShrink: 0, cursor: 'pointer' }}
-                  />
-                  <div>
-                    <div style={{ fontSize: '13px', color: 'var(--sd-text)', fontWeight: 500 }}>{label}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px' }}>{desc}</div>
+
+              {/* Venue option */}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', marginBottom: '10px' }}>
+                <input
+                  type="checkbox"
+                  checked={modules.venue}
+                  onChange={() => toggleModule('venue')}
+                  style={{ accentColor: 'var(--sd-purple)', marginTop: '2px', flexShrink: 0, cursor: 'pointer' }}
+                />
+                <div>
+                  <div style={{ fontSize: '13px', color: 'var(--sd-text)', fontWeight: 500 }}>Venue</div>
+                  <div style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px' }}>
+                    A reusable location object with optional contact details. Add a Room Matrix to the venue to enable room selection for attendees.
                   </div>
-                </label>
-              ))}
+                </div>
+              </label>
+
+              {/* Venue dropdown — shown when venue module is checked */}
+              {modules.venue && (
+                <div style={{ marginLeft: '24px', marginBottom: '10px' }}>
+                  {venues.length === 0 ? (
+                    <p style={{ fontSize: '12px', color: 'var(--sd-muted)', margin: '0 0 6px 0' }}>
+                      You have no venues yet.{' '}
+                      <Link href="/ep/venues/new" target="_blank" style={{ color: 'var(--sd-purple)', textDecoration: 'none' }}>
+                        Create a venue first →
+                      </Link>
+                    </p>
+                  ) : (
+                    <select
+                      style={{ ...inputStyle, maxWidth: '360px' }}
+                      value={venueId}
+                      onChange={e => setVenueId(e.target.value)}
+                    >
+                      <option value="">— Select a venue —</option>
+                      {venues.map(v => (
+                        <option key={v.id} value={v.id}>{v.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+
+              {/* Basic Event Rooms option */}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', marginBottom: '10px' }}>
+                <input
+                  type="checkbox"
+                  checked={modules.room_selection}
+                  onChange={() => toggleModule('room_selection')}
+                  style={{ accentColor: 'var(--sd-purple)', marginTop: '2px', flexShrink: 0, cursor: 'pointer' }}
+                />
+                <div>
+                  <div style={{ fontSize: '13px', color: 'var(--sd-text)', fontWeight: 500 }}>Basic Event Rooms</div>
+                  <div style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px' }}>
+                    An event-specific Room Matrix tied to this event only — not reusable across events. Add rooms after creation to enable room selection for attendees.
+                  </div>
+                </div>
+              </label>
             </div>
           </div>
         </div>

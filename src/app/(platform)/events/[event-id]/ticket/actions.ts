@@ -5,7 +5,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createInPlatformNotification } from '@/lib/notifications'
 import { getPaymentProvider, getEpPaymentProvider } from '@/lib/payments'
 import { revalidatePath } from 'next/cache'
-import { sendTelegramMessage } from '@/lib/telegram/send'
+import { sendTelegramDM, sendEventChannelMessage } from '@/lib/telegram/send'
 
 // 6-char uppercase alphanumeric excluding visually ambiguous chars (0, O, 1, I, L)
 const ROOMMATE_CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -32,6 +32,7 @@ export async function purchaseTicket(
   paymentToken?: { provider: 'square'; nonce: string }
               | { provider: 'paypal'; paypalOrderId: string }
               | null,
+  selectedRoomId?: string,     // optional — Room Lead tickets with room_required_at_purchase
 ): Promise<{ success: true; orderId: string; roommate_code?: string } | { error: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -305,6 +306,65 @@ export async function purchaseTicket(
     confirmedRoomId = roomId
   }
 
+  // 5.6. Validate and soft-lock Room Lead's selected room (if room_required_at_purchase)
+  let confirmedLeadRoomId: string | null = null
+  if (selectedRoomId && ticketType.room_lead) {
+    // Verify room belongs to this event (venue-scoped or event-scoped)
+    const { data: selectedRoom } = await admin
+      .from('rooms')
+      .select('id, bed_spot_count')
+      .eq('id', selectedRoomId)
+      .single()
+
+    if (!selectedRoom) {
+      await supabase.from('locks').delete().eq('locked_by', user.id)
+      return { error: 'Selected room not found. Please choose again.' }
+    }
+
+    // Check not blocked/reserved
+    const { data: roomCfg } = await admin
+      .from('event_room_config')
+      .select('blocked, reserved')
+      .eq('event_id', eventId)
+      .eq('room_id', selectedRoomId)
+      .maybeSingle()
+
+    if (roomCfg?.blocked || roomCfg?.reserved) {
+      await supabase.from('locks').delete().eq('locked_by', user.id)
+      return { error: 'That room is no longer available. Please choose a different room.' }
+    }
+
+    // Capacity check
+    const { count: leadBedBlocks } = await admin.from('bed_blocks')
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId).eq('room_id', selectedRoomId)
+    const { count: leadOccupants } = await admin.from('event_attendees')
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId).eq('room_id', selectedRoomId)
+      .in('room_status', ['Selected', 'Locked In', 'Verified'])
+    const { count: leadRoomLocks } = await admin.from('locks')
+      .select('*', { count: 'exact', head: true })
+      .eq('resource_type', 'room').eq('resource_id', selectedRoomId).gte('expires_at', now)
+
+    const leadAvailable =
+      (selectedRoom.bed_spot_count ?? 0) - (leadBedBlocks ?? 0) - (leadOccupants ?? 0) - (leadRoomLocks ?? 0)
+
+    if (leadAvailable <= 0) {
+      await supabase.from('locks').delete().eq('locked_by', user.id)
+      return { error: 'That room is now full. Please select a different room.' }
+    }
+
+    const { error: leadRoomLockErr } = await supabase.from('locks').insert({
+      resource_type: 'room', resource_id: selectedRoomId, locked_by: user.id, expires_at: expiresAt,
+    })
+    if (leadRoomLockErr) {
+      await supabase.from('locks').delete().eq('locked_by', user.id)
+      return { error: 'Failed to reserve room. Please try again.' }
+    }
+
+    confirmedLeadRoomId = selectedRoomId
+  }
+
   // 6. Calculate subtotal
   const ticketPrice = Number(ticketType.price)
   const subtotal = ticketPrice + merchandiseItems.reduce((sum, m) => sum + Number(m.price), 0)
@@ -387,6 +447,15 @@ export async function purchaseTicket(
     await supabase.from('event_attendees').update({
       room_id: confirmedRoomId,
       room_status: 'Selected',
+      placed_via_code: true,
+    }).eq('event_id', eventId).eq('user_id', user.id)
+  }
+
+  // 10.5b. Assign Room Lead's selected room (if room_required_at_purchase)
+  if (confirmedLeadRoomId) {
+    await supabase.from('event_attendees').update({
+      room_id: confirmedLeadRoomId,
+      room_status: 'Selected',
     }).eq('event_id', eventId).eq('user_id', user.id)
   }
 
@@ -450,6 +519,13 @@ export async function purchaseTicket(
     actionLabel: 'View Event Hub',
     eventId,
   })
+  // new_attendee_enrolled: notify channel and/or DM the new attendee per EP config
+  if (!attendee) {
+    void sendEventChannelMessage(eventId, 'new_attendee_enrolled', {
+      event_name: ticketEventTitle,
+      scene_name: buyerName,
+    }, user.id)
+  }
   // Row 32: roommate code used — notify Room Lead when a roommate is placed via code
   if (confirmedRoomId) {
     const { data: roomLeadRow } = await admin
@@ -473,14 +549,7 @@ export async function purchaseTicket(
         eventId,
       })
       // Row 32: Telegram to Room Lead
-      const { data: roomLeadTg32 } = await admin
-        .from('platform_users')
-        .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
-        .eq('id', roomLeadRow.user_id)
-        .single()
-      if (roomLeadTg32?.telegram_handle && roomLeadTg32.telegram_verified && roomLeadTg32.telegram_notifications_enabled) {
-        void sendTelegramMessage(roomLeadTg32.telegram_handle, row32Body)
-      }
+      void sendTelegramDM(roomLeadRow.user_id, row32Body)
     }
   }
 

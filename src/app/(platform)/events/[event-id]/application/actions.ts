@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createInPlatformNotification, epWantsInPlatform } from '@/lib/notifications'
+import { sendEventChannelMessage } from '@/lib/telegram/send'
 
 export async function saveDraft(
   eventId: string,
@@ -139,6 +140,14 @@ export async function submitApplication(
         actionLabel: 'Review Application',
         eventId,
       })
+    }
+
+    // First enrollment: notify channel and/or DM the new attendee per EP config
+    if (!isResubmission && !attendee) {
+      void sendEventChannelMessage(eventId, 'new_attendee_enrolled', {
+        event_name: eventTitle,
+        scene_name: attendeeDisplayName,
+      }, user.id)
     }
   }
 

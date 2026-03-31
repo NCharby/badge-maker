@@ -4,13 +4,18 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import type { WorkflowStatus } from '@/types/platform'
 
-const SYSTEM_STATUSES = ['Draft', 'Published', 'Event Locked', 'Registration', 'Happening Now', 'Closed', 'Archived']
+// Only 'Published' and custom status UUIDs are valid for opens_at/closes_at
+// (system statuses like 'Draft', 'Event Locked', etc. are excluded from module triggers)
+const ALLOWED_SYSTEM_STATUSES = new Set(['Published'])
 
 export type ModuleCfg = {
   enabled: boolean
   required: boolean
   opens_at_status: string | null
   closes_at_status: string | null
+  room_selection_workflow?: boolean
+  custom_status_message_enabled?: boolean
+  custom_status_message?: string
 }
 
 export async function updateModuleConfig(
@@ -36,23 +41,21 @@ export async function updateModuleConfig(
 
   // venue and room_selection are mutually exclusive
   if (moduleConfig.venue?.enabled && moduleConfig.room_selection?.enabled) {
-    return { error: 'Venue and Room Selection cannot both be enabled. They represent the same room workflow — enable one or the other.' }
+    return { error: 'Venue and Basic Event Rooms cannot both be enabled.' }
   }
 
-  // Validate opens_at_status and closes_at_status values against known statuses
+  // Validate opens_at_status and closes_at_status
   const customStatuses = (event.workflow_statuses ?? []) as WorkflowStatus[]
-  const validStatusValues = new Set([
-    ...SYSTEM_STATUSES,
-    ...customStatuses.map(s => s.id), // custom statuses referenced by UUID
-  ])
+  const customStatusUUIDs = new Set(customStatuses.map(s => s.id))
 
   for (const [key, cfg] of Object.entries(moduleConfig)) {
     if (!cfg.enabled) continue
-    if (cfg.opens_at_status && !validStatusValues.has(cfg.opens_at_status)) {
-      return { error: `Invalid opens_at_status for module "${key}".` }
-    }
-    if (cfg.closes_at_status && !validStatusValues.has(cfg.closes_at_status)) {
-      return { error: `Invalid closes_at_status for module "${key}".` }
+    for (const field of ['opens_at_status', 'closes_at_status'] as const) {
+      const val = cfg[field]
+      if (!val) continue
+      if (!ALLOWED_SYSTEM_STATUSES.has(val) && !customStatusUUIDs.has(val)) {
+        return { error: `Invalid ${field} for module "${key}". Only "Published" and custom workflow statuses are allowed.` }
+      }
     }
   }
 

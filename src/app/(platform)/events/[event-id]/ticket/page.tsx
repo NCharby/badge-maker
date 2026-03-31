@@ -37,7 +37,7 @@ export default async function TicketPage({
   // Completing a ticket purchase IS the enrollment action when no Application module is in use.
   const { data: attendee } = await supabase
     .from('event_attendees')
-    .select('ticket_status, lock_status, ticket_type_id, ticket_purchased_at, order_id, ticket_types(name)')
+    .select('ticket_status, lock_status, ticket_type_id, ticket_purchased_at, order_id, roommate_code, ticket_types(name)')
     .eq('event_id', eventId)
     .eq('user_id', user.id)
     .single()
@@ -146,15 +146,15 @@ export default async function TicketPage({
           background: 'var(--sd-card)',
           border: '1px solid var(--sd-border)',
           borderRadius: 'var(--sd-radius)',
-          padding: '40px 32px',
+          padding: '32px',
           textAlign: 'center',
           boxShadow: '0 1px 3px rgba(0,0,0,.06)',
         }}>
           <div style={{ fontSize: '40px', marginBottom: '12px' }}>🎟</div>
           <h1 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '8px' }}>
-            You have a ticket!
+            You&apos;re registered!
           </h1>
-          <p style={{ fontSize: '14px', color: 'var(--sd-text)', marginBottom: '4px' }}>{ticketName}</p>
+          <p style={{ fontSize: '13px', color: 'var(--sd-muted)', marginBottom: '4px' }}>{ticketName}</p>
           {purchasedAt && (
             <p style={{ fontSize: '12px', color: 'var(--sd-muted)', marginBottom: '4px' }}>{purchasedAt}</p>
           )}
@@ -163,6 +163,21 @@ export default async function TicketPage({
               Order #{attendee.order_id.slice(0, 8)}
             </p>
           )}
+
+          {attendee.roommate_code && (
+            <div style={{ marginTop: '24px', padding: '16px 20px', background: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: '8px', textAlign: 'left' }}>
+              <p style={{ fontSize: '12px', fontWeight: 700, color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                Your Roommate Code
+              </p>
+              <p style={{ fontSize: '28px', fontWeight: 800, letterSpacing: '0.15em', color: '#065f46', fontFamily: 'monospace', marginBottom: '6px' }}>
+                {attendee.roommate_code}
+              </p>
+              <p style={{ fontSize: '12px', color: '#047857' }}>
+                Share this code with people you want in your room. They can enter it during checkout to reserve a spot.
+              </p>
+            </div>
+          )}
+
           <Link
             href={`/events/${eventId}`}
             style={{ display: 'inline-block', marginTop: '20px', padding: '9px 20px', background: 'var(--sd-green)', color: '#fff', borderRadius: '7px', fontSize: '13px', fontWeight: 600, textDecoration: 'none' }}
@@ -203,6 +218,48 @@ export default async function TicketPage({
     .select('id, name, description, price, available_count, image_url, ticket_type_restriction')
     .eq('event_id', eventId)
     .eq('enabled', true)
+
+  // Fetch available rooms for checkout when a Room Lead ticket requires room selection at purchase
+  const hasRoomStep = (ticketTypes ?? []).some(t => t.room_required_at_purchase && t.room_lead)
+  type CheckoutRoom = { id: string; name: string; number: string | null; lodging_type: string | null; bed_type: string | null; min_occupancy: number; max_occupancy: number; open_spot_count: number }
+  let checkoutRooms: CheckoutRoom[] = []
+  if (hasRoomStep) {
+    const { data: eventForRooms } = await adminSupabase
+      .from('platform_events').select('venue_id').eq('id', eventId).single()
+    const venueId = eventForRooms?.venue_id ?? null
+
+    const roomsQuery = adminSupabase
+      .from('rooms')
+      .select('id, name, number, lodging_type, bed_type, min_occupancy, bed_spot_count')
+    const { data: rawRooms } = venueId
+      ? await roomsQuery.eq('venue_id', venueId)
+      : await roomsQuery.eq('event_id', eventId)
+
+    if (rawRooms?.length) {
+      const roomIds = rawRooms.map(r => r.id)
+      const [{ data: configs }, { data: occupantRows }] = await Promise.all([
+        adminSupabase.from('event_room_config').select('room_id, blocked, reserved')
+          .eq('event_id', eventId).in('room_id', roomIds),
+        adminSupabase.from('event_attendees').select('room_id')
+          .eq('event_id', eventId)
+          .in('room_status', ['Selected', 'Locked In', 'Verified'])
+          .not('room_id', 'is', null)
+          .in('room_id', roomIds),
+      ])
+      const configMap = new Map((configs ?? []).map(c => [c.room_id, c]))
+      const occupantCounts = new Map<string, number>()
+      for (const o of occupantRows ?? []) {
+        if (o.room_id) occupantCounts.set(o.room_id, (occupantCounts.get(o.room_id) ?? 0) + 1)
+      }
+      checkoutRooms = rawRooms
+        .filter(r => { const cfg = configMap.get(r.id); return !cfg?.blocked && !cfg?.reserved })
+        .map(r => ({
+          id: r.id, name: r.name, number: r.number, lodging_type: r.lodging_type,
+          bed_type: r.bed_type, min_occupancy: r.min_occupancy, max_occupancy: r.bed_spot_count,
+          open_spot_count: Math.max(0, r.bed_spot_count - (occupantCounts.get(r.id) ?? 0)),
+        }))
+    }
+  }
 
   // Only fetch volunteer shifts if at least one ticket type requires volunteer hours
   const needsShifts = (ticketTypes ?? []).some(t => t.volunteer_hours_required > 0)
@@ -256,6 +313,7 @@ export default async function TicketPage({
           ticketTypes={(ticketTypes ?? []) as Parameters<typeof TicketCheckoutClient>[0]['ticketTypes']}
           merchandise={(merchandise ?? []) as Parameters<typeof TicketCheckoutClient>[0]['merchandise']}
           volunteerShifts={volunteerShifts}
+          checkoutRooms={checkoutRooms}
           hasRoommateCodeFeature={hasRoommateCodeFeature}
           paymentProvider={epPaymentProvider}
           squareAppId={squareAppId}

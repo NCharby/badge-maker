@@ -10,9 +10,25 @@ interface RoomCardProps {
   eventId: string
   attendee: AttendeeRoomState
   myApplications: MyApplication[]
+  eventStartDate: string
+  eventEndDate: string
 }
 
-export default function RoomCard({ room, eventId, attendee, myApplications }: RoomCardProps) {
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+function buildDayDateMap(startDate: string, endDate: string): Record<string, string> {
+  const map: Record<string, string> = {}
+  const current = new Date(startDate + 'T12:00:00Z')
+  const end = new Date(endDate + 'T12:00:00Z')
+  while (current < end) {
+    map[DAY_NAMES[current.getUTCDay()]] = current.toISOString().slice(0, 10)
+    current.setUTCDate(current.getUTCDate() + 1)
+  }
+  return map
+}
+
+export default function RoomCard({ room, eventId, attendee, myApplications, eventStartDate, eventEndDate }: RoomCardProps) {
+  const dateMap = buildDayDateMap(eventStartDate, eventEndDate)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
@@ -141,12 +157,17 @@ export default function RoomCard({ room, eventId, attendee, myApplications }: Ro
       {/* Pricing */}
       {room.room_daily_rates && room.room_daily_rates.length > 0 && (
         <div style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>
-          {room.room_daily_rates.map(r => (
-            <div key={r.date}>
-              {new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}:{' '}
-              ${r.amount.toFixed(2)}/night
-            </div>
-          ))}
+          {room.room_daily_rates.map(r => {
+            const isoDate = dateMap[r.date]
+            const label = isoDate
+              ? new Date(isoDate + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' })
+              : r.date.charAt(0).toUpperCase() + r.date.slice(1).toLowerCase()
+            return (
+              <div key={r.date}>
+                {label}: ${r.amount.toFixed(2)}/night
+              </div>
+            )
+          })}
           {totalNightly !== null && (
             <div style={{ fontWeight: 600, marginTop: '2px', color: 'var(--sd-text)' }}>
               Total: ${totalNightly.toFixed(2)} <span style={{ fontWeight: 400, color: 'var(--sd-muted)' }}>(paid to hotel)</span>
@@ -165,7 +186,7 @@ export default function RoomCard({ room, eventId, attendee, myApplications }: Ro
 
       {/* Occupant chips */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' }}>
-        {room.occupants.map((occ, idx) => (
+        {(room.occupants ?? []).map((occ, idx) => (
           <span
             key={idx}
             style={{

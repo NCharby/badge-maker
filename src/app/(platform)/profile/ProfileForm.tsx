@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { PlatformUser, getDisplayName } from '@/types/platform'
-import { updateProfile, requestEmailChange, updatePaymentProvider, sendTelegramVerificationCode, verifyTelegramCode } from './actions'
+import { updateProfile, requestEmailChange, updatePaymentProvider, sendTelegramVerificationCode } from './actions'
 
 const SOCIAL_PLATFORMS = ['Fetlife', 'Discord', 'Bluesky', 'Twitter / X', 'Instagram', 'Recon'] as const
 
@@ -102,6 +103,7 @@ const sectionHeaderStyle: React.CSSProperties = {
 }
 
 export default function ProfileForm({ user }: { user: PlatformUser }) {
+  const router = useRouter()
   const displayName = getDisplayName(user)
   const initials = displayName.slice(0, 2).toUpperCase()
 
@@ -142,37 +144,28 @@ export default function ProfileForm({ user }: { user: PlatformUser }) {
   }
 
   // Telegram verification flow
-  const [telegramCodeSent, setTelegramCodeSent] = useState(false)
-  const [telegramCodeInput, setTelegramCodeInput] = useState('')
+  const [telegramCodeGenerated, setTelegramCodeGenerated] = useState<string | null>(null)
   const [telegramVerifyError, setTelegramVerifyError] = useState('')
-  const [telegramVerifySuccess, setTelegramVerifySuccess] = useState(false)
   const [isTelegramSendPending, startTelegramSendTransition] = useTransition()
-  const [isTelegramVerifyPending, startTelegramVerifyTransition] = useTransition()
+  const [copySuccess, setCopySuccess] = useState(false)
 
-  function handleSendTelegramCode() {
+  function handleGetTelegramCode() {
     setTelegramVerifyError('')
     startTelegramSendTransition(async () => {
       const result = await sendTelegramVerificationCode()
-      if (result.error) {
+      if ('error' in result && result.error) {
         setTelegramVerifyError(result.error)
-      } else {
-        setTelegramCodeSent(true)
+      } else if ('code' in result && result.code) {
+        setTelegramCodeGenerated(result.code)
       }
     })
   }
 
-  function handleVerifyTelegramCode() {
-    setTelegramVerifyError('')
-    startTelegramVerifyTransition(async () => {
-      const result = await verifyTelegramCode(telegramCodeInput)
-      if (result.error) {
-        setTelegramVerifyError(result.error)
-      } else {
-        setTelegramVerifySuccess(true)
-        setTelegramCodeSent(false)
-        setTelegramCodeInput('')
-      }
-    })
+  function handleCopyVerifyCommand() {
+    if (!telegramCodeGenerated) return
+    navigator.clipboard.writeText(`/verify ${telegramCodeGenerated}`)
+    setCopySuccess(true)
+    setTimeout(() => setCopySuccess(false), 2000)
   }
 
   // Email change flow
@@ -718,10 +711,10 @@ export default function ProfileForm({ user }: { user: PlatformUser }) {
               Stored without @. The platform uses this to send you Telegram notifications.
             </p>
           </div>
-          {telegramHandle && !user.telegram_verified && !telegramVerifySuccess && (
+          {telegramHandle && !user.telegram_verified && (
             <div
               style={{
-                padding: '10px 14px',
+                padding: '12px 14px',
                 borderRadius: '7px',
                 fontSize: '13px',
                 border: '1px solid #FCD34D',
@@ -729,53 +722,82 @@ export default function ProfileForm({ user }: { user: PlatformUser }) {
                 color: '#92400e',
               }}
             >
-              <strong>Handle not yet verified.</strong> The platform bot will send you a 6-digit
-              confirmation code.{' '}
-              <button
-                onClick={handleSendTelegramCode}
-                disabled={isTelegramSendPending}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: isTelegramSendPending ? 'not-allowed' : 'pointer',
-                  color: '#92400e',
-                  fontSize: '13px',
-                  textDecoration: 'underline',
-                  padding: 0,
-                }}
-              >
-                {isTelegramSendPending ? 'Sending…' : telegramCodeSent ? 'Re-send code' : 'Send verification code'}
-              </button>
-              {telegramCodeSent && (
-                <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ fontSize: '12px' }}>
-                    Code sent to <strong>@{telegramHandle.replace(/^@/, '')}</strong>. Make sure you have started a chat with @ShinyDogEventsBot first.
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <input
-                      style={{ ...inputStyle, width: '120px', background: '#fff' }}
-                      type="text"
-                      maxLength={6}
-                      value={telegramCodeInput}
-                      onChange={e => setTelegramCodeInput(e.target.value.replace(/\D/g, ''))}
-                      placeholder="000000"
-                    />
+              {!telegramCodeGenerated ? (
+                <>
+                  <strong>Handle not yet verified.</strong> Get a verification code to send to the bot.{' '}
+                  <button
+                    onClick={handleGetTelegramCode}
+                    disabled={isTelegramSendPending}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: isTelegramSendPending ? 'not-allowed' : 'pointer',
+                      color: '#92400e',
+                      fontSize: '13px',
+                      textDecoration: 'underline',
+                      padding: 0,
+                    }}
+                  >
+                    {isTelegramSendPending ? 'Generating…' : 'Get verification code'}
+                  </button>
+                </>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    Your code: <strong style={{ fontSize: '16px', letterSpacing: '2px' }}>{telegramCodeGenerated}</strong>
                     <button
-                      onClick={handleVerifyTelegramCode}
-                      disabled={isTelegramVerifyPending || telegramCodeInput.length !== 6}
+                      onClick={handleCopyVerifyCommand}
                       style={{
-                        padding: '8px 14px',
-                        borderRadius: '7px',
-                        fontSize: '13px',
-                        fontWeight: 500,
-                        cursor: (isTelegramVerifyPending || telegramCodeInput.length !== 6) ? 'not-allowed' : 'pointer',
-                        border: 'none',
-                        background: (isTelegramVerifyPending || telegramCodeInput.length !== 6) ? '#D1D5DB' : '#92400e',
-                        color: '#fff',
-                        whiteSpace: 'nowrap',
+                        marginLeft: '10px',
+                        padding: '2px 8px',
+                        borderRadius: '5px',
+                        fontSize: '12px',
+                        border: '1px solid #92400e',
+                        background: 'none',
+                        color: '#92400e',
+                        cursor: 'pointer',
                       }}
                     >
-                      {isTelegramVerifyPending ? 'Verifying…' : 'Verify'}
+                      {copySuccess ? 'Copied!' : 'Copy /verify command'}
+                    </button>
+                  </div>
+                  <ol style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    <li>Open <strong>@ShinyDogEventsBot</strong> on Telegram</li>
+                    <li>Send exactly: <code style={{ background: '#FEF3C7', padding: '1px 4px', borderRadius: '3px' }}>/verify {telegramCodeGenerated}</code></li>
+                    <li>
+                      <button
+                        onClick={() => router.refresh()}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          color: '#92400e',
+                          fontSize: '12px',
+                          textDecoration: 'underline',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Refresh status
+                      </button>{' '}
+                      after sending to confirm
+                    </li>
+                  </ol>
+                  <div style={{ fontSize: '11px', opacity: 0.8 }}>
+                    Code expires in 15 minutes.{' '}
+                    <button
+                      onClick={handleGetTelegramCode}
+                      disabled={isTelegramSendPending}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        color: '#92400e',
+                        fontSize: '11px',
+                        textDecoration: 'underline',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Get a new code
                     </button>
                   </div>
                 </div>
@@ -785,20 +807,6 @@ export default function ProfileForm({ user }: { user: PlatformUser }) {
                   {telegramVerifyError}
                 </div>
               )}
-            </div>
-          )}
-          {telegramVerifySuccess && (
-            <div
-              style={{
-                padding: '10px 14px',
-                borderRadius: '7px',
-                fontSize: '13px',
-                border: '1px solid #6EE7B7',
-                background: 'var(--sd-green-light)',
-                color: 'var(--sd-green-dark)',
-              }}
-            >
-              Telegram handle verified! You will now receive Telegram notifications.
             </div>
           )}
         </div>

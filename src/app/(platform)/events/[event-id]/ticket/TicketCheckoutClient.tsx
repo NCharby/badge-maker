@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js'
 import { purchaseTicket } from './actions'
 import { validateRoommateCode } from './validateRoommateCode'
@@ -59,11 +60,23 @@ interface SquareSDK {
   payments(appId: string, locationId: string): Promise<SquarePaymentsInstance>
 }
 
+interface CheckoutRoom {
+  id: string
+  name: string
+  number: string | null
+  lodging_type: string | null
+  bed_type: string | null
+  min_occupancy: number
+  max_occupancy: number
+  open_spot_count: number
+}
+
 interface Props {
   eventId: string
   ticketTypes: TicketType[]
   merchandise: MerchandiseItem[]
   volunteerShifts: VolunteerShift[]
+  checkoutRooms: CheckoutRoom[]   // pre-fetched rooms for room_required_at_purchase Room Lead step
   hasRoommateCodeFeature: boolean  // true if any Room Lead ticket type has roommate_codes_enabled
   paymentProvider: 'square' | 'paypal'
   squareAppId: string
@@ -109,24 +122,26 @@ function shiftsOverlapCheck(ids: string[], shifts: VolunteerShift[]): boolean {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-type Step = 'ticket' | 'roommate_code' | 'shifts' | 'merch' | 'review' | 'payment' | 'success'
+type Step = 'ticket' | 'room' | 'roommate_code' | 'shifts' | 'merch' | 'review' | 'payment'
 
 export default function TicketCheckoutClient({
   eventId,
   ticketTypes,
   merchandise,
   volunteerShifts,
+  checkoutRooms,
   hasRoommateCodeFeature,
   paymentProvider,
   squareAppId,
   squareLocationId,
   paypalClientId,
 }: Props) {
+  const router = useRouter()
   const [step, setStep] = useState<Step>('ticket')
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
   const [selectedShiftIds, setSelectedShiftIds] = useState<string[]>([])
   const [selectedMerchIds, setSelectedMerchIds] = useState<string[]>([])
-  const [orderId, setOrderId] = useState<string | null>(null)
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
 
@@ -136,9 +151,6 @@ export default function TicketCheckoutClient({
   const [confirmedRoomCode, setConfirmedRoomCode] = useState<string | null>(null)
   const [confirmedRoomInfo, setConfirmedRoomInfo] = useState<RoomInfo | null>(null)
   const [isVerifyPending, startVerifyTransition] = useTransition()
-
-  // Code returned to Room Lead after purchase (for success screen)
-  const [purchasedRoommateCode, setPurchasedRoommateCode] = useState<string | undefined>()
 
   // Square card state
   const squareCardRef = useRef<SquareCard | null>(null)
@@ -158,12 +170,16 @@ export default function TicketCheckoutClient({
   const selectedMerchItems = selectedMerchIds.map(id => eligibleMerch.find(m => m.id === id)).filter(Boolean) as MerchandiseItem[]
   const total = (selectedTicket ? Number(selectedTicket.price) : 0) + selectedMerchItems.reduce((s, m) => s + Number(m.price), 0)
 
+  // Show room step when: Room Lead ticket with room_required_at_purchase
+  const showRoomStep = selectedTicket?.room_lead && selectedTicket?.room_required_at_purchase && checkoutRooms.length > 0
+
   // Show roommate code step when: feature is enabled AND selected ticket is NOT a Room Lead ticket
   const showRoommateCodeStep =
     hasRoommateCodeFeature && selectedTicket !== undefined && !selectedTicket.room_lead
 
   function getStepOrder(): Step[] {
     const steps: Step[] = ['ticket']
+    if (showRoomStep) steps.push('room')
     if (showRoommateCodeStep) steps.push('roommate_code')
     if (selectedTicket && selectedTicket.volunteer_hours_required > 0) steps.push('shifts')
     if (eligibleMerch.length > 0) steps.push('merch')
@@ -255,13 +271,13 @@ export default function TicketCheckoutClient({
       selectedMerchIds,
       confirmedRoomCode ?? undefined,
       token,
+      selectedRoomId ?? undefined,
     )
     if ('error' in result) {
       setError(result.error)
     } else {
-      setOrderId(result.orderId)
-      setPurchasedRoommateCode(result.roommate_code)
-      setStep('success')
+      // Let the server component re-render with the confirmed ticket data (including roommate_code)
+      router.refresh()
     }
   }
 
@@ -366,48 +382,6 @@ export default function TicketCheckoutClient({
     )
   }
 
-  // ── Success ────────────────────────────────────────────────────────────────────
-  if (step === 'success') {
-    return (
-      <div style={{ background: 'var(--sd-card)', border: '1px solid var(--sd-border)', borderRadius: 'var(--sd-radius)', padding: '32px', textAlign: 'center' }}>
-        <div style={{ fontSize: '40px', marginBottom: '12px' }}>🎟</div>
-        <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '8px' }}>
-          You&apos;re registered!
-        </h2>
-        <p style={{ fontSize: '13px', color: 'var(--sd-muted)', marginBottom: '4px' }}>
-          {selectedTicket?.name}
-        </p>
-        {orderId && (
-          <p style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>
-            Order #{orderId.slice(0, 8)}
-          </p>
-        )}
-
-        {/* Roommate Code display for Room Leads */}
-        {purchasedRoommateCode && (
-          <div style={{ marginTop: '24px', padding: '16px 20px', background: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: '8px', textAlign: 'left' }}>
-            <p style={{ fontSize: '12px', fontWeight: 700, color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
-              Your Roommate Code
-            </p>
-            <p style={{ fontSize: '28px', fontWeight: 800, letterSpacing: '0.15em', color: '#065f46', fontFamily: 'monospace', marginBottom: '6px' }}>
-              {purchasedRoommateCode}
-            </p>
-            <p style={{ fontSize: '12px', color: '#047857' }}>
-              Share this code with people you want in your room. They can enter it during checkout to reserve a spot.
-            </p>
-          </div>
-        )}
-
-        <a
-          href={`/events/${eventId}`}
-          style={{ display: 'inline-block', marginTop: '20px', padding: '9px 20px', background: 'var(--sd-green)', color: '#fff', borderRadius: '7px', fontSize: '13px', fontWeight: 600, textDecoration: 'none' }}
-        >
-          Back to event hub
-        </a>
-      </div>
-    )
-  }
-
   const card = (children: React.ReactNode) => (
     <div style={{ background: 'var(--sd-card)', border: '1px solid var(--sd-border)', borderRadius: 'var(--sd-radius)', padding: '24px' }}>
       {children}
@@ -443,6 +417,7 @@ export default function TicketCheckoutClient({
                 // Reset all downstream state when ticket type changes
                 setSelectedShiftIds([])
                 setSelectedMerchIds([])
+                setSelectedRoomId(null)
                 setCodeInput('')
                 setCodeError('')
                 setConfirmedRoomInfo(null)
@@ -467,7 +442,7 @@ export default function TicketCheckoutClient({
                 )}
                 {tt.room_required_at_purchase && (
                   <p style={{ fontSize: '11px', color: 'var(--sd-muted)', marginTop: '4px', marginBottom: 0 }}>
-                    ⚠ Room selection during checkout is not yet available — select your room after purchase.
+                    Includes room selection
                   </p>
                 )}
               </button>
@@ -479,7 +454,68 @@ export default function TicketCheckoutClient({
     )
   }
 
-  // ── Step 1.5: Roommate Code ───────────────────────────────────────────────────
+  // ── Step 1.5: Room Selection (Room Lead with room_required_at_purchase) ────────
+  if (step === 'room') {
+    return card(
+      <>
+        <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '4px' }}>Select Your Room</h2>
+        <p style={{ fontSize: '13px', color: 'var(--sd-muted)', marginBottom: '20px' }}>
+          Your ticket requires room selection at checkout. Choose a room below to continue.
+        </p>
+
+        {checkoutRooms.length === 0 ? (
+          <p style={{ fontSize: '13px', color: 'var(--sd-muted)' }}>No rooms are currently available.</p>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px', marginBottom: '4px' }}>
+            {checkoutRooms.map(room => {
+              const isSelected = selectedRoomId === room.id
+              const isFull = room.open_spot_count === 0
+              return (
+                <button
+                  key={room.id}
+                  onClick={() => { if (!isFull) setSelectedRoomId(room.id) }}
+                  disabled={isFull}
+                  style={{
+                    textAlign: 'left', padding: '14px 16px', borderRadius: '8px',
+                    border: `2px solid ${isSelected ? 'var(--sd-green)' : 'var(--sd-border)'}`,
+                    background: isSelected ? 'var(--sd-green-light)' : isFull ? '#f9fafb' : 'var(--sd-card)',
+                    cursor: isFull ? 'not-allowed' : 'pointer',
+                    opacity: isFull ? 0.6 : 1,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--sd-text)' }}>
+                      {room.name}{room.number ? ` · ${room.number}` : ''}
+                    </span>
+                    <span style={{
+                      fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: '20px', whiteSpace: 'nowrap',
+                      background: room.open_spot_count > 0 ? '#d1fae5' : '#fee2e2',
+                      color: room.open_spot_count > 0 ? '#065f46' : '#991b1b',
+                    }}>
+                      {room.open_spot_count > 0 ? `${room.open_spot_count} open` : 'Full'}
+                    </span>
+                  </div>
+                  {room.lodging_type && (
+                    <p style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '3px', marginBottom: 0 }}>{room.lodging_type}</p>
+                  )}
+                  {room.bed_type && (
+                    <p style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px', marginBottom: 0 }}>{room.bed_type}</p>
+                  )}
+                  <p style={{ fontSize: '11px', color: 'var(--sd-muted)', marginTop: '4px', marginBottom: 0 }}>
+                    {room.min_occupancy}–{room.max_occupancy} occupants
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {navRow('Back', 'Next →', selectedRoomId === null, nextStep)}
+      </>
+    )
+  }
+
+  // ── Step 1.6: Roommate Code ───────────────────────────────────────────────────
   if (step === 'roommate_code') {
     return card(
       <>

@@ -3,7 +3,6 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateEventDetails } from './actions'
-import Link from 'next/link'
 
 const DRAFT_STATUS = 'Draft'
 
@@ -36,13 +35,11 @@ interface Props {
     description: string
     start_date: string
     end_date: string
-    location: string
-    venue_id: string
+    room_lock_in_date: string
   }
-  venues: { id: string; name: string }[]
 }
 
-export default function EditEventClient({ eventId, currentStatus, initialValues, venues }: Props) {
+export default function EditEventClient({ eventId, currentStatus, initialValues }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
@@ -52,8 +49,7 @@ export default function EditEventClient({ eventId, currentStatus, initialValues,
   const [description, setDescription] = useState(initialValues.description)
   const [startDate, setStartDate] = useState(initialValues.start_date)
   const [endDate, setEndDate] = useState(initialValues.end_date)
-  const [location, setLocation] = useState(initialValues.location)
-  const [venueId, setVenueId] = useState(initialValues.venue_id)
+  const [roomLockInDate, setRoomLockInDate] = useState(initialValues.room_lock_in_date)
 
   const isPublished = currentStatus !== DRAFT_STATUS
 
@@ -66,7 +62,7 @@ export default function EditEventClient({ eventId, currentStatus, initialValues,
     if (endDate < startDate) { setError('End date must be on or after start date.'); return }
 
     startTransition(async () => {
-      const result = await updateEventDetails(eventId, { title, description, start_date: startDate, end_date: endDate, location, venue_id: venueId || null })
+      const result = await updateEventDetails(eventId, { title, description, start_date: startDate, end_date: endDate, room_lock_in_date: roomLockInDate })
       if ('error' in result) {
         setError(result.error)
       } else {
@@ -142,41 +138,18 @@ export default function EditEventClient({ eventId, currentStatus, initialValues,
         </div>
 
         <div>
-          <label style={labelStyle}>Location</label>
+          <label style={labelStyle}>Room Lock-In Date</label>
           <input
+            type="datetime-local"
             style={inputStyle}
-            value={location}
-            onChange={e => setLocation(e.target.value)}
-            placeholder="Physical address"
+            value={roomLockInDate}
+            onChange={e => {
+              const val = e.target.value
+              setRoomLockInDate(val && !val.includes('T') ? val + 'T00:00' : val)
+            }}
           />
-        </div>
-
-        <div>
-          <label style={labelStyle}>Venue</label>
-          {venues.length === 0 ? (
-            <p style={{ fontSize: '12px', color: 'var(--sd-muted)', margin: '4px 0 0' }}>
-              No venues yet.{' '}
-              <Link href="/ep/venues/new" style={{ color: 'var(--sd-purple)', textDecoration: 'none' }}>
-                Create a venue →
-              </Link>
-            </p>
-          ) : (
-            <select
-              style={{ ...inputStyle, cursor: 'pointer' }}
-              value={venueId}
-              onChange={e => setVenueId(e.target.value)}
-            >
-              <option value="">— No venue selected —</option>
-              {venues.map(v => (
-                <option key={v.id} value={v.id}>{v.name}</option>
-              ))}
-            </select>
-          )}
           <p style={{ fontSize: '11px', color: 'var(--sd-muted)', marginTop: '4px' }}>
-            Used by the Venue module for room management. Selecting a venue automatically enables the Venue module and disables Room Selection.{' '}
-            <Link href="/ep/venues" style={{ color: 'var(--sd-purple)', textDecoration: 'none' }}>
-              Manage venues →
-            </Link>
+            The deadline for all attendees to finalize their room selections. Time defaults to 12:00 AM if not specified. Required for lock countdown notifications.
           </p>
         </div>
 

@@ -31,6 +31,7 @@ export type NotificationType =
   | 'area_lead_removed'         // row 28 — area lead label removed
   | 'application_approved'      // gap    — attendee: EP approved their application
   | 'application_declined'      // gap    — attendee: EP declined their application
+  | 'lock_check_reminder'       // EP-initiated — attendee has incomplete required modules
 
 /**
  * Write an in-platform notification record for the given user.

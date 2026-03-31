@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect, useTransition, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createActivity, updateActivity, deleteActivity, importScheduleCSV } from './actions'
 import type { ActivityInput } from './actions'
@@ -39,6 +39,10 @@ function formatShiftTime(dateStr: string): string {
     weekday: 'short', month: 'short', day: 'numeric',
     hour: 'numeric', minute: '2-digit',
   })
+}
+
+function formatDayLabel(dateStr: string): string {
+  return new Date(dateStr + 'T12:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 }
 
 function formatDuration(minutes: number): string {
@@ -258,11 +262,42 @@ export default function ScheduleManageClient({ eventId, initialActivities }: Pro
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<Record<string, string>>({})
   const [isDeletePending, startDeleteTransition] = useTransition()
+  const [search, setSearch] = useState('')
+  const [activeDayFilter, setActiveDayFilter] = useState<string | null>(null)
 
   // Sync state when server refreshes data (e.g. after CSV import)
   useEffect(() => {
     setActivities(initialActivities)
   }, [initialActivities])
+
+  const uniqueDays = useMemo(() => {
+    const days = new Set<string>()
+    for (const a of activities) {
+      const day = a.date_time.slice(0, 10)
+      if (day) days.add(day)
+    }
+    return Array.from(days).sort()
+  }, [activities])
+
+  const grouped = useMemo(() => {
+    const lowerSearch = search.toLowerCase()
+    const filtered = activities.filter(a => {
+      const matchesSearch = !search || a.name.toLowerCase().includes(lowerSearch) || a.description.toLowerCase().includes(lowerSearch)
+      const matchesDay = !activeDayFilter || a.date_time.slice(0, 10) === activeDayFilter
+      return matchesSearch && matchesDay
+    })
+
+    const dayMap = new Map<string, ActivityRow[]>()
+    for (const a of filtered) {
+      const day = a.date_time.slice(0, 10)
+      if (!dayMap.has(day)) dayMap.set(day, [])
+      dayMap.get(day)!.push(a)
+    }
+
+    return Array.from(dayMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, items]) => ({ day, items }))
+  }, [activities, search, activeDayFilter])
 
   function handleSave(saved: ActivityRow) {
     setActivities(prev => {
@@ -293,6 +328,55 @@ export default function ScheduleManageClient({ eventId, initialActivities }: Pro
 
   return (
     <div>
+      {/* Search input */}
+      <div style={{ marginBottom: '10px' }}>
+        <input
+          style={inputStyle}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search activities…"
+        />
+      </div>
+
+      {/* Day filter chips */}
+      {uniqueDays.length > 1 && (
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '14px' }}>
+          <button
+            onClick={() => setActiveDayFilter(null)}
+            style={{
+              padding: '4px 12px',
+              borderRadius: '20px',
+              fontSize: '12px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              border: activeDayFilter === null ? 'none' : '1px solid var(--sd-border)',
+              background: activeDayFilter === null ? 'var(--sd-purple)' : 'var(--sd-card)',
+              color: activeDayFilter === null ? '#fff' : 'var(--sd-text)',
+            }}
+          >
+            All days
+          </button>
+          {uniqueDays.map(day => (
+            <button
+              key={day}
+              onClick={() => setActiveDayFilter(activeDayFilter === day ? null : day)}
+              style={{
+                padding: '4px 12px',
+                borderRadius: '20px',
+                fontSize: '12px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: activeDayFilter === day ? 'none' : '1px solid var(--sd-border)',
+                background: activeDayFilter === day ? 'var(--sd-purple)' : 'var(--sd-card)',
+                color: activeDayFilter === day ? '#fff' : 'var(--sd-text)',
+              }}
+            >
+              {formatDayLabel(day)}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Add activity button + CSV import */}
       {!addingNew && (
         <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -322,102 +406,121 @@ export default function ScheduleManageClient({ eventId, initialActivities }: Pro
         </div>
       )}
 
-      {/* Empty state */}
+      {/* Empty states */}
       {activities.length === 0 && !addingNew && (
         <p style={{ fontSize: '14px', color: 'var(--sd-muted)' }}>No activities yet. Add the first one above.</p>
       )}
+      {activities.length > 0 && grouped.length === 0 && (search || activeDayFilter) && (
+        <p style={{ fontSize: '14px', color: 'var(--sd-muted)' }}>No activities match your search.</p>
+      )}
 
-      {/* Activity list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {activities.map(activity => (
-          <div key={activity.id}>
-            {editingId === activity.id ? (
-              <ActivityForm
-                eventId={eventId}
-                initial={{
-                  name: activity.name,
-                  date_time: toDatetimeLocal(activity.date_time),
-                  duration_minutes: String(activity.duration_minutes),
-                  description: activity.description,
-                  volunteers_requested: activity.volunteers_requested,
-                  volunteer_count: activity.volunteer_count != null ? String(activity.volunteer_count) : '',
-                  volunteer_shift_duration_minutes: activity.volunteer_shift_duration_minutes != null ? String(activity.volunteer_shift_duration_minutes) : '',
-                  volunteer_shift_date_time: activity.volunteer_shift_date_time ? toDatetimeLocal(activity.volunteer_shift_date_time) : '',
-                  id: activity.id,
-                }}
-                onSave={handleSave}
-                onCancel={() => setEditingId(null)}
-              />
-            ) : (
-              <div style={{
-                background: 'var(--sd-card)',
-                border: '1px solid var(--sd-border)',
-                borderRadius: 'var(--sd-radius)',
-                padding: '14px 16px',
-                boxShadow: '0 1px 3px rgba(0,0,0,.04)',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--sd-text)', marginBottom: '4px' }}>
-                      {activity.name}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--sd-muted)', display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                      <span>{formatShiftTime(activity.date_time)}</span>
-                      <span>·</span>
-                      <span>{formatDuration(activity.duration_minutes)}</span>
-                      {activity.volunteers_requested && activity.volunteer_count && (
-                        <>
-                          <span>·</span>
-                          <span style={{ color: 'var(--sd-purple)', fontWeight: 600 }}>
-                            {activity.volunteer_count} volunteer{activity.volunteer_count !== 1 ? 's' : ''} needed
-                          </span>
-                        </>
+      {/* Grouped activity list */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+        {grouped.map(group => (
+          <div key={group.day}>
+            <div style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              color: 'var(--sd-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              padding: '8px 0 4px',
+            }}>
+              {formatDayLabel(group.day)}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+              {group.items.map(activity => (
+                <div key={activity.id}>
+                  {editingId === activity.id ? (
+                    <ActivityForm
+                      eventId={eventId}
+                      initial={{
+                        name: activity.name,
+                        date_time: toDatetimeLocal(activity.date_time),
+                        duration_minutes: String(activity.duration_minutes),
+                        description: activity.description,
+                        volunteers_requested: activity.volunteers_requested,
+                        volunteer_count: activity.volunteer_count != null ? String(activity.volunteer_count) : '',
+                        volunteer_shift_duration_minutes: activity.volunteer_shift_duration_minutes != null ? String(activity.volunteer_shift_duration_minutes) : '',
+                        volunteer_shift_date_time: activity.volunteer_shift_date_time ? toDatetimeLocal(activity.volunteer_shift_date_time) : '',
+                        id: activity.id,
+                      }}
+                      onSave={handleSave}
+                      onCancel={() => setEditingId(null)}
+                    />
+                  ) : (
+                    <div style={{
+                      background: 'var(--sd-card)',
+                      border: '1px solid var(--sd-border)',
+                      borderRadius: 'var(--sd-radius)',
+                      padding: '14px 16px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,.04)',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--sd-text)', marginBottom: '4px' }}>
+                            {activity.name}
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--sd-muted)', display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                            <span>{formatShiftTime(activity.date_time)}</span>
+                            <span>·</span>
+                            <span>{formatDuration(activity.duration_minutes)}</span>
+                            {activity.volunteers_requested && activity.volunteer_count && (
+                              <>
+                                <span>·</span>
+                                <span style={{ color: 'var(--sd-purple)', fontWeight: 600 }}>
+                                  {activity.volunteer_count} volunteer{activity.volunteer_count !== 1 ? 's' : ''} needed
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          <p style={{ fontSize: '13px', color: 'var(--sd-text)', margin: 0, lineHeight: 1.5 }}>{activity.description}</p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center' }}>
+                          {confirmingDeleteId === activity.id ? (
+                            <>
+                              <span style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>Delete this activity?</span>
+                              <button
+                                onClick={() => handleDelete(activity.id)}
+                                disabled={isDeletePending}
+                                style={{ fontSize: '12px', color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0, fontWeight: 600 }}
+                              >
+                                Delete
+                              </button>
+                              <button
+                                onClick={() => setConfirmingDeleteId(null)}
+                                style={{ fontSize: '12px', color: 'var(--sd-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => { setEditingId(activity.id); setAddingNew(false); setConfirmingDeleteId(null) }}
+                                style={{ fontSize: '12px', color: 'var(--sd-purple)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => setConfirmingDeleteId(activity.id)}
+                                disabled={isDeletePending}
+                                style={{ fontSize: '12px', color: '#dc2626', background: 'none', border: 'none', cursor: isDeletePending ? 'not-allowed' : 'pointer', textDecoration: 'underline', padding: 0 }}
+                              >
+                                Delete
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {deleteError[activity.id] && (
+                        <p style={{ fontSize: '12px', color: '#dc2626', marginTop: '6px', marginBottom: 0 }}>{deleteError[activity.id]}</p>
                       )}
                     </div>
-                    <p style={{ fontSize: '13px', color: 'var(--sd-text)', margin: 0, lineHeight: 1.5 }}>{activity.description}</p>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center' }}>
-                    {confirmingDeleteId === activity.id ? (
-                      <>
-                        <span style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>Delete this activity?</span>
-                        <button
-                          onClick={() => handleDelete(activity.id)}
-                          disabled={isDeletePending}
-                          style={{ fontSize: '12px', color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0, fontWeight: 600 }}
-                        >
-                          Delete
-                        </button>
-                        <button
-                          onClick={() => setConfirmingDeleteId(null)}
-                          style={{ fontSize: '12px', color: 'var(--sd-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => { setEditingId(activity.id); setAddingNew(false); setConfirmingDeleteId(null) }}
-                          style={{ fontSize: '12px', color: 'var(--sd-purple)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => setConfirmingDeleteId(activity.id)}
-                          disabled={isDeletePending}
-                          style={{ fontSize: '12px', color: '#dc2626', background: 'none', border: 'none', cursor: isDeletePending ? 'not-allowed' : 'pointer', textDecoration: 'underline', padding: 0 }}
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
-                  </div>
+                  )}
                 </div>
-                {deleteError[activity.id] && (
-                  <p style={{ fontSize: '12px', color: '#dc2626', marginTop: '6px', marginBottom: 0 }}>{deleteError[activity.id]}</p>
-                )}
-              </div>
-            )}
+              ))}
+            </div>
           </div>
         ))}
       </div>

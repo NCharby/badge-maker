@@ -37,7 +37,7 @@ export default async function RoomDetailPage({
   // Fetch event
   const { data: event } = await admin
     .from('platform_events')
-    .select('id, slug, title, room_lock_in_date')
+    .select('id, slug, title, start_date, end_date, room_lock_in_date')
     .eq('id', eventId)
     .single()
   if (!event) notFound()
@@ -170,6 +170,8 @@ export default async function RoomDetailPage({
         occupants={resolvedOccupants}
         pendingApplications={pendingApplications}
         isMyRoom={isMyRoom}
+        eventStartDate={event.start_date}
+        eventEndDate={event.end_date}
       />
     </div>
   )

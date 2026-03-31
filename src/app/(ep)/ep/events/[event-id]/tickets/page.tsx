@@ -14,7 +14,7 @@ export default async function EpTicketsPage({
 
   const { data: event } = await supabase
     .from('platform_events')
-    .select('id, title')
+    .select('id, title, module_config')
     .eq('id', eventId)
     .eq('owner_id', user.id)
     .single()
@@ -36,6 +36,10 @@ export default async function EpTicketsPage({
     .eq('event_id', eventId)
     .order('created_at')
 
+  // Roommate codes are only available when the room selection workflow is enabled
+  const mc = (event.module_config ?? {}) as Record<string, { room_selection_workflow?: boolean } | undefined>
+  const roomSelectionWorkflowEnabled = !!(mc.venue?.room_selection_workflow || mc.room_selection?.room_selection_workflow)
+
   return (
     <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2rem 1.5rem' }}>
       <Link
@@ -48,6 +52,7 @@ export default async function EpTicketsPage({
         eventId={eventId}
         eventTitle={event.title}
         ticketTypes={(ticketTypes ?? []) as Parameters<typeof TicketsClient>[0]['ticketTypes']}
+        roomSelectionWorkflowEnabled={roomSelectionWorkflowEnabled}
       />
     </div>
   )

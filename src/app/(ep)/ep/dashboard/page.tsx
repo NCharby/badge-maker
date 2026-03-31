@@ -273,27 +273,40 @@ export default async function EpDashboardPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {activeVenues.map((venue: { id: string; name: string; physical_address: string; status: string }) => (
-              <Link
+              <div
                 key={venue.id}
-                href={`/ep/venues/${venue.id}`}
                 style={{
                   background: 'var(--sd-card)',
                   border: '1px solid var(--sd-border)',
                   borderRadius: 'var(--sd-radius)',
                   padding: '14px 20px',
-                  textDecoration: 'none',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   gap: '12px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,.06)',
                 }}
               >
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--sd-text)' }}>{venue.name}</div>
                   <div style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px' }}>{venue.physical_address}</div>
                 </div>
-                <span style={{ fontSize: '12px', color: 'var(--sd-purple)', flexShrink: 0 }}>Manage →</span>
-              </Link>
+                <Link
+                  href={`/ep/venues/${venue.id}`}
+                  style={{
+                    flexShrink: 0,
+                    padding: '7px 16px',
+                    background: 'var(--sd-purple)',
+                    color: '#fff',
+                    borderRadius: '7px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                  }}
+                >
+                  Manage →
+                </Link>
+              </div>
             ))}
             {archivedVenues.length > 0 && (
               <div style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '4px' }}>

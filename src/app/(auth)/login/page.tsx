@@ -41,7 +41,11 @@ function LoginForm() {
     const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({ email, password })
 
     if (signInError || !user) {
-      setError('Invalid email or password. Please try again.')
+      if (signInError?.message?.toLowerCase().includes('email not confirmed')) {
+        setError('Please verify your email address before signing in. Check your inbox for the confirmation link.')
+      } else {
+        setError('Invalid email or password. Please try again.')
+      }
       setLoading(false)
       return
     }

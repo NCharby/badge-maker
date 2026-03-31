@@ -4,7 +4,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { parseCSV } from '@/lib/csv/parseCSV'
 import { createInPlatformNotification } from '@/lib/notifications'
-import { sendTelegramMessage } from '@/lib/telegram/send'
+import { sendTelegramDM } from '@/lib/telegram/send'
 
 export type ShiftInput = {
   name: string
@@ -265,13 +265,8 @@ export async function toggleAreaLead(
   if (error) return { error: error.message }
 
   // Row 27 / Row 28: area lead assigned/removed → notify volunteer (in-platform + Telegram)
-  const [{ data: eventRowVol }, { data: volunteerTg }] = await Promise.all([
+  const [{ data: eventRowVol }] = await Promise.all([
     admin.from('platform_events').select('title').eq('id', eventId).single(),
-    admin
-      .from('platform_users')
-      .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
-      .eq('id', signup.user_id)
-      .single(),
   ])
   const eventTitleVol = eventRowVol?.title ?? 'the event'
   const notifType = isLead ? 'area_lead_assigned' : 'area_lead_removed'
@@ -289,9 +284,7 @@ export async function toggleAreaLead(
     actionLabel: 'View Volunteer Shifts',
     eventId,
   })
-  if (volunteerTg?.telegram_handle && volunteerTg.telegram_verified && volunteerTg.telegram_notifications_enabled) {
-    void sendTelegramMessage(volunteerTg.telegram_handle, notifBody)
-  }
+  void sendTelegramDM(signup.user_id, notifBody)
 
   revalidatePath(`/ep/events/${eventId}/volunteer`)
   return { success: true }

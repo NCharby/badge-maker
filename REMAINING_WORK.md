@@ -57,7 +57,7 @@ Required for §6.3 (weekly automated hotel email). Must be callable by an extern
 - Generate Excel (`.xlsx`) using `exceljs` and PDF using existing `lib/pdf.ts`
 - Compare against last week's snapshot (store in a `report_snapshots` table or Supabase Storage)
 - Highlight changes in yellow in the Excel file; summarize in email body
-- Send via Postmark to `platform_events.hotel_contact_email ?? venues.email`
+- Send via Resend to `platform_events.hotel_contact_email ?? venues.email`
 - Must return 200 (scheduler needs a success signal)
 
 ---
@@ -72,7 +72,7 @@ Required for §10. Triggered by external scheduler after event transitions to `E
 **Implementation guidance:**
 - Accept `event_id` query param; validate it exists and is in `Event Locked` status
 - Generate multi-tab Excel (`.xlsx`) with tabs: Attendee Room List, Room Lock Status, Volunteer Schedule, Event Schedule
-- Email to EP (`platform_events.owner_id` → `platform_users.email`) via Postmark
+- Email to EP (`platform_events.owner_id` → `platform_users.email`) via Resend
 - Store generated file in Supabase Storage for re-download from EP panel
 - Column spec per §10
 
@@ -116,7 +116,7 @@ Rows 12, 13, 17–21, and 23 of the notification inventory (§6.12) require an e
 ### 6. Email Delivery — All Notification Rows
 
 **Status:** All `// TODO: send email` stubs
-**Pattern:** Use Postmark (`POSTMARK_API_KEY`) via `src/lib/email.ts` (or create it if it doesn't exist)
+**Pattern:** Use Resend (`RESEND_API_KEY`) via `src/lib/email.ts`
 
 Every Server Action that fires an in-platform notification also has a `// TODO: send email` comment. Email sends need to be wired for:
 
@@ -142,7 +142,7 @@ Every Server Action that fires an in-platform notification also has a `// TODO: 
 
 **Implementation pattern** (add after each `createInPlatformNotification` call):
 ```typescript
-// TODO: send email — replace with Postmark call
+// TODO: send email — replace with Resend call
 // await sendEmail({ to: userEmail, subject: '...', body: '...' })
 ```
 

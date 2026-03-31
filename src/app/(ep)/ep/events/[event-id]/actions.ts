@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import type { WorkflowStatus } from '@/types/platform'
+import { sendEventChannelMessage } from '@/lib/telegram/send'
 
 const SYSTEM_STATUSES = ['Draft', 'Published', 'Event Locked', 'Registration', 'Happening Now', 'Closed', 'Archived']
 
@@ -16,7 +17,7 @@ export async function updateEventStatus(
 
   const { data: event } = await supabase
     .from('platform_events')
-    .select('id, workflow_statuses')
+    .select('id, title, start_date, workflow_statuses, module_config')
     .eq('id', eventId)
     .eq('owner_id', user.id)
     .single()
@@ -37,6 +38,42 @@ export async function updateEventStatus(
     .update(updatePayload)
     .eq('id', eventId)
   if (error) return { error: error.message }
+
+  // Find custom status message for any module that opens at this status
+  const workflowStatuses = ((event.workflow_statuses ?? []) as WorkflowStatus[])
+  const moduleConfig = (event.module_config ?? {}) as Record<string, {
+    enabled?: boolean
+    opens_at_status?: string | null
+    custom_status_message_enabled?: boolean
+    custom_status_message?: string
+  } | undefined>
+  let statusMessage = ''
+  for (const cfg of Object.values(moduleConfig)) {
+    if (!cfg?.enabled || !cfg.opens_at_status || !cfg.custom_status_message_enabled || !cfg.custom_status_message) continue
+    // opens_at_status may be a UUID (custom status) or a system status name like 'Published'
+    const resolvedName = workflowStatuses.find(s => s.id === cfg.opens_at_status)?.name ?? cfg.opens_at_status
+    if (resolvedName === newStatus) {
+      statusMessage = cfg.custom_status_message
+      break
+    }
+  }
+
+  // Event-specific channel notifications
+  sendEventChannelMessage(eventId, 'status_transition', { new_status: newStatus, event_name: event.title ?? '', status_message: statusMessage })
+    .then(r => { if (!r.success) console.error('[telegram] status_transition failed:', r.error) })
+  if (newStatus === 'Event Locked') {
+    const eventDate = event.start_date
+      ? new Date(event.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      : ''
+    sendEventChannelMessage(eventId, 'event_locked', { event_name: event.title ?? '', event_date: eventDate })
+      .then(r => { if (!r.success) console.error('[telegram] event_locked failed:', r.error) })
+  }
+  // rooms_open: fire when the new status matches the opens_at_status of room_selection or venue module
+  const roomModuleCfg = moduleConfig['room_selection'] ?? moduleConfig['venue']
+  if (roomModuleCfg?.enabled && roomModuleCfg?.opens_at_status === newStatus) {
+    sendEventChannelMessage(eventId, 'rooms_open', { event_name: event.title ?? '' })
+      .then(r => { if (!r.success) console.error('[telegram] rooms_open failed:', r.error) })
+  }
 
   revalidatePath(`/ep/events/${eventId}`)
   revalidatePath('/ep/dashboard')

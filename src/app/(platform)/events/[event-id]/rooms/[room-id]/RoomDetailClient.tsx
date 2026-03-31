@@ -1,8 +1,22 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { claimRoommateByEmail, acceptApplication, declineApplication } from '../actions'
+import { useRouter } from 'next/navigation'
+import { claimRoommateByEmail, acceptApplication, declineApplication, releaseRoom } from '../actions'
 import type { AttendeeRoomState } from '../actions'
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+function buildDayDateMap(startDate: string, endDate: string): Record<string, string> {
+  const map: Record<string, string> = {}
+  const current = new Date(startDate + 'T12:00:00Z')
+  const end = new Date(endDate + 'T12:00:00Z')
+  while (current < end) {
+    map[DAY_NAMES[current.getUTCDay()]] = current.toISOString().slice(0, 10)
+    current.setUTCDate(current.getUTCDate() + 1)
+  }
+  return map
+}
 
 type RoomData = {
   id: string
@@ -42,6 +56,8 @@ interface RoomDetailClientProps {
   occupants: ResolvedOccupant[]
   pendingApplications: ResolvedApplication[]
   isMyRoom: boolean
+  eventStartDate: string
+  eventEndDate: string
 }
 
 export default function RoomDetailClient({
@@ -51,7 +67,12 @@ export default function RoomDetailClient({
   occupants,
   pendingApplications,
   isMyRoom,
+  eventStartDate,
+  eventEndDate,
 }: RoomDetailClientProps) {
+  const router = useRouter()
+  const dateMap = buildDayDateMap(eventStartDate, eventEndDate)
+
   // Claim by email
   const [claimEmail, setClaimEmail] = useState('')
   const [claimPending, startClaimTransition] = useTransition()
@@ -62,6 +83,22 @@ export default function RoomDetailClient({
   const [appPending, startAppTransition] = useTransition()
   const [appErrors, setAppErrors] = useState<Record<string, string>>({})
   const [resolvedApps, setResolvedApps] = useState<Set<string>>(new Set())
+
+  // Release room
+  const [releasePending, startReleaseTransition] = useTransition()
+  const [releaseError, setReleaseError] = useState<string | null>(null)
+
+  const handleRelease = () => {
+    setReleaseError(null)
+    startReleaseTransition(async () => {
+      const result = await releaseRoom(eventId, room.id)
+      if (result?.error) {
+        setReleaseError(result.error)
+      } else {
+        router.push(`/events/${eventId}/rooms`)
+      }
+    })
+  }
 
   const totalNightly = room.room_daily_rates && room.room_daily_rates.length > 0
     ? room.room_daily_rates.reduce((sum, r) => sum + r.amount, 0)
@@ -180,12 +217,18 @@ export default function RoomDetailClient({
         {room.room_daily_rates && room.room_daily_rates.length > 0 && (
           <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--sd-border)', fontSize: '13px' }}>
             <div style={{ color: 'var(--sd-muted)', marginBottom: '6px' }}>Nightly rates (paid directly to hotel)</div>
-            {room.room_daily_rates.map(r => (
-              <div key={r.date} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>{new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                <span>${r.amount.toFixed(2)}</span>
-              </div>
-            ))}
+            {room.room_daily_rates.map(r => {
+              const isoDate = dateMap[r.date]
+              const label = isoDate
+                ? new Date(isoDate + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' })
+                : r.date.charAt(0).toUpperCase() + r.date.slice(1).toLowerCase()
+              return (
+                <div key={r.date} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{label}</span>
+                  <span>${r.amount.toFixed(2)}</span>
+                </div>
+              )
+            })}
             {totalNightly !== null && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, marginTop: '6px', paddingTop: '6px', borderTop: '1px solid var(--sd-border)' }}>
                 <span>Total</span>
@@ -219,6 +262,33 @@ export default function RoomDetailClient({
           </div>
         ))}
       </div>
+
+      {/* Release room */}
+      {isMyRoom && attendee.lock_status !== 'Locked' && (
+        <div style={{ marginBottom: '24px' }}>
+          <button
+            onClick={handleRelease}
+            disabled={releasePending}
+            style={{
+              fontSize: '13px',
+              color: '#dc2626',
+              background: 'none',
+              border: '1px solid #fca5a5',
+              borderRadius: '6px',
+              padding: '6px 14px',
+              cursor: releasePending ? 'not-allowed' : 'pointer',
+              opacity: releasePending ? 0.7 : 1,
+            }}
+          >
+            {releasePending ? 'Releasing…' : 'Release my spot'}
+          </button>
+          {releaseError && (
+            <p style={{ color: '#dc2626', fontSize: '12px', marginTop: '6px', marginBottom: 0 }}>
+              {releaseError}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Room Lead: Find a Roommate panel */}
       {isMyRoom && attendee.is_room_lead && (

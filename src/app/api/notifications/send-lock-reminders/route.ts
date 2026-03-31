@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createInPlatformNotification } from '@/lib/notifications'
-import { sendTelegramMessage } from '@/lib/telegram/send'
+import { sendTelegramDM, sendEventChannelMessage } from '@/lib/telegram/send'
 
 function createAdminClient() {
   return createClient(
@@ -65,6 +65,12 @@ export async function POST(request: NextRequest) {
       .eq('ticket_status', 'Complete')
       .not('room_status', 'in', '("Locked In","Verified")')
 
+    // Channel broadcast — once per event per run
+    void sendEventChannelMessage(event.id, isUrgent ? 'lock_deadline_48h' : 'lock_deadline_1week', {
+      event_name: event.title ?? '',
+      lock_in_date: lockDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+    })
+
     for (const attendee of attendees ?? []) {
       // Dedup: skip if this notification type was sent for this event in the last 20 hours
       const { data: existing } = await admin
@@ -89,14 +95,7 @@ export async function POST(request: NextRequest) {
           actionLabel: 'Go to Event',
         })
         // Row 12 / 13: Telegram to attendee
-        const { data: attendeeTg } = await admin
-          .from('platform_users')
-          .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
-          .eq('id', attendee.user_id)
-          .single()
-        if (attendeeTg?.telegram_handle && attendeeTg.telegram_verified && attendeeTg.telegram_notifications_enabled) {
-          void sendTelegramMessage(attendeeTg.telegram_handle, body)
-        }
+        void sendTelegramDM(attendee.user_id, body)
         sent++
       } catch (err) {
         errors.push(`User ${attendee.user_id}: ${err instanceof Error ? err.message : String(err)}`)

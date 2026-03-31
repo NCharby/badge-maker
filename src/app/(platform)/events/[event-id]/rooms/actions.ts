@@ -3,7 +3,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { createInPlatformNotification } from '@/lib/notifications'
-import { sendTelegramMessage } from '@/lib/telegram/send'
+import { sendTelegramDM } from '@/lib/telegram/send'
 
 // ── Shared types ────────────────────────────────────────────────────────────
 
@@ -202,14 +202,7 @@ export async function applyForRoom(
       eventId,
     })
     // Row 7: Telegram to Room Lead
-    const { data: roomLeadTg } = await admin
-      .from('platform_users')
-      .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
-      .eq('id', roomLead.user_id)
-      .single()
-    if (roomLeadTg?.telegram_handle && roomLeadTg.telegram_verified && roomLeadTg.telegram_notifications_enabled) {
-      void sendTelegramMessage(roomLeadTg.telegram_handle, applyBody)
-    }
+    void sendTelegramDM(roomLead.user_id, applyBody)
   }
 
   revalidatePath(`/events/${eventId}/rooms`)
@@ -347,9 +340,7 @@ export async function claimRoommateByEmail(
     eventId,
   })
   // Row 29: Telegram to claimed user
-  if (targetTg?.telegram_handle && targetTg.telegram_verified && targetTg.telegram_notifications_enabled) {
-    void sendTelegramMessage(targetTg.telegram_handle, row29Body)
-  }
+  void sendTelegramDM(targetUser.id, row29Body)
 
   revalidatePath(`/events/${eventId}/rooms`)
   revalidatePath(`/events/${eventId}/rooms/${roomId}`)
@@ -487,10 +478,7 @@ export async function acceptApplication(
         actionLabel: 'Browse Rooms',
         eventId,
       })
-      const tg = supersededTgProfiles?.find(p => p.id === other.applicant_user_id)
-      if (tg?.telegram_handle && tg.telegram_verified && tg.telegram_notifications_enabled) {
-        void sendTelegramMessage(tg.telegram_handle, row9Body)
-      }
+      void sendTelegramDM(other.applicant_user_id, row9Body)
     }
   }
 
@@ -506,14 +494,7 @@ export async function acceptApplication(
     eventId,
   })
   // Row 8: Telegram to accepted roommate
-  const { data: acceptedTg } = await admin
-    .from('platform_users')
-    .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
-    .eq('id', application.applicant_user_id)
-    .single()
-  if (acceptedTg?.telegram_handle && acceptedTg.telegram_verified && acceptedTg.telegram_notifications_enabled) {
-    void sendTelegramMessage(acceptedTg.telegram_handle, row8Body)
-  }
+  void sendTelegramDM(application.applicant_user_id, row8Body)
 
   revalidatePath(`/events/${eventId}/rooms`)
   revalidatePath(`/events/${eventId}/rooms/${application.room_id}`)
@@ -573,14 +554,7 @@ export async function declineApplication(
     eventId,
   })
   // Row 9 direct: Telegram to declined applicant
-  const { data: declinedTg } = await admin
-    .from('platform_users')
-    .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
-    .eq('id', application.applicant_user_id)
-    .single()
-  if (declinedTg?.telegram_handle && declinedTg.telegram_verified && declinedTg.telegram_notifications_enabled) {
-    void sendTelegramMessage(declinedTg.telegram_handle, row9DirectBody)
-  }
+  void sendTelegramDM(application.applicant_user_id, row9DirectBody)
 
   revalidatePath(`/events/${eventId}/rooms`)
   revalidatePath(`/events/${eventId}/rooms/${application.room_id}`)
@@ -708,14 +682,7 @@ export async function acceptInvitation(
       eventId,
     })
     // Row 30: Telegram to Room Lead
-    const { data: roomLeadTg30 } = await admin
-      .from('platform_users')
-      .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
-      .eq('id', roomLeadRow.user_id)
-      .single()
-    if (roomLeadTg30?.telegram_handle && roomLeadTg30.telegram_verified && roomLeadTg30.telegram_notifications_enabled) {
-      void sendTelegramMessage(roomLeadTg30.telegram_handle, row30Body)
-    }
+    void sendTelegramDM(roomLeadRow.user_id, row30Body)
   }
 
   revalidatePath(`/events/${eventId}/rooms`)
@@ -778,15 +745,199 @@ export async function declineInvitation(
       eventId,
     })
     // Row 31: Telegram to Room Lead
-    const { data: roomLeadTg31 } = await admin
-      .from('platform_users')
-      .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
-      .eq('id', roomLeadDeclineRow.user_id)
-      .single()
-    if (roomLeadTg31?.telegram_handle && roomLeadTg31.telegram_verified && roomLeadTg31.telegram_notifications_enabled) {
-      void sendTelegramMessage(roomLeadTg31.telegram_handle, row31Body)
-    }
+    void sendTelegramDM(roomLeadDeclineRow.user_id, row31Body)
   }
 
   revalidatePath(`/events/${eventId}/rooms`)
+}
+
+// ── useRoommateCode (post-checkout, from the rooms page) ─────────────────────
+// Allows an attendee with a completed ticket but no room to enter a Room Lead's
+// Roommate Code from the rooms page (after checkout has already completed).
+
+export async function useRoommateCode(
+  eventId: string,
+  code: string,
+): Promise<
+  | { success: true; room: { id: string; name: string; number: string | null; lodging_type: string | null } }
+  | { error: string; reason?: 'room_not_selected' | 'room_full' | 'invalid_code' }
+> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated', reason: 'invalid_code' }
+
+  const admin = createAdminClient()
+  const upperCode = code.toUpperCase().trim()
+
+  // Verify caller has a completed ticket and no room yet
+  const { data: myAttendee } = await supabase
+    .from('event_attendees')
+    .select('ticket_status, room_id, is_room_lead')
+    .eq('event_id', eventId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!myAttendee) return { error: 'You are not enrolled in this event.', reason: 'invalid_code' }
+  if (myAttendee.ticket_status !== 'Complete') return { error: 'You need a completed ticket to use a Roommate Code.', reason: 'invalid_code' }
+  if (myAttendee.room_id) return { error: 'You already have a room assigned.', reason: 'invalid_code' }
+  if (myAttendee.is_room_lead) return { error: 'Roommate Codes are for non-Room-Lead attendees.', reason: 'invalid_code' }
+
+  // Look up Room Lead attendee by code
+  const { data: leadAttendee } = await admin
+    .from('event_attendees')
+    .select('user_id, room_id, is_room_lead')
+    .eq('event_id', eventId)
+    .eq('roommate_code', upperCode)
+    .eq('is_room_lead', true)
+    .maybeSingle()
+
+  if (!leadAttendee) return { error: 'This code is not valid.', reason: 'invalid_code' }
+
+  if (!leadAttendee.room_id) {
+    return {
+      error: 'Your Room Lead has not selected a room yet. Try again after they select one, or contact your Room Lead directly.',
+      reason: 'room_not_selected',
+    }
+  }
+
+  const roomId = leadAttendee.room_id as string
+
+  // Check room is not blocked or reserved
+  const { data: roomConfig } = await admin
+    .from('event_room_config')
+    .select('blocked, reserved')
+    .eq('event_id', eventId)
+    .eq('room_id', roomId)
+    .maybeSingle()
+
+  if (roomConfig?.blocked || roomConfig?.reserved) {
+    return { error: 'This code is not valid.', reason: 'invalid_code' }
+  }
+
+  // Capacity check
+  const now = new Date().toISOString()
+
+  const { data: room } = await admin
+    .from('rooms')
+    .select('id, name, number, lodging_type, bed_spot_count')
+    .eq('id', roomId)
+    .single()
+
+  if (!room) return { error: 'Room not found.', reason: 'invalid_code' }
+
+  const { count: bedBlocks } = await admin.from('bed_blocks')
+    .select('*', { count: 'exact', head: true })
+    .eq('event_id', eventId).eq('room_id', roomId)
+
+  const { count: occupants } = await admin.from('event_attendees')
+    .select('*', { count: 'exact', head: true })
+    .eq('event_id', eventId).eq('room_id', roomId)
+    .in('room_status', ['Selected', 'Locked In', 'Verified'])
+
+  const { count: roomLocks } = await admin.from('locks')
+    .select('*', { count: 'exact', head: true })
+    .eq('resource_type', 'room').eq('resource_id', roomId).gte('expires_at', now)
+
+  const available =
+    (room.bed_spot_count ?? 0) - (bedBlocks ?? 0) - (occupants ?? 0) - (roomLocks ?? 0)
+
+  if (available <= 0) {
+    const { data: eventRow33 } = await admin.from('platform_events').select('title').eq('id', eventId).single()
+    const eventTitle33 = eventRow33?.title ?? 'the event'
+
+    void createInPlatformNotification({
+      userId: leadAttendee.user_id as string,
+      type: 'roommate_code_room_full',
+      title: 'Roommate Code: room is full',
+      body: `Someone tried to use your Roommate Code for ${eventTitle33} but your room is full (${room.name}${room.number ? ` · Room ${room.number}` : ''}).`,
+      actionUrl: `/events/${eventId}/rooms/${roomId}`,
+      actionLabel: 'Manage Room',
+      eventId,
+    })
+    void sendTelegramDM(leadAttendee.user_id as string, `Your Roommate Code was used but your room is full for ${eventTitle33}.`)
+
+    return { error: 'This room is currently full.', reason: 'room_full' }
+  }
+
+  // Acquire room soft lock (15 min)
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+  const { error: lockErr } = await supabase.from('locks').insert({
+    resource_type: 'room', resource_id: roomId, locked_by: user.id, expires_at: expiresAt,
+  })
+  if (lockErr) return { error: 'Failed to reserve spot. Please try again.', reason: 'invalid_code' }
+
+  // Update attendee: set room, placed_via_code
+  const { error: updateErr } = await supabase
+    .from('event_attendees')
+    .update({ room_id: roomId, room_status: 'Selected', placed_via_code: true })
+    .eq('event_id', eventId)
+    .eq('user_id', user.id)
+
+  // Release lock
+  await supabase.from('locks').delete().eq('locked_by', user.id).eq('resource_type', 'room').eq('resource_id', roomId)
+
+  if (updateErr) return { error: 'Failed to assign room. Please try again.', reason: 'invalid_code' }
+
+  // Notify Room Lead (row 32)
+  const { data: myProfile } = await admin
+    .from('platform_users')
+    .select('preferred_scene_name, email')
+    .eq('id', user.id)
+    .single()
+  const myName = myProfile?.preferred_scene_name?.trim() || myProfile?.email?.split('@')[0] || 'A user'
+
+  const { data: eventRow32 } = await admin.from('platform_events').select('title').eq('id', eventId).single()
+  const eventTitle32 = eventRow32?.title ?? 'the event'
+
+  const row32Body = `${myName} used your Roommate Code and has been placed in your room for ${eventTitle32}.`
+  void createInPlatformNotification({
+    userId: leadAttendee.user_id as string,
+    type: 'roommate_code_used',
+    title: 'Roommate joined your room',
+    body: row32Body,
+    actionUrl: `/events/${eventId}/rooms/${roomId}`,
+    actionLabel: 'Manage Room',
+    eventId,
+  })
+  void sendTelegramDM(leadAttendee.user_id as string, row32Body)
+
+  revalidatePath(`/events/${eventId}/rooms`)
+
+  return {
+    success: true,
+    room: { id: room.id, name: room.name, number: room.number, lodging_type: room.lodging_type },
+  }
+}
+
+// ── releaseRoom ───────────────────────────────────────────────────────────────
+
+export async function releaseRoom(
+  eventId: string,
+  roomId: string,
+): Promise<{ error?: string } | void> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  const { data: attendee } = await supabase
+    .from('event_attendees')
+    .select('room_id, lock_status, ticket_status')
+    .eq('event_id', eventId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!attendee || attendee.ticket_status !== 'Complete') return { error: 'No completed ticket found.' }
+  if (attendee.room_id !== roomId) return { error: 'This is not your current room.' }
+  if (attendee.lock_status === 'Locked') return { error: 'Your room selection is locked and cannot be changed.' }
+
+  const { error: updateError } = await supabase
+    .from('event_attendees')
+    .update({ room_id: null, room_status: 'Not Selected', is_room_lead: false })
+    .eq('event_id', eventId)
+    .eq('user_id', user.id)
+
+  if (updateError) return { error: 'Failed to release room. Please try again.' }
+
+  revalidatePath(`/events/${eventId}/rooms`)
+  revalidatePath(`/events/${eventId}/rooms/${roomId}`)
 }

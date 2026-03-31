@@ -185,6 +185,47 @@ export default function WorkflowManagerClient({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
 
+      {/* Add custom status form — top */}
+      <div style={{
+        padding: '16px',
+        background: 'var(--sd-card)',
+        border: '1px solid var(--sd-border)',
+        borderRadius: '8px',
+        marginBottom: '8px',
+      }}>
+        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '10px' }}>
+          Add Custom Status
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--sd-muted)', display: 'block', marginBottom: '4px' }}>
+              Name <span style={{ color: '#991b1b' }}>*</span>
+            </label>
+            <input
+              value={addName}
+              onChange={e => { setAddName(e.target.value); setAddError('') }}
+              placeholder="e.g. Applications Open"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--sd-muted)', display: 'block', marginBottom: '4px' }}>
+              Description (optional)
+            </label>
+            <input
+              value={addDescription}
+              onChange={e => setAddDescription(e.target.value)}
+              placeholder="Brief description for this phase"
+              style={inputStyle}
+            />
+          </div>
+          {addError && <span style={{ fontSize: '12px', color: '#991b1b' }}>{addError}</span>}
+          <button onClick={handleAdd} disabled={isPending} style={{ ...btnStyle('primary', isPending), alignSelf: 'flex-start' }}>
+            {isPending ? 'Adding…' : 'Add Status'}
+          </button>
+        </div>
+      </div>
+
       {/* System statuses — before */}
       {SYSTEM_BEFORE.map(name => <SystemStatusPill key={name} name={name} />)}
 
@@ -196,7 +237,7 @@ export default function WorkflowManagerClient({
       {/* Custom status rows */}
       {statuses.length === 0 && (
         <div style={{ padding: '12px 16px', border: '1px dashed var(--sd-border)', borderRadius: '8px', fontSize: '13px', color: 'var(--sd-muted)', textAlign: 'center' }}>
-          No custom statuses yet. Add one below.
+          No custom statuses yet. Add one above.
         </div>
       )}
 
@@ -280,46 +321,6 @@ export default function WorkflowManagerClient({
       </div>
       {SYSTEM_AFTER.map(name => <SystemStatusPill key={name} name={name} />)}
 
-      {/* Add custom status form */}
-      <div style={{
-        marginTop: '8px',
-        padding: '16px',
-        background: 'var(--sd-card)',
-        border: '1px solid var(--sd-border)',
-        borderRadius: '8px',
-      }}>
-        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '10px' }}>
-          Add Custom Status
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--sd-muted)', display: 'block', marginBottom: '4px' }}>
-              Name <span style={{ color: '#991b1b' }}>*</span>
-            </label>
-            <input
-              value={addName}
-              onChange={e => { setAddName(e.target.value); setAddError('') }}
-              placeholder="e.g. Applications Open"
-              style={inputStyle}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--sd-muted)', display: 'block', marginBottom: '4px' }}>
-              Description (optional)
-            </label>
-            <input
-              value={addDescription}
-              onChange={e => setAddDescription(e.target.value)}
-              placeholder="Brief description for this phase"
-              style={inputStyle}
-            />
-          </div>
-          {addError && <span style={{ fontSize: '12px', color: '#991b1b' }}>{addError}</span>}
-          <button onClick={handleAdd} disabled={isPending} style={{ ...btnStyle('primary', isPending), alignSelf: 'flex-start' }}>
-            {isPending ? 'Adding…' : 'Add Status'}
-          </button>
-        </div>
-      </div>
     </div>
   )
 }

@@ -154,12 +154,12 @@ export default function TestEmailPage() {
              Test Instructions
            </h2>
            <div className="text-gray-300 space-y-2">
-             <p>1. First, click "Check Email Configuration" to verify Postmark is set up correctly</p>
+             <p>1. First, click "Check Email Configuration" to verify Resend is set up correctly</p>
              <p>2. If configuration is successful, click "Test Waiver Email" to send a test email</p>
              <p>3. The test will first generate a real PDF, then send an email with the PDF attached</p>
              <p>4. Check the console for any errors</p>
              <p>5. Verify that the email is received with the correct content and PDF attachment</p>
-             <p><strong>Note:</strong> You'll need to configure your Postmark API key in the environment variables</p>
+             <p><strong>Note:</strong> You'll need to configure your Resend API key in the environment variables</p>
              <p><strong>Note:</strong> Replace 'test@example.com' with a real email address to test actual delivery</p>
            </div>
          </div>
@@ -169,8 +169,8 @@ export default function TestEmailPage() {
             Environment Variables Required
           </h2>
           <div className="text-gray-300 space-y-2">
-            <p><code>POSTMARK_API_KEY</code> - Your Postmark API key</p>
-            <p><code>POSTMARK_FROM_EMAIL</code> - The email address to send from (optional, defaults to noreply@yourdomain.com)</p>
+            <p><code>RESEND_API_KEY</code> - Your Resend API key</p>
+            <p><code>RESEND_FROM_EMAIL</code> - The email address to send from (optional, defaults to noreply@yourdomain.com)</p>
             <p><code>NEXT_PUBLIC_APP_URL</code> - Your application URL for email links</p>
           </div>
         </div>

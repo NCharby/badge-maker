@@ -6,8 +6,8 @@ import type { WorkflowStatus } from '@/types/platform'
 import { updateModuleConfig } from './actions'
 import type { ModuleCfg } from './actions'
 
-const SYSTEM_BEFORE = ['Draft', 'Published']
-const SYSTEM_AFTER = ['Event Locked', 'Registration', 'Happening Now', 'Closed', 'Archived']
+// Modules that are never "required" — they have no completion gate
+const NEVER_REQUIRED = new Set(['schedule', 'venue', 'room_selection'])
 
 // Canonical module order matching the attendee workflow progression.
 // venue and room_selection are mutually exclusive — only one may be enabled at a time.
@@ -17,8 +17,8 @@ const MODULE_META: Record<string, { label: string; description: string; lockEnab
   application:    { label: 'Application',     description: 'Custom application form attendees complete before being approved.' },
   ticketing:      { label: 'Ticketing',        description: 'Ticket types, pricing, and purchase flow. Required for all events.', lockEnabled: true },
   waiver:         { label: 'Waiver',           description: 'Digital waiver signing via Odoo integration.' },
-  venue:          { label: 'Venue',              description: 'A reusable location object with optional contact details and an optional Room Matrix. Assign the venue in Event Settings. When the venue has rooms, the Room Selection workflow becomes available to attendees. Mutually exclusive with Basic Event Rooms.', mutex: 'room_selection' },
-  room_selection: { label: 'Basic Event Rooms', description: 'An event-specific Room Matrix tied to this event only — not reusable across events. Add rooms after creation to enable the Room Selection workflow for attendees. Mutually exclusive with Venue.', mutex: 'venue' },
+  venue:          { label: 'Venue',            description: 'A reusable location object with optional contact details and Room Matrix. Assign a venue from this event\'s Venue page. Mutually exclusive with Basic Event Rooms.', mutex: 'room_selection' },
+  room_selection: { label: 'Basic Event Rooms', description: 'An event-specific Room Matrix tied to this event only — not reusable across events. Mutually exclusive with Venue.', mutex: 'venue' },
   volunteering:   { label: 'Volunteering',     description: 'Volunteer shift signup and required-hours tracking.' },
   schedule:       { label: 'Schedule',         description: 'Public event schedule and activity listings.' },
   badge:          { label: 'Badge',            description: 'Badge creation using the Badge Maker module.' },
@@ -27,8 +27,11 @@ const MODULE_META: Record<string, { label: string; description: string; lockEnab
 type FormCfg = {
   enabled: boolean
   required: boolean
-  opens_at_status: string  // '' = null
-  closes_at_status: string // '' = null
+  opens_at_status: string   // '' = null
+  closes_at_status: string  // '' = null
+  room_selection_workflow: boolean
+  custom_status_message_enabled: boolean
+  custom_status_message: string
 }
 
 type RawModuleCfg = {
@@ -36,6 +39,9 @@ type RawModuleCfg = {
   required?: boolean
   opens_at_status?: string | null
   closes_at_status?: string | null
+  room_selection_workflow?: boolean
+  custom_status_message_enabled?: boolean
+  custom_status_message?: string
 }
 
 function buildInitialState(moduleConfig: Record<string, RawModuleCfg>): Record<string, FormCfg> {
@@ -43,10 +49,13 @@ function buildInitialState(moduleConfig: Record<string, RawModuleCfg>): Record<s
   for (const key of MODULE_ORDER) {
     const cfg = moduleConfig[key] ?? {}
     result[key] = {
-      enabled:          key === 'ticketing' ? true  : (cfg.enabled  ?? false),
-      required:         key === 'ticketing' ? true  : (cfg.required ?? false),
-      opens_at_status:  cfg.opens_at_status  ?? '',
-      closes_at_status: cfg.closes_at_status ?? '',
+      enabled:                       key === 'ticketing' ? true  : (cfg.enabled  ?? false),
+      required:                      NEVER_REQUIRED.has(key) ? false : (key === 'ticketing' ? true : (cfg.required ?? false)),
+      opens_at_status:               cfg.opens_at_status  ?? '',
+      closes_at_status:              cfg.closes_at_status ?? '',
+      room_selection_workflow:       cfg.room_selection_workflow ?? false,
+      custom_status_message_enabled: cfg.custom_status_message_enabled ?? false,
+      custom_status_message:         cfg.custom_status_message ?? '',
     }
   }
   return result
@@ -62,7 +71,7 @@ const selectStyle: React.CSSProperties = {
   width: '100%',
 }
 
-// Module-level component — avoids React nested-component anti-pattern
+// Status dropdown restricted to 'Published' + custom statuses only
 function StatusSelect({
   value,
   onChange,
@@ -85,16 +94,13 @@ function StatusSelect({
         : <option value="">— not set —</option>
       }
       <optgroup label="System Statuses">
-        {SYSTEM_BEFORE.map(n => <option key={n} value={n}>{n}</option>)}
+        <option value="Published">Published</option>
       </optgroup>
       {sortedStatuses.length > 0 && (
         <optgroup label="Custom Statuses">
           {sortedStatuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </optgroup>
       )}
-      <optgroup label="System Statuses">
-        {SYSTEM_AFTER.map(n => <option key={n} value={n}>{n}</option>)}
-      </optgroup>
     </select>
   )
 }
@@ -129,16 +135,19 @@ export default function ModuleConfigClient({
 
   function handleSave() {
     setError('')
-    // Only include enabled modules in module_config; absent key = disabled per spec
     const outConfig: Record<string, ModuleCfg> = {}
     for (const key of MODULE_ORDER) {
       const cfg = config[key]
       if (!cfg.enabled) continue
+      const isRoomModule = key === 'venue' || key === 'room_selection'
       outConfig[key] = {
-        enabled:          true,
-        required:         cfg.required,
-        opens_at_status:  cfg.opens_at_status  || null,
-        closes_at_status: cfg.closes_at_status || null,
+        enabled:                       true,
+        required:                      NEVER_REQUIRED.has(key) ? false : cfg.required,
+        opens_at_status:               cfg.opens_at_status  || null,
+        closes_at_status:              cfg.closes_at_status || null,
+        room_selection_workflow:       isRoomModule ? cfg.room_selection_workflow : undefined,
+        custom_status_message_enabled: cfg.custom_status_message_enabled,
+        custom_status_message:         cfg.custom_status_message_enabled ? cfg.custom_status_message : '',
       }
     }
     startTransition(async () => {
@@ -168,6 +177,8 @@ export default function ModuleConfigClient({
           const meta = MODULE_META[key]
           const cfg = config[key]
           const locked = !!meta.lockEnabled
+          const neverRequired = NEVER_REQUIRED.has(key)
+          const isRoomModule = key === 'venue' || key === 'room_selection'
 
           return (
             <div
@@ -241,8 +252,8 @@ export default function ModuleConfigClient({
                       </div>
                     </div>
 
-                    {/* Required toggle */}
-                    {!locked && (
+                    {/* Required toggle — not shown for NEVER_REQUIRED modules */}
+                    {!locked && !neverRequired && (
                       <div style={{ gridColumn: '1 / -1' }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: isPending ? 'not-allowed' : 'pointer', fontSize: '13px', color: 'var(--sd-text)' }}>
                           <input
@@ -256,6 +267,63 @@ export default function ModuleConfigClient({
                         </label>
                       </div>
                     )}
+
+                    {/* Room Selection Workflow toggle — venue and room_selection only */}
+                    {isRoomModule && (
+                      <div style={{ gridColumn: '1 / -1', paddingTop: '4px', borderTop: '1px solid var(--sd-border)', marginTop: '4px' }}>
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: isPending ? 'not-allowed' : 'pointer', fontSize: '13px', color: 'var(--sd-text)' }}>
+                          <input
+                            type="checkbox"
+                            checked={cfg.room_selection_workflow}
+                            disabled={isPending}
+                            onChange={e => update(key, 'room_selection_workflow', e.target.checked)}
+                            style={{ width: '14px', height: '14px', marginTop: '2px', flexShrink: 0 }}
+                          />
+                          <span>
+                            <strong>Enable Room Selection Workflow</strong>
+                            <span style={{ display: 'block', fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px' }}>
+                              Enables room selection in checkout, Roommate Finder, room blocking, reservations, and roommate codes.
+                            </span>
+                          </span>
+                        </label>
+                      </div>
+                    )}
+
+                    {/* Custom status message */}
+                    <div style={{ gridColumn: '1 / -1', paddingTop: '4px', borderTop: isRoomModule ? 'none' : '1px solid var(--sd-border)', marginTop: isRoomModule ? '0' : '4px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: isPending ? 'not-allowed' : 'pointer', fontSize: '13px', color: 'var(--sd-text)', marginBottom: '8px' }}>
+                        <input
+                          type="checkbox"
+                          checked={cfg.custom_status_message_enabled}
+                          disabled={isPending}
+                          onChange={e => update(key, 'custom_status_message_enabled', e.target.checked)}
+                          style={{ width: '14px', height: '14px' }}
+                        />
+                        Add custom status message for this module&rsquo;s opening
+                        <span style={{ fontSize: '11px', color: 'var(--sd-muted)', fontStyle: 'italic' }}>
+                          &nbsp;— available as {'{status_message}'} in the Event Status Transition notification
+                        </span>
+                      </label>
+                      {cfg.custom_status_message_enabled && (
+                        <textarea
+                          value={cfg.custom_status_message}
+                          onChange={e => update(key, 'custom_status_message', e.target.value)}
+                          disabled={isPending}
+                          placeholder={`Custom message shown when ${meta.label} opens…`}
+                          rows={3}
+                          style={{
+                            width: '100%',
+                            padding: '8px 10px',
+                            border: '1px solid var(--sd-border)',
+                            borderRadius: '6px',
+                            fontSize: '13px',
+                            color: 'var(--sd-text)',
+                            resize: 'vertical',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

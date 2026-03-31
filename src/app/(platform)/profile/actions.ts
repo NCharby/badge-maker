@@ -2,7 +2,6 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { sendTelegramMessage } from '@/lib/telegram/send'
 
 export type ProfileUpdateData = {
   preferred_scene_name: string
@@ -52,6 +51,7 @@ export async function updateProfile(data: ProfileUpdateData) {
       telegram_notifications_enabled: data.telegram_notifications_enabled,
       ...(resetVerification ? {
         telegram_verified: false,
+        telegram_chat_id: null,
         telegram_verification_code: null,
         telegram_verification_expires_at: null,
       } : {}),
@@ -64,6 +64,9 @@ export async function updateProfile(data: ProfileUpdateData) {
   return { success: true }
 }
 
+// Generates a 6-digit verification code and stores it in the DB.
+// Returns the code to the client — the user sends /verify CODE to the bot to complete verification.
+// Verification is performed by the bot webhook, not by a client-side form submission.
 export async function sendTelegramVerificationCode() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -82,7 +85,6 @@ export async function sendTelegramVerificationCode() {
     return { error: 'Your Telegram handle is already verified.' }
   }
 
-  // Generate 6-digit code
   const code = Math.floor(100000 + Math.random() * 900000).toString()
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
 
@@ -96,53 +98,7 @@ export async function sendTelegramVerificationCode() {
 
   if (updateError) return { error: updateError.message }
 
-  const result = await sendTelegramMessage(
-    profile.telegram_handle,
-    `Your SD Platform verification code is: <b>${code}</b>\n\nEnter this code on your profile page. It expires in 15 minutes.`,
-  )
-
-  if (!result.success) {
-    return { error: `Could not reach @${profile.telegram_handle} — make sure you have started a conversation with @ShinyDogEventsBot first.` }
-  }
-
-  return { success: true }
-}
-
-export async function verifyTelegramCode(code: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
-
-  const { data: profile } = await supabase
-    .from('platform_users')
-    .select('telegram_verification_code, telegram_verification_expires_at')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.telegram_verification_code) {
-    return { error: 'No verification code found. Please request a new code.' }
-  }
-  if (!profile.telegram_verification_expires_at || new Date() > new Date(profile.telegram_verification_expires_at)) {
-    return { error: 'Verification code has expired. Please request a new code.' }
-  }
-  if (profile.telegram_verification_code !== code.trim()) {
-    return { error: 'Incorrect code. Please try again.' }
-  }
-
-  const { error: updateError } = await supabase
-    .from('platform_users')
-    .update({
-      telegram_verified: true,
-      telegram_notifications_enabled: true,
-      telegram_verification_code: null,
-      telegram_verification_expires_at: null,
-    })
-    .eq('id', user.id)
-
-  if (updateError) return { error: updateError.message }
-
-  revalidatePath('/profile')
-  return { success: true }
+  return { success: true, code }
 }
 
 export async function updatePaymentProvider(provider: 'square' | 'paypal') {

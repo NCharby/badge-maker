@@ -150,7 +150,7 @@ async function processEvent(
   }
 
   // Email to EP
-  const fromEmail = process.env.POSTMARK_FROM_EMAIL ?? 'noreply@shinydog.events'
+  const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'noreply@shinydog.events'
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
   const fileName = `offline-packet-${event.id}-${timestamp}.xlsx`

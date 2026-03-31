@@ -2,7 +2,7 @@
 
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createInPlatformNotification } from '@/lib/notifications'
-import { sendTelegramMessage } from '@/lib/telegram/send'
+import { sendTelegramDM } from '@/lib/telegram/send'
 
 export type ValidateRoommateCodeResult =
   | { valid: false; reason: 'invalid_code' | 'room_not_selected' | 'room_full' }
@@ -101,7 +101,7 @@ export async function validateRoommateCode(
   if (availableSpots <= 0) {
     // Notification row 33: Room Lead notified their room is full — dedup within 1 hour
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-    const [{ count: recentCount }, { data: eventRowFull }, { data: roomLeadTg33 }] = await Promise.all([
+    const [{ count: recentCount }, { data: eventRowFull }] = await Promise.all([
       admin
         .from('platform_notifications')
         .select('*', { count: 'exact', head: true })
@@ -110,11 +110,6 @@ export async function validateRoommateCode(
         .eq('event_id', eventId)
         .gte('created_at', oneHourAgo),
       admin.from('platform_events').select('title').eq('id', eventId).single(),
-      admin
-        .from('platform_users')
-        .select('telegram_handle, telegram_verified, telegram_notifications_enabled')
-        .eq('id', leadAttendee.user_id)
-        .single(),
     ])
 
     if ((recentCount ?? 0) === 0) {
@@ -129,9 +124,7 @@ export async function validateRoommateCode(
         eventId,
       })
       // Row 33: Telegram to Room Lead
-      if (roomLeadTg33?.telegram_handle && roomLeadTg33.telegram_verified && roomLeadTg33.telegram_notifications_enabled) {
-        void sendTelegramMessage(roomLeadTg33.telegram_handle, row33Body)
-      }
+      void sendTelegramDM(leadAttendee.user_id, row33Body)
     }
     return { valid: false, reason: 'room_full' }
   }

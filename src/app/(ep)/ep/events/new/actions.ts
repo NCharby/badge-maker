@@ -18,7 +18,7 @@ export async function createEvent(data: {
   description: string
   start_date: string
   end_date: string
-  location: string
+  venue_id?: string
   modules: ModuleInput
 }): Promise<{ success: true; eventId: string } | { error: string }> {
   const supabase = await createClient()
@@ -42,6 +42,7 @@ export async function createEvent(data: {
   const today = new Date().toISOString().split('T')[0]
   if (data.start_date < today) return { error: 'Start date cannot be in the past.' }
   if (data.end_date < data.start_date) return { error: 'End date must be on or after start date.' }
+  if (data.modules.venue && !data.venue_id) return { error: 'A venue must be selected when the Venue module is enabled.' }
 
   // Generate a unique URL-safe slug from the title
   const baseSlug = title
@@ -92,7 +93,7 @@ export async function createEvent(data: {
       description: data.description.trim() || null,
       start_date: data.start_date,
       end_date: data.end_date,
-      location: data.location.trim() || null,
+      venue_id: data.venue_id || null,
       owner_id: user.id,
       status: 'Draft',
       module_config: moduleConfig,

@@ -1,8 +1,8 @@
-import { ServerClient } from 'postmark';
+import { Resend } from 'resend';
 
-// Initialize Postmark client
-const postmarkClient = process.env.POSTMARK_API_KEY 
-  ? new ServerClient(process.env.POSTMARK_API_KEY)
+// Initialize Resend client
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
   : null;
 
 export interface EmailData {
@@ -18,7 +18,7 @@ export interface EmailAttachment {
   Name: string;
   Content: string; // Base64 encoded content
   ContentType: string;
-  ContentID: string | null; // Content ID for attachments (null for regular attachments)
+  ContentID: string | null; // unused by Resend; kept for call-site compatibility
 }
 
 export interface WaiverEmailData {
@@ -63,69 +63,34 @@ export interface EmailResult {
  * Send a waiver confirmation email with PDF attachment
  */
 export async function sendWaiverConfirmationEmail(data: WaiverEmailData): Promise<EmailResult> {
+  let attachments: EmailAttachment[] = [];
+
   try {
-    // Check if Postmark is configured
-    if (!postmarkClient) {
-      console.warn('Postmark not configured, skipping email');
-      return {
-        success: false,
-        error: 'Email service not configured'
-      };
-    }
-    let attachments: EmailAttachment[] = [];
-    
-    // Try to get PDF content for attachment
-    try {
-      let pdfContent: string;
-      
-      // Try to get PDF directly from Supabase storage first
-      if (data.pdfUrl.includes('/storage/v1/object/public/')) {
-        try {
-          pdfContent = await getPDFFromStorage(data.pdfUrl);
-        } catch (storageError) {
-          console.warn('Storage method failed, trying URL download:', storageError);
-          pdfContent = await downloadPDFContent(data.pdfUrl);
-        }
-      } else {
-        // For non-Supabase URLs, use direct download
+    let pdfContent: string;
+
+    if (data.pdfUrl.includes('/storage/v1/object/public/')) {
+      try {
+        pdfContent = await getPDFFromStorage(data.pdfUrl);
+      } catch {
         pdfContent = await downloadPDFContent(data.pdfUrl);
       }
-      
-      attachments = [
-        {
-          Name: `waiver-${data.waiverId}.pdf`,
-          Content: pdfContent,
-          ContentType: 'application/pdf',
-          ContentID: null
-        }
-      ];
-    } catch (pdfError) {
-      console.warn('PDF attachment failed, sending email without attachment:', pdfError);
-      // Continue without PDF attachment
+    } else {
+      pdfContent = await downloadPDFContent(data.pdfUrl);
     }
-    
-    const emailData: EmailData = {
-      To: data.email,
-      From: process.env.POSTMARK_FROM_EMAIL || 'noreply@yourdomain.com',
-      Subject: 'Your Event Waiver Confirmation',
-      HtmlBody: createWaiverEmailHTML(data),
-      TextBody: createWaiverEmailText(data),
-      Attachments: attachments
-    };
 
-    const result = await postmarkClient.sendEmail(emailData);
-    
-    return {
-      success: true,
-      messageId: result.MessageID
-    };
-  } catch (error) {
-    console.error('Email sending error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
-    };
+    attachments = [{ Name: `waiver-${data.waiverId}.pdf`, Content: pdfContent, ContentType: 'application/pdf', ContentID: null }];
+  } catch (pdfError) {
+    console.warn('PDF attachment failed, sending email without attachment:', pdfError);
   }
+
+  return sendEmail({
+    To: data.email,
+    From: process.env.RESEND_FROM_EMAIL || 'noreply@yourdomain.com',
+    Subject: 'Your Event Waiver Confirmation',
+    HtmlBody: createWaiverEmailHTML(data),
+    TextBody: createWaiverEmailText(data),
+    Attachments: attachments,
+  });
 }
 
 /**
@@ -381,25 +346,31 @@ If you have any questions, please contact the event organizers
  */
 export async function sendEmail(emailData: EmailData): Promise<EmailResult> {
   try {
-    // Check if Postmark is configured
-    if (!postmarkClient) {
-      return {
-        success: false,
-        error: 'Email service not configured'
-      };
+    if (!resend) {
+      return { success: false, error: 'Email service not configured' };
     }
 
-    const result = await postmarkClient.sendEmail(emailData);
-    
-    return {
-      success: true,
-      messageId: result.MessageID
-    };
+    const { data, error } = await resend.emails.send({
+      from: emailData.From,
+      to: emailData.To,
+      subject: emailData.Subject,
+      html: emailData.HtmlBody,
+      text: emailData.TextBody,
+      attachments: emailData.Attachments?.map(a => ({
+        filename: a.Name,
+        content: a.Content,
+        contentType: a.ContentType,
+      })),
+    });
+
+    if (error) throw error;
+
+    return { success: true, messageId: data?.id };
   } catch (error) {
     console.error('Email sending error:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
     };
   }
 }
@@ -408,17 +379,11 @@ export async function sendEmail(emailData: EmailData): Promise<EmailResult> {
  * Verify email sending is configured correctly
  */
 export async function verifyEmailConfiguration(): Promise<boolean> {
+  if (!resend) return false;
   try {
-    // Check if Postmark is configured
-    if (!postmarkClient) {
-      return false;
-    }
-
-    // Test the Postmark configuration
-    const result = await postmarkClient.getServer();
-    return !!result;
-  } catch (error) {
-    console.error('Email configuration error:', error);
+    const { error } = await resend.domains.list();
+    return !error;
+  } catch {
     return false;
   }
 }
@@ -553,270 +518,64 @@ export async function getBadgeConfirmationData(
 }
 
 /**
- * Send badge confirmation email using Postmark template system
+ * Send badge confirmation email (delegates to sendBadgeConfirmationEmail).
+ * Kept for call-site compatibility; Resend has no server-side template system.
  */
 export async function sendBadgeConfirmationEmailWithTemplate(
   data: BadgeConfirmationEmailData
 ): Promise<EmailResult> {
-  try {
-    // Check if Postmark is configured
-    if (!postmarkClient) {
-      console.warn('Postmark not configured, skipping email');
-      return {
-        success: false,
-        error: 'Email service not configured'
-      };
-    }
-
-    // Format dates for template
-    const badgeCreatedDate = new Date(data.badgeCreatedAt).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-
-    const waiverSignedDate = new Date(data.waiverSignedAt).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-
-    const telegramExpiryDate = data.telegramInvite 
-      ? new Date(data.telegramInvite.expiresAt).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-      : '';
-
-    // Prepare template data - format arrays and objects as strings for simplified template
-    const socialMediaText = data.socialMediaHandles.length > 0 
-      ? data.socialMediaHandles.map(handle => `• ${handle.platform}: @${handle.handle}`).join('\n')
-      : 'None provided';
-
-    // Format telegram sections as complete HTML blocks
-    const telegramSectionHtml = data.telegramInvite 
-      ? `<div class="section telegram-section">
-        <h3>💬 Join the Community</h3>
-        <p>Connect with other attendees and stay updated on event information:</p>
-        <p><strong>Private Group Invite:</strong></p>
-        <div class="telegram-text">${data.telegramInvite.url} (expires: ${telegramExpiryDate})</div>
-        ${data.telegramPublicChannel ? `
-        <p><strong>Public Channel:</strong></p>
-        <div class="telegram-text">${data.telegramPublicChannel.name} - ${data.telegramPublicChannel.url}</div>
-        ` : ''}
-      </div>`
-      : '';
-
-    const telegramSectionText = data.telegramInvite 
-      ? `💬 JOIN THE COMMUNITY
-Connect with other attendees and stay updated on event information:
-- Private Group Invite: ${data.telegramInvite.url} (expires: ${telegramExpiryDate})
-${data.telegramPublicChannel ? `- Public Channel: ${data.telegramPublicChannel.name} - ${data.telegramPublicChannel.url}` : ''}
-
-`
-      : '';
-
-    const telegramNextStepsHtml = data.telegramInvite 
-      ? '<li>Join the Telegram group to connect with other attendees</li>'
-      : '';
-
-    const telegramNextStepsText = data.telegramInvite 
-      ? '- Join the Telegram group to connect with other attendees'
-      : '';
-
-    const templateData = {
-      fullName: data.fullName,
-      email: data.email,
-      badgeName: data.badgeName,
-      socialMediaHandles: socialMediaText,
-      badgeCreatedAt: badgeCreatedDate,
-      waiverId: data.waiverId,
-      waiverSignedAt: waiverSignedDate,
-      waiverPdfUrl: data.waiverPdfUrl,
-      telegramSectionHtml: telegramSectionHtml,
-      telegramSectionText: telegramSectionText,
-      telegramNextStepsHtml: telegramNextStepsHtml,
-      telegramNextStepsText: telegramNextStepsText,
-      eventName: data.eventName,
-      eventSlug: data.eventSlug
-    };
-
-    // Download PDF for attachment
-    let attachments: EmailAttachment[] = [];
-    try {
-      // Try to get PDF from storage first, then fallback to URL download
-      let pdfContent = null;
-      try {
-        pdfContent = await getPDFFromStorage(data.waiverPdfUrl);
-      } catch (storageError) {
-        pdfContent = await downloadPDFContent(data.waiverPdfUrl);
-      }
-      
-      if (pdfContent) {
-        attachments = [
-          {
-            Name: `waiver-${data.waiverId}.pdf`,
-            Content: pdfContent,
-            ContentType: 'application/pdf',
-            ContentID: null
-          }
-        ];
-      }
-    } catch (pdfError) {
-      console.warn('PDF attachment failed, sending email without attachment:', pdfError);
-    }
-
-    // Send email using Postmark template
-    const templateId = process.env.POSTMARK_TEMPLATE_ID ? parseInt(process.env.POSTMARK_TEMPLATE_ID) : undefined;
-    
-    if (!templateId) {
-      throw new Error('POSTMARK_TEMPLATE_ID environment variable is required');
-    }
-
-
-    const result = await postmarkClient.sendEmailWithTemplate({
-      To: data.email,
-      From: process.env.POSTMARK_FROM_EMAIL || 'noreply@yourdomain.com',
-      TemplateId: templateId,
-      TemplateModel: templateData,
-      Attachments: attachments
-    });
-    
-    return {
-      success: true,
-      messageId: result.MessageID
-    };
-  } catch (error) {
-    console.error('Badge confirmation email sending error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
-    };
-  }
+  return sendBadgeConfirmationEmail(data);
 }
 
 /**
- * Send badge confirmation email using inline HTML (fallback)
+ * Send badge confirmation email using inline HTML
  */
 export async function sendBadgeConfirmationEmail(
   data: BadgeConfirmationEmailData
 ): Promise<EmailResult> {
-  try {
-    // Check if Postmark is configured
-    if (!postmarkClient) {
-      console.warn('Postmark not configured, skipping email');
-      return {
-        success: false,
-        error: 'Email service not configured'
-      };
-    }
+  let attachments: EmailAttachment[] = [];
 
-    let attachments: EmailAttachment[] = [];
-    
-    // Try to get PDF content for attachment
-    try {
-      let pdfContent: string;
-      
-      // Try to get PDF directly from Supabase storage first
-      if (data.waiverPdfUrl.includes('/storage/v1/object/public/')) {
-        try {
-          pdfContent = await getPDFFromStorage(data.waiverPdfUrl);
-        } catch (storageError) {
-          console.warn('Storage method failed, trying URL download:', storageError);
-          pdfContent = await downloadPDFContent(data.waiverPdfUrl);
-        }
-      } else {
-        // For non-Supabase URLs, use direct download
+  try {
+    let pdfContent: string;
+
+    if (data.waiverPdfUrl.includes('/storage/v1/object/public/')) {
+      try {
+        pdfContent = await getPDFFromStorage(data.waiverPdfUrl);
+      } catch {
         pdfContent = await downloadPDFContent(data.waiverPdfUrl);
       }
-      
-      attachments = [
-        {
-          Name: `waiver-${data.waiverId}.pdf`,
-          Content: pdfContent,
-          ContentType: 'application/pdf',
-          ContentID: null
-        }
-      ];
-    } catch (pdfError) {
-      console.warn('PDF attachment failed, sending email without attachment:', pdfError);
-      // Continue without PDF attachment
+    } else {
+      pdfContent = await downloadPDFContent(data.waiverPdfUrl);
     }
 
-    // Format social media handles for template
-    const socialMediaList = data.socialMediaHandles
-      .map(handle => `• ${handle.platform}: @${handle.handle}`)
-      .join('<br>');
-
-    // Format dates
-    const badgeCreatedDate = new Date(data.badgeCreatedAt).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-
-    const waiverSignedDate = new Date(data.waiverSignedAt).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-
-    const telegramExpiryDate = data.telegramInvite 
-      ? new Date(data.telegramInvite.expiresAt).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-      : '';
-
-    // Create email data for Postmark template
-    const emailData: EmailData = {
-      To: data.email,
-      From: process.env.POSTMARK_FROM_EMAIL || 'noreply@yourdomain.com',
-      Subject: `Your ${data.eventName} Badge is Ready!`,
-      HtmlBody: createBadgeConfirmationEmailHTML(data, {
-        socialMediaList,
-        badgeCreatedDate,
-        waiverSignedDate,
-        telegramExpiryDate
-      }),
-      TextBody: createBadgeConfirmationEmailText(data, {
-        socialMediaList: data.socialMediaHandles
-          .map(handle => `• ${handle.platform}: @${handle.handle}`)
-          .join('\n'),
-        badgeCreatedDate,
-        waiverSignedDate,
-        telegramExpiryDate
-      }),
-      Attachments: attachments
-    };
-
-    const result = await postmarkClient.sendEmail(emailData);
-    
-    return {
-      success: true,
-      messageId: result.MessageID
-    };
-  } catch (error) {
-    console.error('Badge confirmation email sending error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
-    };
+    attachments = [{ Name: `waiver-${data.waiverId}.pdf`, Content: pdfContent, ContentType: 'application/pdf', ContentID: null }];
+  } catch (pdfError) {
+    console.warn('PDF attachment failed, sending email without attachment:', pdfError);
   }
+
+  const socialMediaList = data.socialMediaHandles
+    .map(handle => `• ${handle.platform}: @${handle.handle}`)
+    .join('<br>');
+
+  const opts = {
+    badgeCreatedDate: new Date(data.badgeCreatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    waiverSignedDate: new Date(data.waiverSignedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    telegramExpiryDate: data.telegramInvite
+      ? new Date(data.telegramInvite.expiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : '',
+  };
+
+  return sendEmail({
+    To: data.email,
+    From: process.env.RESEND_FROM_EMAIL || 'noreply@yourdomain.com',
+    Subject: `Your ${data.eventName} Badge is Ready!`,
+    HtmlBody: createBadgeConfirmationEmailHTML(data, { socialMediaList, ...opts }),
+    TextBody: createBadgeConfirmationEmailText(data, {
+      socialMediaList: data.socialMediaHandles.map(h => `• ${h.platform}: @${h.handle}`).join('\n'),
+      ...opts,
+    }),
+    Attachments: attachments,
+  });
 }
 
 /**

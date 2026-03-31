@@ -3,7 +3,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createInPlatformNotification, epWantsInPlatform, epWantsTelegram } from '@/lib/notifications'
 import { revalidatePath } from 'next/cache'
-import { sendTelegramMessage } from '@/lib/telegram/send'
+import { sendTelegramDM } from '@/lib/telegram/send'
 
 export async function signalReadyToLock(eventId: string) {
   const supabase = await createClient()
@@ -64,13 +64,8 @@ export async function signalReadyToLock(eventId: string) {
       })
     }
     // Row 10: Telegram to EP (only if EP has telegram enabled for this type in their preferences)
-    if (
-      epWantsTelegram(prefs, 'ready_to_lock') &&
-      epProfile?.telegram_handle &&
-      epProfile.telegram_verified &&
-      epProfile.telegram_notifications_enabled
-    ) {
-      void sendTelegramMessage(epProfile.telegram_handle, row10Body)
+    if (epWantsTelegram(prefs, 'ready_to_lock')) {
+      void sendTelegramDM(eventRow.owner_id, row10Body)
     }
   }
 

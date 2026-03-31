@@ -57,9 +57,10 @@ interface TicketFormProps {
   isPending: boolean
   onSave: () => void
   onCancel: () => void
+  roomSelectionWorkflowEnabled: boolean
 }
 
-function TicketForm({ form, setForm, error, isPending, onSave, onCancel }: TicketFormProps) {
+function TicketForm({ form, setForm, error, isPending, onSave, onCancel, roomSelectionWorkflowEnabled }: TicketFormProps) {
   return (
     <div style={{
       background: 'var(--sd-card2)',
@@ -128,7 +129,7 @@ function TicketForm({ form, setForm, error, isPending, onSave, onCancel }: Ticke
             />
             Room Lead
           </label>
-          {form.room_lead && (
+          {form.room_lead && roomSelectionWorkflowEnabled && (
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--sd-text)', cursor: 'pointer', paddingLeft: '20px' }}>
               <input
                 type="checkbox"
@@ -197,10 +198,12 @@ export default function TicketsClient({
   eventId,
   eventTitle,
   ticketTypes,
+  roomSelectionWorkflowEnabled = false,
 }: {
   eventId: string
   eventTitle: string
   ticketTypes: TicketType[]
+  roomSelectionWorkflowEnabled?: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -301,6 +304,7 @@ export default function TicketsClient({
             isPending={isPending}
             onSave={handleSave}
             onCancel={cancel}
+            roomSelectionWorkflowEnabled={roomSelectionWorkflowEnabled}
           />
         </div>
       )}
@@ -329,6 +333,7 @@ export default function TicketsClient({
                   isPending={isPending}
                   onSave={handleSave}
                   onCancel={cancel}
+                  roomSelectionWorkflowEnabled={roomSelectionWorkflowEnabled}
                 />
               ) : (
                 <div style={{

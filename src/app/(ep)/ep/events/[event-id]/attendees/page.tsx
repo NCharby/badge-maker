@@ -68,7 +68,7 @@ export default async function EpAttendeesPage({
     .eq('event_id', eventId)
     .order('application_status')
 
-  const rows = (attendees ?? []) as {
+  const rows = (attendees ?? []) as unknown as {
     user_id: string
     application_status: string
     ticket_status: string

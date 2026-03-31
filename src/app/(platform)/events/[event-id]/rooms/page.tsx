@@ -65,9 +65,20 @@ export default async function RoomsPage({
     )
   }
 
+  // Check if this event has Room Lead ticket types with roommate_codes_enabled
+  const { data: roommateCodeTickets } = await admin
+    .from('ticket_types')
+    .select('id')
+    .eq('event_id', eventId)
+    .eq('room_lead', true)
+    .eq('roommate_codes_enabled', true)
+    .limit(1)
+  const hasRoommateCodeFeature = (roommateCodeTickets?.length ?? 0) > 0
+
   // Call RPC (user client — SECURITY DEFINER enforces attendee check)
   const { data: rooms, error: rpcError } = await supabase
     .rpc('get_roommate_finder_cards', { p_event_id: eventId })
+  if (rpcError) console.error('[rooms/page] get_roommate_finder_cards error:', rpcError)
 
   // Pending Room Lead invitations (claimed this user)
   const { data: pendingInvitations } = await supabase
@@ -202,6 +213,9 @@ export default async function RoomsPage({
         attendee={attendeeState}
         myApplications={(myApplications ?? []) as MyApplication[]}
         lockInDate={event.room_lock_in_date ?? null}
+        hasRoommateCodeFeature={hasRoommateCodeFeature}
+        eventStartDate={event.start_date}
+        eventEndDate={event.end_date}
       />
     </div>
   )

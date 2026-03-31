@@ -3,7 +3,7 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import type { ModuleConfig, WorkflowStatus } from '@/types/platform'
-import { getModuleOpenState, getOpensAtName } from '@/lib/modules'
+import { getModuleOpenState } from '@/lib/modules'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -96,7 +96,8 @@ type ModuleCard = {
   isRequired: boolean
   isComplete: boolean
   isActionRequired: boolean
-  isClosed: boolean   // read-only state (past closes_at_status)
+  isClosed: boolean      // read-only state (past closes_at_status)
+  isNotYetOpen: boolean  // module not yet available
   statusLabel: string
   statusStyle: { background: string; color: string }
   iconStyle: { background: string }
@@ -115,7 +116,25 @@ function buildModuleCard(
   eventSlug: string,
   confirmedVolunteerMinutes: number = 0,
   isClosed = false,
+  isNotYetOpen = false,
 ): ModuleCard {
+  // Modules not yet open: show a locked placeholder with no CTA
+  if (isNotYetOpen) {
+    const { label, icon } = MODULE_META[key]
+    const gray = { background: '#F3F4F6', color: '#6B7280' }
+    return {
+      key, label, icon,
+      isRequired: config.required,
+      isComplete: false,
+      isActionRequired: false,
+      isClosed: false,
+      isNotYetOpen: true,
+      statusLabel: 'Coming Soon',
+      statusStyle: gray,
+      iconStyle: { background: '#F3F4F6' },
+      description: 'This module is not yet open.',
+    }
+  }
   const { label, icon } = MODULE_META[key]
   const isRequired = config.required
   const green = { background: 'var(--sd-green-light)', color: 'var(--sd-green-dark)' }
@@ -127,6 +146,7 @@ function buildModuleCard(
   const base: Omit<ModuleCard, 'key' | 'label' | 'icon' | 'isRequired' | 'isClosed'> = {
     isComplete: false,
     isActionRequired: false,
+    isNotYetOpen: false,
     statusLabel: 'Incomplete',
     statusStyle: gray,
     iconStyle: { background: '#F3F4F6' },
@@ -233,6 +253,33 @@ function buildModuleCard(
   return card
 }
 
+// ─── Entry-point module detection ────────────────────────────────────────────
+// The "entry point" is the first required+enabled module in workflow order.
+// schedule and badge never gate enrollment so they are excluded.
+const ENTRY_POINT_CANDIDATES: ModuleKey[] = ['application', 'ticketing', 'waiver', 'volunteering']
+
+function statusPosition(opensAt: string | null | undefined, workflowStatuses: WorkflowStatus[]): number {
+  if (!opensAt || opensAt === 'Draft' || opensAt === 'Published') return 0
+  const custom = workflowStatuses.find(s => s.id === opensAt)
+  if (custom) return 2 + custom.order
+  if (opensAt === 'Event Locked') return 9000
+  return 9999
+}
+
+function findEntryPointModule(
+  config: Record<string, ModuleConfig | undefined>,
+  workflowStatuses: WorkflowStatus[],
+): { key: ModuleKey; cfg: ModuleConfig } | null {
+  let best: { key: ModuleKey; cfg: ModuleConfig; pos: number } | null = null
+  for (const key of ENTRY_POINT_CANDIDATES) {
+    const cfg = config[key]
+    if (!cfg?.enabled || !cfg?.required) continue
+    const pos = statusPosition(cfg.opens_at_status, workflowStatuses)
+    if (!best || pos < best.pos) best = { key, cfg, pos }
+  }
+  return best ? { key: best.key, cfg: best.cfg } : null
+}
+
 function getLockStatusStyle(lockStatus: string): { background: string; color: string } {
   if (lockStatus === 'Locked')        return { background: 'var(--sd-green-light)', color: 'var(--sd-green-dark)' }
   if (lockStatus === 'Ready to Lock') return { background: 'var(--sd-amber-light)', color: '#92400e' }
@@ -259,7 +306,7 @@ export default async function EventAttendeePage({
   // Fetch event (admin client — users have no RLS on platform_events; §3)
   const { data: event } = await adminSupabase
     .from('platform_events')
-    .select('id, slug, title, description, start_date, end_date, location, status, module_config, workflow_statuses, telegram_group, discord_server, room_lock_in_date')
+    .select('id, slug, title, description, start_date, end_date, location, status, module_config, workflow_statuses, telegram_group, telegram_chat_link, discord_server, room_lock_in_date')
     .eq('id', eventId)
     .single()
 
@@ -279,9 +326,11 @@ export default async function EventAttendeePage({
 
   // ── Unenrolled user: show Event Detail view ──────────────────────────────
   if (!attendee) {
-    const appCfg = moduleConfig.application
+    const entryPoint = findEntryPointModule(moduleConfig, workflowStatuses)
+    const entryPointState = entryPoint
+      ? getModuleOpenState(entryPoint.cfg, event.status, workflowStatuses)
+      : null
     const schCfg = moduleConfig.schedule
-    const appOpen = appCfg ? getModuleOpenState(appCfg, event.status, workflowStatuses) === 'open' : false
     const schOpen = schCfg ? getModuleOpenState(schCfg, event.status, workflowStatuses) !== 'not_yet_open' : false
 
     type ScheduleActivity = {
@@ -351,27 +400,52 @@ export default async function EventAttendeePage({
           padding: '24px',
           boxShadow: '0 1px 3px rgba(0,0,0,.06)',
         }}>
-          {appOpen ? (
-            <>
-              <p style={{ fontSize: '14px', color: 'var(--sd-text)', marginBottom: '16px' }}>
-                Applications are open for this event.
-              </p>
-              <Link
-                href={`/events/${eventId}/application`}
-                style={{
-                  display: 'inline-block',
-                  padding: '10px 22px',
-                  background: 'var(--sd-green)',
-                  color: '#fff',
-                  borderRadius: '7px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  textDecoration: 'none',
-                }}
-              >
-                Apply now →
-              </Link>
-            </>
+          {entryPointState === 'open' ? (
+            (() => {
+              const ctaHref = entryPoint!.key === 'application'
+                ? `/events/${eventId}/application`
+                : entryPoint!.key === 'ticketing'
+                  ? `/events/${eventId}/ticket`
+                  : null
+              const ctaLabel = entryPoint!.key === 'application'
+                ? 'Apply now →'
+                : entryPoint!.key === 'ticketing'
+                  ? 'Get your ticket →'
+                  : null
+              const ctaBody = entryPoint!.key === 'application'
+                ? 'Applications are open for this event.'
+                : entryPoint!.key === 'ticketing'
+                  ? 'Tickets are now available for this event.'
+                  : 'Registration is open for this event.'
+              return (
+                <>
+                  <p style={{ fontSize: '14px', color: 'var(--sd-text)', marginBottom: ctaHref ? '16px' : '0' }}>
+                    {ctaBody}
+                  </p>
+                  {ctaHref && (
+                    <Link
+                      href={ctaHref}
+                      style={{
+                        display: 'inline-block',
+                        padding: '10px 22px',
+                        background: 'var(--sd-green)',
+                        color: '#fff',
+                        borderRadius: '7px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        textDecoration: 'none',
+                      }}
+                    >
+                      {ctaLabel}
+                    </Link>
+                  )}
+                </>
+              )
+            })()
+          ) : entryPointState === 'closed' ? (
+            <p style={{ fontSize: '14px', color: 'var(--sd-muted)' }}>
+              Registration for this event is now closed.
+            </p>
           ) : (
             <p style={{ fontSize: '14px', color: 'var(--sd-muted)' }}>
               Stay tuned — registration for this event will be opening soon.
@@ -465,44 +539,35 @@ export default async function EventAttendeePage({
     confirmedVolunteerMinutes = (confirmedShifts ?? []).reduce((sum, s) => sum + s.duration_minutes, 0)
   }
 
-  // Build module cards — only for modules that are open or closed (not not_yet_open)
+  // Build module cards — ALL enabled modules (open, closed, and not_yet_open)
+  // For room_selection: either the Basic Event Rooms key OR the Venue module key may
+  // provide rooms. Both surface as the same "Room Selection" card in the hub.
+  function getEffectiveCfg(key: ModuleKey): ModuleConfig | undefined {
+    if (key === 'room_selection') return moduleConfig.room_selection ?? moduleConfig.venue
+    return moduleConfig[key]
+  }
+
   const cards: ModuleCard[] = MODULE_ORDER
-    .filter(key => {
-      const cfg = moduleConfig[key]
-      if (!cfg?.enabled) return false
-      const state = getModuleOpenState(cfg, event.status, workflowStatuses)
-      return state !== 'not_yet_open'
-    })
+    .filter(key => getEffectiveCfg(key)?.enabled)
     .map(key => {
-      const cfg = moduleConfig[key]!
+      const cfg = getEffectiveCfg(key)!
       const state = getModuleOpenState(cfg, event.status, workflowStatuses)
       return buildModuleCard(
         key, cfg, attendee as unknown as AttendeeRow,
         eventId, event.room_lock_in_date ?? null, event.slug,
         confirmedVolunteerMinutes,
         state === 'closed',
+        state === 'not_yet_open',
       )
     })
 
-  const requiredCards = cards.filter(c => c.isRequired)
-  const completedRequired = requiredCards.filter(c => c.isComplete).length
-  const totalRequired = requiredCards.length
+  // All required modules regardless of open state — used for checklist and lock gating
+  const allRequiredCards = cards.filter(c => c.isRequired)
+  const completedRequired = allRequiredCards.filter(c => c.isComplete).length
+  const totalRequired = allRequiredCards.length
   const progressPct = totalRequired > 0 ? Math.round((completedRequired / totalRequired) * 100) : 100
   const allRequiredComplete = completedRequired === totalRequired
   const lockStatus: string = (attendee as unknown as AttendeeRow).lock_status
-
-  // Determine if any modules are not yet open (for informational note)
-  const notYetOpenLabels: string[] = MODULE_ORDER
-    .filter(key => {
-      const cfg = moduleConfig[key]
-      if (!cfg?.enabled) return false
-      return getModuleOpenState(cfg, event.status, workflowStatuses) === 'not_yet_open'
-    })
-    .map(key => {
-      const cfg = moduleConfig[key]!
-      const opensAt = getOpensAtName(cfg, workflowStatuses)
-      return opensAt ? `${MODULE_META[key].label} (opens at: ${opensAt})` : MODULE_META[key].label
-    })
 
   // Server action for Ready to Lock
   async function handleReadyToLock() {
@@ -555,11 +620,11 @@ export default async function EventAttendeePage({
               {event.location && <span>📍 {event.location}</span>}
               <span>🧑‍💼 Organized by Shiny Dog Productions</span>
             </div>
-            {(event.telegram_group || event.discord_server) && (
-              <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                {event.telegram_group && (
+            {(event.telegram_chat_link || event.telegram_group || event.discord_server) && (
+              <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                {event.telegram_chat_link && (
                   <a
-                    href={event.telegram_group}
+                    href={/^https?:\/\//i.test(event.telegram_chat_link) ? event.telegram_chat_link : `https://${event.telegram_chat_link}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{ padding: '5px 12px', border: '1px solid var(--sd-border)', borderRadius: '7px', fontSize: '12px', fontWeight: 500, color: 'var(--sd-text)', textDecoration: 'none', background: 'var(--sd-card)' }}
@@ -567,9 +632,26 @@ export default async function EventAttendeePage({
                     Telegram Group
                   </a>
                 )}
+                {event.telegram_group && (() => {
+                  const val = event.telegram_group
+                  const href = /^https?:\/\//i.test(val) ? val
+                    : val.startsWith('@') ? `https://t.me/${val.slice(1)}`
+                    : /^-?\d+$/.test(val) ? null
+                    : `https://${val}`
+                  return href ? (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ padding: '5px 12px', border: '1px solid var(--sd-border)', borderRadius: '7px', fontSize: '12px', fontWeight: 500, color: 'var(--sd-text)', textDecoration: 'none', background: 'var(--sd-card)' }}
+                    >
+                      Notification Channel
+                    </a>
+                  ) : null
+                })()}
                 {event.discord_server && (
                   <a
-                    href={event.discord_server}
+                    href={/^https?:\/\//i.test(event.discord_server) ? event.discord_server : `https://${event.discord_server}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{ padding: '5px 12px', border: '1px solid var(--sd-border)', borderRadius: '7px', fontSize: '12px', fontWeight: 500, color: 'var(--sd-text)', textDecoration: 'none', background: 'var(--sd-card)' }}
@@ -609,28 +691,6 @@ export default async function EventAttendeePage({
         )}
       </div>
 
-      {/* No open modules yet */}
-      {cards.length === 0 && notYetOpenLabels.length > 0 && (
-        <div style={{
-          background: 'var(--sd-card)',
-          border: '1px solid var(--sd-border)',
-          borderRadius: 'var(--sd-radius)',
-          padding: '24px',
-          marginBottom: '24px',
-          boxShadow: '0 1px 3px rgba(0,0,0,.06)',
-        }}>
-          <p style={{ fontSize: '14px', color: 'var(--sd-muted)', marginBottom: '12px' }}>
-            No modules are currently open for this event.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {notYetOpenLabels.map((label, i) => (
-              <span key={i} style={{ fontSize: '13px', color: 'var(--sd-muted)' }}>
-                ⏳ {label}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Module grid */}
       {cards.length > 0 && (
@@ -646,12 +706,12 @@ export default async function EventAttendeePage({
             <div
               key={card.key}
               style={{
-                background: card.isActionRequired ? '#FFFBEB' : 'var(--sd-card)',
-                border: `1px ${card.isRequired ? 'solid' : 'dashed'} ${card.isActionRequired ? '#FCD34D' : 'var(--sd-border)'}`,
+                background: card.isNotYetOpen ? 'var(--sd-card)' : card.isActionRequired ? '#FFFBEB' : 'var(--sd-card)',
+                border: `1px ${card.isRequired && !card.isNotYetOpen ? 'solid' : 'dashed'} ${card.isActionRequired ? '#FCD34D' : 'var(--sd-border)'}`,
                 borderRadius: 'var(--sd-radius)',
                 padding: '20px',
                 boxShadow: '0 1px 3px rgba(0,0,0,.06)',
-                opacity: card.isClosed && !card.isComplete ? 0.75 : 1,
+                opacity: card.isNotYetOpen ? 0.5 : card.isClosed && !card.isComplete ? 0.75 : 1,
               }}
             >
               {/* Card header */}
@@ -661,7 +721,7 @@ export default async function EventAttendeePage({
                     {card.icon}
                   </div>
                   <span style={{ fontSize: '14px', fontWeight: 600 }}>{card.label}</span>
-                  {card.isClosed && (
+                  {card.isClosed && !card.isNotYetOpen && (
                     <span style={{ fontSize: '11px', color: 'var(--sd-muted)', fontStyle: 'italic' }}>read-only</span>
                   )}
                 </div>
@@ -686,8 +746,8 @@ export default async function EventAttendeePage({
               {/* Extra detail */}
               {card.detail && <div style={{ marginBottom: '10px' }}>{card.detail}</div>}
 
-              {/* CTA */}
-              {card.ctaHref ? (
+              {/* CTA — not shown for not_yet_open cards */}
+              {!card.isNotYetOpen && (card.ctaHref ? (
                 <Link
                   href={card.ctaHref}
                   style={{
@@ -713,7 +773,7 @@ export default async function EventAttendeePage({
                 </Link>
               ) : card.ctaLabel ? (
                 <span style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>{card.ctaLabel}</span>
-              ) : null}
+              ) : null)}
 
               {/* Optional tag */}
               {!card.isRequired && (
@@ -766,9 +826,9 @@ export default async function EventAttendeePage({
         </p>
 
         {/* Requirements checklist */}
-        {requiredCards.length > 0 && (
+        {allRequiredCards.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '16px' }}>
-            {requiredCards.map(card => (
+            {allRequiredCards.map(card => (
               <div
                 key={card.key}
                 style={{
