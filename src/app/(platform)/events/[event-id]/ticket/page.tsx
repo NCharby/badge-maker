@@ -221,7 +221,7 @@ export default async function TicketPage({
 
   // Fetch available rooms for checkout when a Room Lead ticket requires room selection at purchase
   const hasRoomStep = (ticketTypes ?? []).some(t => t.room_required_at_purchase && t.room_lead)
-  type CheckoutRoom = { id: string; name: string; number: string | null; lodging_type: string | null; bed_type: string | null; min_occupancy: number; max_occupancy: number; open_spot_count: number }
+  type CheckoutRoom = { id: string; name: string; number: string | null; lodging_type: string | null; bed_type: string | null; min_occupancy: number; max_occupancy: number; open_spot_count: number; room_daily_rates: Array<{ date: string; amount: number }> | null }
   let checkoutRooms: CheckoutRoom[] = []
   if (hasRoomStep) {
     const { data: eventForRooms } = await adminSupabase
@@ -230,7 +230,7 @@ export default async function TicketPage({
 
     const roomsQuery = adminSupabase
       .from('rooms')
-      .select('id, name, number, lodging_type, bed_type, min_occupancy, bed_spot_count')
+      .select('id, name, number, lodging_type, bed_type, min_occupancy, bed_spot_count, room_daily_rates')
     const { data: rawRooms } = venueId
       ? await roomsQuery.eq('venue_id', venueId)
       : await roomsQuery.eq('event_id', eventId)
@@ -257,6 +257,7 @@ export default async function TicketPage({
           id: r.id, name: r.name, number: r.number, lodging_type: r.lodging_type,
           bed_type: r.bed_type, min_occupancy: r.min_occupancy, max_occupancy: r.bed_spot_count,
           open_spot_count: Math.max(0, r.bed_spot_count - (occupantCounts.get(r.id) ?? 0)),
+          room_daily_rates: (r.room_daily_rates ?? null) as Array<{ date: string; amount: number }> | null,
         }))
     }
   }
@@ -319,6 +320,8 @@ export default async function TicketPage({
           squareAppId={squareAppId}
           squareLocationId={squareLocationId}
           paypalClientId={paypalClientId}
+          eventStartDate={event.start_date}
+          eventEndDate={event.end_date}
         />
       </div>
     </>

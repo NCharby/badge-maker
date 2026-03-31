@@ -90,7 +90,7 @@ export default function AppNav({ user, unreadCount = 0 }: AppNavProps) {
             href={isAdmin ? '/admin/dashboard' : '/ep/dashboard'}
             style={{ color: linkColor, textDecoration: 'none', fontSize: '0.9rem' }}
           >
-            Dashboard
+            {isAdmin ? 'Admin Dashboard' : 'EP Dashboard'}
           </Link>
         )}
         <Link href="/events/browse" style={{ color: linkColor, textDecoration: 'none', fontSize: '0.9rem' }}>

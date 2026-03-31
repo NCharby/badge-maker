@@ -69,6 +69,7 @@ interface CheckoutRoom {
   min_occupancy: number
   max_occupancy: number
   open_spot_count: number
+  room_daily_rates: Array<{ date: string; amount: number }> | null
 }
 
 interface Props {
@@ -82,6 +83,8 @@ interface Props {
   squareAppId: string
   squareLocationId: string
   paypalClientId: string
+  eventStartDate: string
+  eventEndDate: string
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -104,6 +107,19 @@ function formatDuration(minutes: number): string {
   if (h === 0) return `${m}m`
   if (m === 0) return `${h}h`
   return `${h}h ${m}m`
+}
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+function buildDayDateMap(startDate: string, endDate: string): Record<string, string> {
+  const map: Record<string, string> = {}
+  const current = new Date(startDate + 'T12:00:00Z')
+  const end = new Date(endDate + 'T12:00:00Z')
+  while (current < end) {
+    map[DAY_NAMES[current.getUTCDay()]] = current.toISOString().slice(0, 10)
+    current.setUTCDate(current.getUTCDate() + 1)
+  }
+  return map
 }
 
 function shiftsOverlapCheck(ids: string[], shifts: VolunteerShift[]): boolean {
@@ -135,7 +151,10 @@ export default function TicketCheckoutClient({
   squareAppId,
   squareLocationId,
   paypalClientId,
+  eventStartDate,
+  eventEndDate,
 }: Props) {
+  const dateMap = buildDayDateMap(eventStartDate, eventEndDate)
   const router = useRouter()
   const [step, setStep] = useState<Step>('ticket')
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
@@ -504,6 +523,23 @@ export default function TicketCheckoutClient({
                   <p style={{ fontSize: '11px', color: 'var(--sd-muted)', marginTop: '4px', marginBottom: 0 }}>
                     {room.min_occupancy}–{room.max_occupancy} occupants
                   </p>
+                  {room.room_daily_rates && room.room_daily_rates.length > 0 && (() => {
+                    const total = room.room_daily_rates.reduce((s, r) => s + r.amount, 0)
+                    return (
+                      <div style={{ fontSize: '11px', color: 'var(--sd-muted)', marginTop: '6px' }}>
+                        {room.room_daily_rates.map(r => {
+                          const isoDate = dateMap[r.date]
+                          const label = isoDate
+                            ? new Date(isoDate + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' })
+                            : r.date.charAt(0).toUpperCase() + r.date.slice(1).toLowerCase()
+                          return <div key={r.date}>{label}: ${r.amount.toFixed(2)}/night</div>
+                        })}
+                        <div style={{ fontWeight: 600, marginTop: '2px', color: 'var(--sd-text)' }}>
+                          Total: ${total.toFixed(2)} <span style={{ fontWeight: 400, color: 'var(--sd-muted)' }}>(paid to hotel)</span>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </button>
               )
             })}

@@ -87,6 +87,7 @@ export async function epBlockRoom(
   if (error) return { error: error.message }
 
   revalidatePath(`/ep/events/${eventId}/venue`)
+  revalidatePath(`/ep/events/${eventId}/rooms`)
   return { success: true }
 }
 
@@ -109,6 +110,7 @@ export async function epUnblockRoom(
   if (error) return { error: error.message }
 
   revalidatePath(`/ep/events/${eventId}/venue`)
+  revalidatePath(`/ep/events/${eventId}/rooms`)
   return { success: true }
 }
 
@@ -136,6 +138,7 @@ export async function epReserveRoom(
   if (error) return { error: error.message }
 
   revalidatePath(`/ep/events/${eventId}/venue`)
+  revalidatePath(`/ep/events/${eventId}/rooms`)
   return { success: true }
 }
 
@@ -159,6 +162,7 @@ export async function epUnreserveRoom(
   if (error) return { error: error.message }
 
   revalidatePath(`/ep/events/${eventId}/venue`)
+  revalidatePath(`/ep/events/${eventId}/rooms`)
   return { success: true }
 }
 
@@ -184,6 +188,7 @@ export async function epBlockBed(
   if (error) return { error: error.message }
 
   revalidatePath(`/ep/events/${eventId}/venue`)
+  revalidatePath(`/ep/events/${eventId}/rooms`)
   return { success: true }
 }
 
@@ -204,6 +209,7 @@ export async function epUnblockBed(
   if (error) return { error: error.message }
 
   revalidatePath(`/ep/events/${eventId}/venue`)
+  revalidatePath(`/ep/events/${eventId}/rooms`)
   return { success: true }
 }
 
@@ -301,6 +307,7 @@ export async function epAssignAttendee(
   if (error) return { error: error.message }
 
   revalidatePath(`/ep/events/${eventId}/venue`)
+  revalidatePath(`/ep/events/${eventId}/rooms`)
   return { success: true }
 }
 
@@ -321,5 +328,6 @@ export async function epRemoveAttendee(
   if (error) return { error: error.message }
 
   revalidatePath(`/ep/events/${eventId}/venue`)
+  revalidatePath(`/ep/events/${eventId}/rooms`)
   return { success: true }
 }

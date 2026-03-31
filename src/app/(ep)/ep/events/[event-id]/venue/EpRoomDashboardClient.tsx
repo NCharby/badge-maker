@@ -99,6 +99,13 @@ function RoomManageCard({
     doAction(() => epReserveRoom(eventId, room.id, reserveNote || undefined, reserveNotePublic))
   }
 
+  function handleNotePublicChange(checked: boolean) {
+    setReserveNotePublic(checked)
+    if (room.reserved) {
+      doAction(() => epReserveRoom(eventId, room.id, reserveNote || undefined, checked))
+    }
+  }
+
   function handleUnreserve() {
     doAction(() => epUnreserveRoom(eventId, room.id))
   }
@@ -212,63 +219,84 @@ function RoomManageCard({
         <p style={{ fontSize: '12px', color: 'var(--sd-red)', marginBottom: '8px' }}>{actionError}</p>
       )}
 
-      {/* Block / Unblock row */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+      {/* Block / Reserve actions — grid keeps inputs and buttons column-aligned */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 92px',
+        columnGap: '6px',
+        rowGap: '5px',
+        alignItems: 'center',
+        marginBottom: '8px',
+      }}>
+        {/* Block row */}
+        <input
+          value={blockNote}
+          onChange={e => setBlockNote(e.target.value)}
+          readOnly={room.blocked}
+          placeholder={room.blocked ? 'No block note' : 'Block note (optional)'}
+          style={{
+            padding: '5px 9px', borderRadius: '6px', fontSize: '12px', width: '100%', boxSizing: 'border-box',
+            border: '1px solid var(--sd-border)',
+            color: room.blocked ? 'var(--sd-muted)' : 'var(--sd-text)',
+            background: room.blocked ? 'var(--sd-bg)' : 'var(--sd-card)',
+            cursor: room.blocked ? 'default' : 'text',
+          }}
+        />
         {!room.blocked ? (
-          <>
-            <input
-              value={blockNote}
-              onChange={e => setBlockNote(e.target.value)}
-              placeholder="Block note (optional)"
-              style={{ flex: 1, minWidth: '140px', padding: '5px 9px', borderRadius: '6px', border: '1px solid var(--sd-border)', fontSize: '12px', color: 'var(--sd-text)', background: 'var(--sd-card)' }}
-            />
-            <button
-              onClick={handleBlock}
-              disabled={isPending}
-              style={{ padding: '5px 12px', borderRadius: '6px', border: 'none', background: '#ef4444', color: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
-            >
-              Block Room
-            </button>
-          </>
+          <button
+            onClick={handleBlock}
+            disabled={isPending}
+            style={{ width: '100%', padding: '5px 0', borderRadius: '6px', border: 'none', background: '#ef4444', color: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            Block Room
+          </button>
         ) : (
           <button
             onClick={handleUnblock}
             disabled={isPending}
-            style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid var(--sd-border)', background: 'none', color: 'var(--sd-purple)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+            style={{ width: '100%', padding: '5px 0', borderRadius: '6px', border: '1px solid var(--sd-border)', background: 'none', color: 'var(--sd-purple)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
           >
-            Unblock Room
+            Unblock
           </button>
         )}
 
+        {/* Reserve row */}
+        <input
+          value={reserveNote}
+          onChange={e => setReserveNote(e.target.value)}
+          readOnly={room.reserved}
+          placeholder={room.reserved ? 'No reserve note' : 'Reserve note (optional)'}
+          style={{
+            padding: '5px 9px', borderRadius: '6px', fontSize: '12px', width: '100%', boxSizing: 'border-box',
+            border: '1px solid var(--sd-border)',
+            color: room.reserved ? 'var(--sd-muted)' : 'var(--sd-text)',
+            background: room.reserved ? 'var(--sd-bg)' : 'var(--sd-card)',
+            cursor: room.reserved ? 'default' : 'text',
+          }}
+        />
         {!room.reserved ? (
-          <>
-            <input
-              value={reserveNote}
-              onChange={e => setReserveNote(e.target.value)}
-              placeholder="Reserve note (optional)"
-              style={{ flex: 1, minWidth: '140px', padding: '5px 9px', borderRadius: '6px', border: '1px solid var(--sd-border)', fontSize: '12px', color: 'var(--sd-text)', background: 'var(--sd-card)' }}
-            />
-            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--sd-muted)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={reserveNotePublic} onChange={e => setReserveNotePublic(e.target.checked)} />
-              Show to users
-            </label>
-            <button
-              onClick={handleReserve}
-              disabled={isPending}
-              style={{ padding: '5px 12px', borderRadius: '6px', border: 'none', background: '#f59e0b', color: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
-            >
-              Reserve
-            </button>
-          </>
+          <button
+            onClick={handleReserve}
+            disabled={isPending}
+            style={{ width: '100%', padding: '5px 0', borderRadius: '6px', border: 'none', background: '#f59e0b', color: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            Reserve
+          </button>
         ) : (
           <button
             onClick={handleUnreserve}
             disabled={isPending}
-            style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid var(--sd-border)', background: 'none', color: 'var(--sd-purple)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+            style={{ width: '100%', padding: '5px 0', borderRadius: '6px', border: '1px solid var(--sd-border)', background: 'none', color: 'var(--sd-purple)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
           >
             Unreserve
           </button>
         )}
+
+        {/* Checkbox — always visible */}
+        <label style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--sd-muted)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={reserveNotePublic} onChange={e => handleNotePublicChange(e.target.checked)} />
+          Show reserve note to users
+        </label>
       </div>
 
       {/* Manage Beds toggle */}
