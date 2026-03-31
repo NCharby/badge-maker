@@ -1,8 +1,8 @@
 # SD Platform — CLAUDE.md
 ## AI-Assisted Development Reference Document
 **Organization:** Shiny Dog Productions Inc.
-**Document Status:** Revised Draft — Payment integration, EP payment config UI, and admin user management implemented
-**Last Updated:** March 2026 (payment processor integration + admin user management)
+**Document Status:** Revised Draft — Payment integration, notification enrichment, webhook dedup fix, QA/security audit, EP settings/notifications split, schedule day-grouping and search, workflow UX improvements
+**Last Updated:** March 2026 (schedule search/day-grouping; EP event settings and notifications pages split; Room Lock-In Date wired to settings; lock countdown notification context; workflow Add Status form relocated to top)
 
 ---
 
@@ -83,7 +83,7 @@ The new platform is built as an extension of the existing badge-maker Next.js co
 | State Management | Zustand with persistence |
 | Form Validation | React Hook Form + Zod |
 | PDF Generation | Puppeteer |
-| Email Delivery | Postmark |
+| Email Delivery | Resend |
 | Telegram | Bot API |
 | Storage | Supabase Storage with RLS |
 | Payments | Square (primary); PayPal (required addition — see §6.2) |
@@ -188,14 +188,18 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
 # Email
-POSTMARK_API_KEY=
-POSTMARK_FROM_EMAIL=
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=
 
 # Telegram
 TELEGRAM_BOT_TOKEN=
 
 # App (required for production)
 NEXT_PUBLIC_APP_URL=https://yourdomain.com   # set in hPanel before deploy; baked at build time
+
+# Development only — never set in production
+NEXT_PUBLIC_DEBUG=true                       # UI gate for dev registration path; must NOT be set in prod builds
+DEBUG_REGISTRATION_KEY=enabled               # Server-side gate for registerDevUser(); must NOT be set in prod
 
 # Runtime (Hostinger-managed — do not set manually in production)
 NODE_ENV=production
@@ -314,7 +318,7 @@ The badge-maker repository (`https://github.com/NCharby/badge-maker`) is a produ
 - Multi-event support via dynamic `[event-name]` routing
 - Image upload, crop, and optimization
 - Social media link integration
-- Automated PDF delivery via Postmark
+- Automated PDF delivery via Resend
 - Telegram integration with automatic invite link generation
 - Mobile-responsive design
 - Row Level Security and audit trails
@@ -399,7 +403,7 @@ Users have no direct access to `platform_events`. Event data is served to attend
 | Service | Purpose | Notes |
 |---|---|---|
 | Supabase | Database, Auth, Storage, RLS | Required — already in use |
-| Postmark | Transactional email delivery | Required — already in use |
+| Resend | Transactional email delivery | Required — already in use |
 | Telegram Bot API | Notifications, channel management | Required — already in use |
 | Square | Payment processing (primary) | Active when EP's `payment_provider = 'square'`; idempotency key = `orders.id`; webhook events: `payment.created`, `payment.updated` (guard on `payment.status === 'COMPLETED'`), `refund.created`, `refund.updated`; all webhook requests verified via `x-square-hmacsha256-signature` header before processing |
 | PayPal | Payment processing (backup) | Active when EP's `payment_provider = 'paypal'`; webhook events: `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.REFUNDED`; all webhook requests verified via PayPal signature before processing |
@@ -555,12 +559,13 @@ An Event is created by an Event Promoter and is a collection of configured modul
 - `location` (physical address if Venue module disabled; Venue object if enabled)
 
 **Optional Fields:**
-- `telegram_group`
+- `telegram_group` — Telegram channel ID or `@username` for bot notification posts; configured on the Notifications page
+- `telegram_chat_link` — public group chat invite URL shown to attendees as a "Telegram Group" button; configured on the Notifications page
 - `discord_server`
 - `social_media_links[]`
 - `application_open_date`
 - `tickets_open_date`
-- `room_lock_in_date`
+- `room_lock_in_date` — deadline for all attendees to finalize room selections; configurable from Event Settings; required to enable lock countdown Telegram notifications (rows 12–13)
 - `room_closed_date`
 - `group_chat_links`
 
@@ -1428,6 +1433,8 @@ CREATE INDEX platform_notifications_user_unread_idx
 
 Rows 12, 13, 17–21, 23 are scheduler-triggered and remain `console.log` stubs pending external scheduler integration.
 
+> **Email/Telegram delivery status (as of March 2026):** All notification rows write an in-platform `platform_notifications` record. Email and Telegram delivery are `// TODO` stubs throughout — no outbound email or Telegram messages are sent by any Server Action. Email delivery (Resend) and Telegram outbound sends must be wired before MVP 1 launch. See `REMAINING_WORK.md` Tier 2 for the full list of rows requiring implementation.
+
 ---
 
 ## 6. Module Specifications
@@ -1691,7 +1698,7 @@ The action available on each card differs by role:
 - System automatically locks remaining room selections on the Lock-In Date
 - A "locked" room is a platform confirmation of the user's intended room; the user is responsible for paying the hotel directly
 - Post-lock: no user changes to room selection; Event Promoter approval required for any modifications
-- On Lock-In Date: system sends an attendance slip to all locked users via **email (Postmark) and Telegram message**; content is system-generated with no Event Promoter template required; content includes: user's scene name, event name, room number, room type, room code, check-in date, check-out date, and instruction to present the room code to hotel desk staff at check-in
+- On Lock-In Date: system sends an attendance slip to all locked users via **email (Resend) and Telegram message**; content is system-generated with no Event Promoter template required; content includes: user's scene name, event name, room number, room type, room code, check-in date, check-out date, and instruction to present the room code to hotel desk staff at check-in
 - Users without locked rooms receive automated notifications prompting resolution
 
 **Room Closed Date:** Goal is confirmed room locks for all attendees by this date. Event Promoter manages resolution of any outstanding issues.
@@ -1758,6 +1765,13 @@ The Schedule Module is recreated within the SD Platform. The existing standalone
 - Enable the Schedule Module for an Event
 - Add activities to the event schedule
 
+**EP Schedule Management UI** (`/ep/events/[event-id]/schedule`):
+- Activities are displayed grouped by day, with a labelled day header (e.g. "Thursday, May 15") separating each group
+- **Search** — full-width text input filters displayed activities by name or description (case-insensitive); shown above the activity list
+- **Day filter chips** — shown when the event spans more than one day; chips for each event day plus an "All days" chip; clicking a chip filters the list to that day; clicking the active chip deselects it
+- Activities are sorted chronologically within each day group
+- Empty state "No activities match your search." is shown when filters produce no results; the original "No activities yet." empty state is shown only when no activities exist
+
 **Required fields per activity:**
 - `name` — activity name
 - `date_time` — date and time the activity occurs
@@ -1808,6 +1822,8 @@ The existing badge-maker codebase is absorbed as-is into the platform as the Bad
 ### 6.8 Telegram Bot
 
 **Library:** `grammY` — TypeScript-first, webhook-native. The bot runs in webhook mode via a Next.js Route Handler (`/api/telegram/webhook`). Polling is not used (incompatible with Hostinger's single-process model).
+
+> **Implementation status:** `grammY` is installed and the invite-link generation path (badge-maker flow) works. The `/api/telegram/webhook` Route Handler does not yet exist — the bot cannot receive messages or commands until this is created. See `REMAINING_WORK.md` for implementation guidance.
 
 **Bot setup:** The bot token is stored in `TELEGRAM_BOT_TOKEN` (environment variable). The webhook URL is registered with Telegram once at deployment pointing to `/api/telegram/webhook`.
 
@@ -1880,6 +1896,19 @@ All shown in Card format. Clicking a card navigates to the corresponding managem
 - Venue Management (create venues, room matrices via manual entry or CSV upload, room groups)
 - Volunteer schedule management
 - Room reservations and blocking
+
+**Implemented EP Event Management Routes:**
+
+`/ep/events/[event-id]/settings` — Core event details. Fields: title, description, start date, end date, Room Lock-In Date (datetime input; time defaults to midnight; required for lock countdown Telegram notifications). **Note:** Telegram Group Chat Link is NOT on this page — it lives on the Notifications page.
+
+`/ep/events/[event-id]/notifications` — Telegram notification configuration for the event. Sections:
+- **Telegram Setup card:** Notification bot (read-only), Channel invite link (parsed to `@username` or numeric chat ID with inline validation feedback), Group Chat Link (validated as a `t.me/…` URL with inline feedback; stored as `telegram_chat_link` on `platform_events`; shown to attendees as a "Telegram Group" button)
+- **Notification Settings card:** Per-notification-type toggles for "Post to channel" and "Send DM to user", plus optional custom message template. Lock countdown rows (1-week, 48-hour) show a green badge with the configured Lock-In Date when set, or an amber warning linking to Event Settings when not set.
+- **Room Selection Opens is not a separate notification type** — this is covered by the Event Status Transition notification (row 25). Any status transition (including one that opens rooms) fires row 25.
+
+`/ep/events/[event-id]/workflow` — Custom workflow status management. The **Add Custom Status form is positioned at the top of the page** (above the full status chain display) for discoverability. Below it: system statuses (Draft, Published), custom status rows with reorder arrows / rename / delete, system statuses (Event Locked onward). Save Order button appears inline when unsaved reordering is pending.
+
+`/ep/events/[event-id]/schedule` — See §6.5 for EP schedule management UI details (day grouping, search, day filter chips).
 
 > **Registration Panel:** Deferred to MVP 2 (when QR code check-in is built). In MVP 1, on-site check-in is handled by a separate dedicated application — not the SD Platform. The `Registration` status signals the check-in phase is active; no platform UI is needed in MVP 1.
 
@@ -1961,13 +1990,17 @@ Complete inventory of all platform notifications. Every entry must be implemente
 | 32 | Roommate Code used — roommate successfully placed in room | Room Lead | Email + Telegram + in-platform | Roommate's scene name, event name, room number |
 | 33 | Roommate Code used but room is full (code attempted, room at capacity) | Room Lead | Email + Telegram + in-platform | Event name, room number |
 
+> **"Room Selection Opens" is not a separate Telegram notification type.** When rooms open, the event transitions to a new workflow status, which fires the Event Status Transition notification (row 25). No standalone "rooms_open" Telegram notification exists — row 25 covers it.
+
+> **Lock countdown notifications (rows 12–13) require `room_lock_in_date` to be set** on the event (via Event Settings). The EP Notifications page displays the configured date as context on those rows, or shows an amber warning linking to Event Settings when the date is not set.
+
 > **Scheduled notifications** (rows 12, 13, 17–21, 23) must be triggered by an external scheduler (Supabase Edge Functions, Zapier, or cron service) calling an API Route Handler — never by `setInterval`, `setTimeout`, or in-process timers (see §2 Hostinger constraints).
 
 > **Offline Reporting Packet trigger** (see §10): When the event transitions to `Event Locked`, the Server Action sets a job flag. An external scheduler calls `/api/reports/offline-packet` to generate and email the report. Do NOT generate it inline in the status-transition Server Action.
 
 > **In-platform notification center (implemented):** The notification inbox at `/notifications` is now built. All notification types write a `platform_notifications` record; users can review, action, and dismiss notifications from this page. The AppNav bell shows the unread count. See the `platform_notifications` schema in §5a for full details.
 
-> **In-platform messaging (Odoo Help Desk):** Conversational support messaging (Odoo Help Desk routing) remains MVP 2. All support communication in MVP 1 uses email (Postmark). The Odoo Help Desk integration is implemented as a stub (`// TODO: Odoo integration — not implemented`) at each integration point.
+> **In-platform messaging (Odoo Help Desk):** Conversational support messaging (Odoo Help Desk routing) remains MVP 2. All support communication in MVP 1 uses email (Resend). The Odoo Help Desk integration is implemented as a stub (`// TODO: Odoo integration — not implemented`) at each integration point.
 
 > **User notification preferences:** Regular users can toggle `email_notifications_enabled` and `telegram_notifications_enabled` globally from their Profile Management page. They cannot opt out per notification type. `telegram_notifications_enabled` defaults to `false` and activates automatically when `telegram_verified` becomes `true`.
 
@@ -2161,7 +2194,7 @@ See §6.3 and User Story 3 for full specification. Delivered automatically on a 
 
 A bulk report packet containing all critical event information formatted for offline use at the event in case internet is unavailable. Serves as a complete operational backup.
 
-**Format:** Excel (`.xlsx`) — multiple tabs, one per report section. Delivered to the EP via email (Postmark).
+**Format:** Excel (`.xlsx`) — multiple tabs, one per report section. Delivered to the EP via email (Resend).
 
 **Trigger:** When the event transitions to `Event Locked` status, the Server Action sets a job flag (or inserts a pending job record). An external scheduler (Supabase Edge Function, Zapier, or cron) calls `/api/reports/offline-packet` to generate and email the report. Do NOT generate inline in the Server Action — this would block the status transition and violate the no-background-work constraint. The EP may also manually regenerate and re-download from the event management panel at any time after `Event Locked`.
 
@@ -2183,13 +2216,14 @@ A bulk report packet containing all critical event information formatted for off
 - Ticketing ✓ *(checkout flow, Square Web Payments SDK, PayPal JS SDK, soft locks, roommate codes, EP payment config UI)*
 - Hotel Room Selection ✓ *(Roommate Finder, room applications, claim-by-email, bed blocking, reservation, Room Open Group, room matrix CSV import)*
 - Attendee Portal ✓ *(dashboard, event hub, module gating, ready-to-lock, self-cancel)*
-- Telegram Bot (basic) ✓ *(webhook mode via grammY, invite link generation, outbound notifications)*
-- Email & Telegram Alerts ✓ *(notification center `/notifications`, AppNav bell, in-platform + email + Telegram channels)*
+- Telegram Bot (basic) **[PARTIAL]** *(grammY installed, invite link generation for badge-maker flow works; `/api/telegram/webhook` route handler not yet created — bot cannot receive messages or commands; outbound platform notification sends not wired)*
+- Email & Telegram Alerts **[PARTIAL]** *(notification center `/notifications` built, AppNav bell built, in-platform delivery wired for all notification rows; email and Telegram sends remain `// TODO` stubs — zero outbound email or Telegram messages sent by platform Server Actions)*
 - Schedule ✓ *(activity management, CSV import, Schedule → Volunteer integration)*
 - Badge Maker ✓ *(legacy badge-maker codebase absorbed; Badge Module enabled per event)*
 - Waiver (via Odoo) — **[BLOCKER]** stub only; pending Odoo API credentials
 - Volunteering ✓ *(shift management, CSV import, soft locks, area lead label, hours countdown)*
 - Admin User Management ✓ *(user list, role promotion/demotion, payment provider assignment via `/admin/users`)*
+- Reporting Endpoints — **[NOT STARTED]** `/api/reports/hotel-weekly` and `/api/reports/offline-packet` route handlers do not exist
 
 ### MVP 2 — Target: Before First October Event
 
@@ -2213,7 +2247,7 @@ A bulk report packet containing all critical event information formatted for off
 ### Decisions Needed
 
 - **[BLOCKER] Odoo Integration (Waiver):** Odoo handles Waiver signing, CRM, and Email Marketing via API, but no API credentials, deployment URL, authentication mechanism, or endpoint details have been specified. Claude Code must scaffold stub functions at each Odoo integration point (waiver status sync, CRM contact sync, email marketing enrollment) and mark them `// TODO: Odoo integration — not implemented`. Integration cannot be completed until Odoo deployment details are provided. This is a pre-launch requirement for the Waiver module.
-- **[POST-MVP] Odoo Help Desk:** In-platform messaging routes to Odoo Help Desk. This is MVP 2. In MVP 1: no messaging UI; all support via email (Postmark). Stub at Odoo integration points with `// TODO: Odoo integration — not implemented`.
+- **[POST-MVP] Odoo Help Desk:** In-platform messaging routes to Odoo Help Desk. This is MVP 2. In MVP 1: no messaging UI; all support via email (Resend). Stub at Odoo integration points with `// TODO: Odoo integration — not implemented`.
 - **[POST-MVP] Age Verification API:** Online age verification is a one-time profile-level check (not a checkout gate). A provider must be selected before implementing. The `verifyAge()` hook is scaffolded with a stub implementation. All in-person ID verification at check-in is handled by a separate application regardless of online verification status.
 
 ### Technical Notes
