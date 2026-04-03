@@ -105,26 +105,11 @@ export async function POST(request: NextRequest) {
     }
 
 
-    // Generate public URL for immediate access
-    const { data: publicUrlData } = supabase.storage
-      .from('badge-images')
-      .getPublicUrl(filename)
-
-    if (!publicUrlData?.publicUrl) {
-      console.error('Failed to generate public URL')
-      return NextResponse.json(
-        { 
-          error: 'Failed to generate access URL',
-          details: 'Public URL generation failed'
-        },
-        { status: 500 }
-      )
-    }
-
+    // Return the storage path — signed URLs are generated at display time
     return NextResponse.json({
       success: true,
       filename,
-      url: publicUrlData.publicUrl,
+      url: data.path,
       size: file.size,
       type: file.type
     })

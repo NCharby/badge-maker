@@ -1,8 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
 import type { WorkflowStatus } from '@/types/platform'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 
 // Only 'Published' and custom status UUIDs are valid for opens_at/closes_at
 // (system statuses like 'Draft', 'Event Locked', etc. are excluded from module triggers)
@@ -14,6 +14,9 @@ export type ModuleCfg = {
   opens_at_status: string | null
   closes_at_status: string | null
   room_selection_workflow?: boolean
+  require_room_at_checkout?: boolean
+  room_lead_can_lock?: boolean
+  room_lead_can_lock_with_open_spots?: boolean
   custom_status_message_enabled?: boolean
   custom_status_message?: string
 }
@@ -22,17 +25,15 @@ export async function updateModuleConfig(
   eventId: string,
   moduleConfig: Record<string, ModuleCfg>,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return { error: 'Access denied.' }
 
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, workflow_statuses')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
-  if (!event) return { error: 'Access denied.' }
+  if (!event) return { error: 'Event not found.' }
 
   // Ticketing must always remain enabled
   if (!moduleConfig.ticketing?.enabled) {
@@ -59,7 +60,7 @@ export async function updateModuleConfig(
     }
   }
 
-  const { error: updateError } = await supabase
+  const { error: updateError } = await admin
     .from('platform_events')
     .update({ module_config: moduleConfig })
     .eq('id', eventId)

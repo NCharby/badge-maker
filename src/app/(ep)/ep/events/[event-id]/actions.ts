@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
 import type { WorkflowStatus } from '@/types/platform'
 import { sendEventChannelMessage } from '@/lib/telegram/send'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 
 const SYSTEM_STATUSES = ['Draft', 'Published', 'Event Locked', 'Registration', 'Happening Now', 'Closed', 'Archived']
 
@@ -11,17 +11,15 @@ export async function updateEventStatus(
   eventId: string,
   newStatus: string,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return { error: 'Access denied.' }
 
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, title, start_date, workflow_statuses, module_config')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
-  if (!event) return { error: 'Access denied.' }
+  if (!event) return { error: 'Event not found.' }
 
   const customNames = ((event.workflow_statuses ?? []) as WorkflowStatus[]).map(s => s.name)
   if (!SYSTEM_STATUSES.includes(newStatus) && !customNames.includes(newStatus)) {
@@ -33,7 +31,7 @@ export async function updateEventStatus(
     updatePayload.pending_offline_report = true
   }
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('platform_events')
     .update(updatePayload)
     .eq('id', eventId)

@@ -1,10 +1,11 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { createInPlatformNotification } from '@/lib/notifications'
 import { getPaymentProvider } from '@/lib/payments'
 import { sendTelegramDM } from '@/lib/telegram/send'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 
 export async function updateApplicationStatus(
   eventId: string,
@@ -13,21 +14,18 @@ export async function updateApplicationStatus(
   action?: 'revoke_and_refund' | 'block_only',
   epNote?: string
 ) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
+  const { authorized, admin: guardAdmin } = await epEventGuard(eventId)
+  if (!authorized || !guardAdmin) return { error: 'Access denied.' }
 
-  // Verify EP owns this event
-  const { data: event } = await supabase
+  const { data: event } = await guardAdmin
     .from('platform_events')
     .select('id, title')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
-  if (!event) return { error: 'Access denied.' }
+  if (!event) return { error: 'Event not found.' }
 
   // Fetch current attendee state
-  const { data: attendee } = await supabase
+  const { data: attendee } = await guardAdmin
     .from('event_attendees')
     .select('application_status, ticket_status, order_id')
     .eq('event_id', eventId)
@@ -45,8 +43,8 @@ export async function updateApplicationStatus(
 
   if (action === 'revoke_and_refund') {
     if (attendee.order_id) {
-      const admin = createAdminClient()
-      const { data: order } = await admin
+      const refundAdmin = createAdminClient()
+      const { data: order } = await refundAdmin
         .from('orders')
         .select('payment_transaction_id, subtotal, payment_provider')
         .eq('id', attendee.order_id)
@@ -66,14 +64,14 @@ export async function updateApplicationStatus(
         if (!refundResult.success) {
           return { error: refundResult.error ?? 'Refund failed. Please try again or process the refund manually.' }
         }
-        await admin
+        await refundAdmin
           .from('orders')
           .update({ status: 'refunded', amount_refunded: order.subtotal })
           .eq('id', attendee.order_id)
       }
     }
     // Reset ticket status regardless of whether a payment refund was needed
-    await supabase
+    await guardAdmin
       .from('event_attendees')
       .update({ ticket_status: 'Incomplete', order_id: null })
       .eq('event_id', eventId)
@@ -81,7 +79,7 @@ export async function updateApplicationStatus(
   }
 
   // Update application status
-  const { error } = await supabase
+  const { error } = await guardAdmin
     .from('event_attendees')
     .update({ application_status: newStatus })
     .eq('event_id', eventId)

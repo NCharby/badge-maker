@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'SD Platform',
+  title: 'Lekd',
 }
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -27,7 +27,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             textDecoration: 'none',
           }}
         >
-          🐕 SD Platform
+          Lekd
         </a>
       </div>
       {children}

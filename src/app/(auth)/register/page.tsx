@@ -47,6 +47,8 @@ function isAtLeast21(dob: string): boolean {
 export default function RegisterPage() {
   const router = useRouter()
 
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -54,6 +56,10 @@ export default function RegisterPage() {
   const [telegramHandle, setTelegramHandle] = useState('')
   const [sceneName, setSceneName] = useState('')
   const [tosAccepted, setTosAccepted] = useState(false)
+
+  // Organization (optional)
+  const [createOrg, setCreateOrg] = useState(false)
+  const [orgName, setOrgName] = useState('')
 
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [globalError, setGlobalError] = useState('')
@@ -63,6 +69,8 @@ export default function RegisterPage() {
   function validate(): boolean {
     const newErrors: Record<string, string> = {}
 
+    if (!firstName.trim()) newErrors.firstName = 'First name is required.'
+    if (!lastName.trim()) newErrors.lastName = 'Last name is required.'
     if (!email) newErrors.email = 'Email is required.'
     if (!password) newErrors.password = 'Password is required.'
     else if (password.length < 8) newErrors.password = 'Password must be at least 8 characters.'
@@ -71,6 +79,7 @@ export default function RegisterPage() {
     if (password !== confirmPassword) newErrors.confirmPassword = 'Passwords do not match.'
     if (!dob) newErrors.dob = 'Date of birth is required.'
     else if (!isAtLeast21(dob)) newErrors.dob = 'You must be 21 or older to create an account.'
+    if (createOrg && !orgName.trim()) newErrors.orgName = 'Organization name is required when creating an organization.'
     if (!tosAccepted) newErrors.tos = 'You must agree to the Terms of Service.'
 
     setErrors(newErrors)
@@ -94,11 +103,14 @@ export default function RegisterPage() {
     // using the browser Supabase client (canonical Next.js App Router pattern).
     if (process.env.NEXT_PUBLIC_DEBUG === 'true') {
       const result = await registerDevUser({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
         email,
         password,
         dob,
         telegramHandle: cleanHandle,
         sceneName: sceneName.trim() || null,
+        orgName: createOrg ? orgName.trim() : null,
       })
       if (result?.error) { setLoading(false); setGlobalError(result.error); return }
       if (result?.success) {
@@ -121,9 +133,12 @@ export default function RegisterPage() {
       options: {
         emailRedirectTo: `${location.origin}/auth/callback`,
         data: {
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
           date_of_birth: dob,
           telegram_handle: cleanHandle,
           preferred_scene_name: sceneName.trim() || null,
+          org_name: createOrg ? orgName.trim() : null,
         },
       },
     })
@@ -217,6 +232,36 @@ export default function RegisterPage() {
       )}
 
       <form onSubmit={handleSubmit} noValidate>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '5px' }}>
+              First name
+            </label>
+            <input
+              style={errors.firstName ? inputErrorStyle : inputStyle}
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="First name"
+              autoFocus
+            />
+            {errors.firstName && <p style={errorStyle}>{errors.firstName}</p>}
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '5px' }}>
+              Last name
+            </label>
+            <input
+              style={errors.lastName ? inputErrorStyle : inputStyle}
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Last name"
+            />
+            {errors.lastName && <p style={errorStyle}>{errors.lastName}</p>}
+          </div>
+        </div>
+
         <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '5px' }}>
             Email address
@@ -228,7 +273,6 @@ export default function RegisterPage() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             autoComplete="email"
-            autoFocus
           />
           {errors.email && <p style={errorStyle}>{errors.email}</p>}
         </div>
@@ -325,6 +369,50 @@ export default function RegisterPage() {
             Displayed in the Roommate Finder, badges, and notifications. Leave blank to use your
             email username.
           </p>
+        </div>
+
+        {/* Organization (optional) */}
+        <div style={{
+          marginBottom: '16px',
+          padding: '16px',
+          borderRadius: '7px',
+          border: `1px solid ${createOrg ? 'var(--sd-green)' : 'var(--sd-border)'}`,
+          background: createOrg ? 'var(--sd-green-light)' : 'var(--sd-card)',
+        }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={createOrg}
+              onChange={(e) => setCreateOrg(e.target.checked)}
+              style={{ marginTop: '2px', width: '16px', height: '16px', flexShrink: 0 }}
+            />
+            <span>
+              <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--sd-text)' }}>
+                Create an Organization
+              </span>
+              <span style={{ display: 'block', fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px' }}>
+                Set up an organization to manage events and invite team members. Free to start.
+              </span>
+            </span>
+          </label>
+          {createOrg && (
+            <div style={{ marginTop: '12px', paddingLeft: '26px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '5px' }}>
+                Organization Name *
+              </label>
+              <input
+                style={errors.orgName ? inputErrorStyle : inputStyle}
+                type="text"
+                value={orgName}
+                onChange={(e) => setOrgName(e.target.value)}
+                placeholder="e.g. Shiny Dog Productions"
+              />
+              {errors.orgName && <p style={errorStyle}>{errors.orgName}</p>}
+              <p style={hintStyle}>
+                You&apos;ll be the Organization Lead with full management access.
+              </p>
+            </div>
+          )}
         </div>
 
         <div

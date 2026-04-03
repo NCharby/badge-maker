@@ -32,6 +32,11 @@ export type NotificationType =
   | 'application_approved'      // gap    — attendee: EP approved their application
   | 'application_declined'      // gap    — attendee: EP declined their application
   | 'lock_check_reminder'       // EP-initiated — attendee has incomplete required modules
+  | 'waiver_completed'          // attendee signed their event waiver
+  | 'badge_completed'           // attendee created their event badge
+  | 'room_lock_request'         // Room Lead sent lock request to occupant
+  | 'room_lock_request_accepted' // Occupant accepted lock request
+  | 'room_lock_request_declined' // Occupant declined lock request and left room
 
 /**
  * Write an in-platform notification record for the given user.

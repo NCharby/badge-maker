@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 import Link from 'next/link'
 import TicketsClient from './TicketsClient'
 
@@ -8,15 +8,13 @@ export default async function EpTicketsPage({
   params: Promise<{ 'event-id': string }>
 }) {
   const { 'event-id': eventId } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return null
 
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, title, module_config')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
 
   if (!event) {
@@ -30,7 +28,7 @@ export default async function EpTicketsPage({
     )
   }
 
-  const { data: ticketTypes } = await supabase
+  const { data: ticketTypes } = await admin
     .from('ticket_types')
     .select('id, name, description, price, available_count, room_lead, roommate_codes_enabled, volunteer_hours_required, room_required_at_purchase')
     .eq('event_id', eventId)

@@ -7,7 +7,7 @@ import { updateModuleConfig } from './actions'
 import type { ModuleCfg } from './actions'
 
 // Modules that are never "required" — they have no completion gate
-const NEVER_REQUIRED = new Set(['schedule', 'venue', 'room_selection'])
+const NEVER_REQUIRED = new Set(['schedule'])
 
 // Canonical module order matching the attendee workflow progression.
 // venue and room_selection are mutually exclusive — only one may be enabled at a time.
@@ -16,7 +16,7 @@ const MODULE_ORDER = ['application', 'ticketing', 'waiver', 'venue', 'room_selec
 const MODULE_META: Record<string, { label: string; description: string; lockEnabled?: boolean; mutex?: string }> = {
   application:    { label: 'Application',     description: 'Custom application form attendees complete before being approved.' },
   ticketing:      { label: 'Ticketing',        description: 'Ticket types, pricing, and purchase flow. Required for all events.', lockEnabled: true },
-  waiver:         { label: 'Waiver',           description: 'Digital waiver signing via Odoo integration.' },
+  waiver:         { label: 'Waiver',           description: 'Digital waiver signing and verification.' },
   venue:          { label: 'Venue',            description: 'A reusable location object with optional contact details and Room Matrix. Assign a venue from this event\'s Venue page. Mutually exclusive with Basic Event Rooms.', mutex: 'room_selection' },
   room_selection: { label: 'Basic Event Rooms', description: 'An event-specific Room Matrix tied to this event only — not reusable across events. Mutually exclusive with Venue.', mutex: 'venue' },
   volunteering:   { label: 'Volunteering',     description: 'Volunteer shift signup and required-hours tracking.' },
@@ -30,6 +30,9 @@ type FormCfg = {
   opens_at_status: string   // '' = null
   closes_at_status: string  // '' = null
   room_selection_workflow: boolean
+  require_room_at_checkout: boolean
+  room_lead_can_lock: boolean
+  room_lead_can_lock_with_open_spots: boolean
   custom_status_message_enabled: boolean
   custom_status_message: string
 }
@@ -40,6 +43,9 @@ type RawModuleCfg = {
   opens_at_status?: string | null
   closes_at_status?: string | null
   room_selection_workflow?: boolean
+  require_room_at_checkout?: boolean
+  room_lead_can_lock?: boolean
+  room_lead_can_lock_with_open_spots?: boolean
   custom_status_message_enabled?: boolean
   custom_status_message?: string
 }
@@ -54,6 +60,9 @@ function buildInitialState(moduleConfig: Record<string, RawModuleCfg>): Record<s
       opens_at_status:               cfg.opens_at_status  ?? '',
       closes_at_status:              cfg.closes_at_status ?? '',
       room_selection_workflow:       cfg.room_selection_workflow ?? false,
+      require_room_at_checkout:      cfg.require_room_at_checkout ?? false,
+      room_lead_can_lock:            cfg.room_lead_can_lock ?? false,
+      room_lead_can_lock_with_open_spots: cfg.room_lead_can_lock_with_open_spots ?? false,
       custom_status_message_enabled: cfg.custom_status_message_enabled ?? false,
       custom_status_message:         cfg.custom_status_message ?? '',
     }
@@ -146,6 +155,9 @@ export default function ModuleConfigClient({
         opens_at_status:               cfg.opens_at_status  || null,
         closes_at_status:              cfg.closes_at_status || null,
         room_selection_workflow:       isRoomModule ? cfg.room_selection_workflow : undefined,
+        require_room_at_checkout:      isRoomModule && cfg.room_selection_workflow ? cfg.require_room_at_checkout : undefined,
+        room_lead_can_lock:            isRoomModule ? cfg.room_lead_can_lock : undefined,
+        room_lead_can_lock_with_open_spots: isRoomModule ? cfg.room_lead_can_lock_with_open_spots : undefined,
         custom_status_message_enabled: cfg.custom_status_message_enabled,
         custom_status_message:         cfg.custom_status_message_enabled ? cfg.custom_status_message : '',
       }
@@ -286,6 +298,66 @@ export default function ModuleConfigClient({
                             </span>
                           </span>
                         </label>
+                      </div>
+                    )}
+
+                    {/* Require room selection at checkout — venue and room_selection only */}
+                    {isRoomModule && cfg.room_selection_workflow && (
+                      <div style={{ gridColumn: '1 / -1', paddingTop: '4px' }}>
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: isPending ? 'not-allowed' : 'pointer', fontSize: '13px', color: 'var(--sd-text)' }}>
+                          <input
+                            type="checkbox"
+                            checked={cfg.require_room_at_checkout}
+                            disabled={isPending}
+                            onChange={e => update(key, 'require_room_at_checkout', e.target.checked)}
+                            style={{ width: '14px', height: '14px', marginTop: '2px', flexShrink: 0 }}
+                          />
+                          <span>
+                            <strong>Require room selection at checkout</strong>
+                            <span style={{ display: 'block', fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px' }}>
+                              All attendees must select a room during ticket checkout. Room Lead ticket types already have their own per-ticket-type setting for this.
+                            </span>
+                          </span>
+                        </label>
+                      </div>
+                    )}
+
+                    {/* Room Lead locking toggles — venue and room_selection only */}
+                    {isRoomModule && cfg.room_selection_workflow && (
+                      <div style={{ gridColumn: '1 / -1', paddingTop: '4px' }}>
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: isPending ? 'not-allowed' : 'pointer', fontSize: '13px', color: 'var(--sd-text)', marginBottom: '10px' }}>
+                          <input
+                            type="checkbox"
+                            checked={cfg.room_lead_can_lock}
+                            disabled={isPending}
+                            onChange={e => update(key, 'room_lead_can_lock', e.target.checked)}
+                            style={{ width: '14px', height: '14px', marginTop: '2px', flexShrink: 0 }}
+                          />
+                          <span>
+                            <strong>Allow Room Leads to lock their room</strong>
+                            <span style={{ display: 'block', fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px' }}>
+                              Room Leads can send a lock request to their roommates. Roommates accept to lock in, or decline and leave the room.
+                            </span>
+                          </span>
+                        </label>
+
+                        {cfg.room_lead_can_lock && (
+                          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: isPending ? 'not-allowed' : 'pointer', fontSize: '13px', color: 'var(--sd-text)', marginLeft: '22px' }}>
+                            <input
+                              type="checkbox"
+                              checked={cfg.room_lead_can_lock_with_open_spots}
+                              disabled={isPending}
+                              onChange={e => update(key, 'room_lead_can_lock_with_open_spots', e.target.checked)}
+                              style={{ width: '14px', height: '14px', marginTop: '2px', flexShrink: 0 }}
+                            />
+                            <span>
+                              <strong>Allow locking with open bed spots</strong>
+                              <span style={{ display: 'block', fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px' }}>
+                                If unchecked, Room Leads can only lock when all bed spots are filled.
+                              </span>
+                            </span>
+                          </label>
+                        )}
                       </div>
                     )}
 

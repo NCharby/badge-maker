@@ -9,6 +9,8 @@ type ResolvedOccupant = {
   displayName: string
   isRoomLead: boolean
   roomStatus: string
+  userLocked: boolean
+  roomLeadLocked: boolean
 }
 
 type ResolvedApplication = {
@@ -37,10 +39,18 @@ export default async function RoomDetailPage({
   // Fetch event
   const { data: event } = await admin
     .from('platform_events')
-    .select('id, slug, title, start_date, end_date, room_lock_in_date')
+    .select('id, slug, title, start_date, end_date, room_lock_in_date, module_config')
     .eq('id', eventId)
     .single()
   if (!event) notFound()
+
+  // EP room locking config
+  const moduleConfig = (event.module_config ?? {}) as Record<string, { room_lead_can_lock?: boolean; room_lead_can_lock_with_open_spots?: boolean } | undefined>
+  const roomCfg = moduleConfig.room_selection ?? moduleConfig.venue
+  const roomLockingConfig = {
+    room_lead_can_lock: roomCfg?.room_lead_can_lock ?? false,
+    room_lead_can_lock_with_open_spots: roomCfg?.room_lead_can_lock_with_open_spots ?? false,
+  }
 
   // Fetch room (admin — users have no RLS on rooms)
   const { data: room } = await admin
@@ -53,7 +63,7 @@ export default async function RoomDetailPage({
   // Fetch attendee record
   const { data: attendee } = await supabase
     .from('event_attendees')
-    .select('room_id, room_status, is_room_lead, lock_status, ticket_status, roommate_code, ticket_types(name)')
+    .select('room_id, room_status, is_room_lead, lock_status, ticket_status, roommate_code, user_locked, room_lead_locked, ticket_types(name)')
     .eq('event_id', eventId)
     .eq('user_id', user.id)
     .single()
@@ -67,7 +77,7 @@ export default async function RoomDetailPage({
   // Current occupants (admin — privacy-resolved)
   const { data: occupantRows } = await admin
     .from('event_attendees')
-    .select('user_id, room_status, is_room_lead')
+    .select('user_id, room_status, is_room_lead, user_locked, room_lead_locked')
     .eq('event_id', eventId)
     .eq('room_id', roomId)
     .in('room_status', ['Selected', 'Locked In', 'Verified'])
@@ -90,6 +100,8 @@ export default async function RoomDetailPage({
         displayName,
         isRoomLead: occ.is_room_lead,
         roomStatus: occ.room_status,
+        userLocked: occ.user_locked ?? false,
+        roomLeadLocked: occ.room_lead_locked ?? false,
       }
     })
   }
@@ -138,6 +150,8 @@ export default async function RoomDetailPage({
     ticket_status: attendee.ticket_status,
     ticket_type_name: (attendee.ticket_types as { name: string }[] | null)?.[0]?.name ?? null,
     roommate_code: attendee.roommate_code ?? null,
+    user_locked: attendee.user_locked ?? false,
+    room_lead_locked: attendee.room_lead_locked ?? false,
   }
 
   return (
@@ -172,6 +186,7 @@ export default async function RoomDetailPage({
         isMyRoom={isMyRoom}
         eventStartDate={event.start_date}
         eventEndDate={event.end_date}
+        roomLockingConfig={roomLockingConfig}
       />
     </div>
   )

@@ -3,7 +3,7 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import RoomFinderClient from './RoomFinderClient'
 import InvitationBanner from './InvitationBanner'
-import type { RoomFinderCard, PendingInvitation, MyApplication, IncomingApplication, AttendeeRoomState } from './actions'
+import type { RoomFinderCard, PendingInvitation, MyApplication, IncomingApplication, AttendeeRoomState, RoomLockRequest } from './actions'
 import type { WorkflowStatus, ModuleConfig } from '@/types/platform'
 import { getModuleOpenState } from '@/lib/modules'
 
@@ -39,7 +39,7 @@ export default async function RoomsPage({
   // Fetch attendee record
   const { data: attendee } = await supabase
     .from('event_attendees')
-    .select('room_id, room_status, is_room_lead, lock_status, ticket_status, roommate_code, ticket_types(name)')
+    .select('room_id, room_status, is_room_lead, lock_status, ticket_status, roommate_code, user_locked, room_lead_locked, ticket_types(name)')
     .eq('event_id', eventId)
     .eq('user_id', user.id)
     .single()
@@ -134,6 +134,20 @@ export default async function RoomsPage({
     }
   }
 
+  // Fetch pending lock requests targeting this user
+  const { data: pendingLockRequests } = await supabase
+    .from('room_lock_requests')
+    .select('id, room_id, requested_by, status, created_at')
+    .eq('event_id', eventId)
+    .eq('target_user_id', user.id)
+    .eq('status', 'pending')
+
+  // Fetch EP room locking config
+  const roomLockingConfig = {
+    room_lead_can_lock: (roomCfg as { room_lead_can_lock?: boolean })?.room_lead_can_lock ?? false,
+    room_lead_can_lock_with_open_spots: (roomCfg as { room_lead_can_lock_with_open_spots?: boolean })?.room_lead_can_lock_with_open_spots ?? false,
+  }
+
   const attendeeState: AttendeeRoomState = {
     room_id: attendee.room_id ?? null,
     room_status: attendee.room_status,
@@ -142,6 +156,8 @@ export default async function RoomsPage({
     ticket_status: attendee.ticket_status,
     ticket_type_name: (attendee.ticket_types as { name: string }[] | null)?.[0]?.name ?? null,
     roommate_code: attendee.roommate_code ?? null,
+    user_locked: attendee.user_locked ?? false,
+    room_lead_locked: attendee.room_lead_locked ?? false,
   }
 
   const backLink = (
@@ -216,6 +232,8 @@ export default async function RoomsPage({
         hasRoommateCodeFeature={hasRoommateCodeFeature}
         eventStartDate={event.start_date}
         eventEndDate={event.end_date}
+        pendingLockRequests={(pendingLockRequests ?? []) as RoomLockRequest[]}
+        roomLockingConfig={roomLockingConfig}
       />
     </div>
   )

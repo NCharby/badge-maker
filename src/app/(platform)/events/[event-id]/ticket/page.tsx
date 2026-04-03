@@ -219,8 +219,13 @@ export default async function TicketPage({
     .eq('event_id', eventId)
     .eq('enabled', true)
 
-  // Fetch available rooms for checkout when a Room Lead ticket requires room selection at purchase
-  const hasRoomStep = (ticketTypes ?? []).some(t => t.room_required_at_purchase && t.room_lead)
+  // Check event-level "require room at checkout" setting from module_config
+  const allModuleCfg = (event.module_config ?? {}) as Record<string, { require_room_at_checkout?: boolean; room_selection_workflow?: boolean } | undefined>
+  const roomModuleCfg = allModuleCfg.room_selection ?? allModuleCfg.venue
+  const eventRequiresRoomAtCheckout = roomModuleCfg?.room_selection_workflow && roomModuleCfg?.require_room_at_checkout
+
+  // Fetch available rooms when: any RL ticket requires room at purchase, OR event-level setting is on
+  const hasRoomStep = (ticketTypes ?? []).some(t => t.room_required_at_purchase && t.room_lead) || !!eventRequiresRoomAtCheckout
   type CheckoutRoom = { id: string; name: string; number: string | null; lodging_type: string | null; bed_type: string | null; min_occupancy: number; max_occupancy: number; open_spot_count: number; room_daily_rates: Array<{ date: string; amount: number }> | null }
   let checkoutRooms: CheckoutRoom[] = []
   if (hasRoomStep) {
@@ -315,6 +320,7 @@ export default async function TicketPage({
           merchandise={(merchandise ?? []) as Parameters<typeof TicketCheckoutClient>[0]['merchandise']}
           volunteerShifts={volunteerShifts}
           checkoutRooms={checkoutRooms}
+          eventRequiresRoomAtCheckout={!!eventRequiresRoomAtCheckout}
           hasRoommateCodeFeature={hasRoommateCodeFeature}
           paymentProvider={epPaymentProvider}
           squareAppId={squareAppId}

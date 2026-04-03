@@ -1,4 +1,4 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import RoomsManageClient from './RoomsManageClient'
@@ -10,15 +10,13 @@ export default async function EpEventRoomsPage({
   params: Promise<{ 'event-id': string }>
 }) {
   const { 'event-id': eventId } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return null
 
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, title, module_config')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
 
   if (!event) notFound()
@@ -28,8 +26,6 @@ export default async function EpEventRoomsPage({
   if (moduleConfig.venue?.enabled) {
     redirect(`/ep/events/${eventId}/venue`)
   }
-
-  const admin = createAdminClient()
 
   const { data: roomData } = await admin
     .from('rooms')
@@ -55,7 +51,7 @@ export default async function EpEventRoomsPage({
         .eq('event_id', eventId)
         .in('room_id', roomIds),
       admin.from('event_attendees')
-        .select('user_id, room_id, room_status, is_room_lead, placed_via_code')
+        .select('user_id, room_id, room_status, is_room_lead, placed_via_code, user_locked, room_lead_locked')
         .eq('event_id', eventId)
         .in('room_status', ['Selected', 'Locked In', 'Verified'])
         .not('room_id', 'is', null)
@@ -95,6 +91,8 @@ export default async function EpEventRoomsPage({
         room_status: a.room_status,
         placed_via_code: a.placed_via_code ?? false,
         is_room_lead: a.is_room_lead ?? false,
+        user_locked: a.user_locked ?? false,
+        room_lead_locked: a.room_lead_locked ?? false,
       }))
       return {
         id: r.id,

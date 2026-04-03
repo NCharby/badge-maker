@@ -9,8 +9,6 @@ import type { PlatformRole } from '@/types/platform'
  *   /(platform)/* — any authenticated platform_user
  *   /(ep)/*       — role must be 'event_promoter' or 'system_admin'
  *   /(admin)/*    — role must be 'system_admin'
- *
- * Badge-maker routes ([event-name]/*) are NOT in the matcher — they are unaffected.
  */
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -49,7 +47,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/events') ||
     pathname.startsWith('/profile') ||
     pathname.startsWith('/ep') ||
-    pathname.startsWith('/admin')
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/org')
 
   if (!user && isProtected) {
     const loginUrl = request.nextUrl.clone()
@@ -109,7 +108,6 @@ export const config = {
      * - _next/static, _next/image (Next.js internals)
      * - favicon.ico, sitemap.xml, robots.txt
      * - /api/* (API routes handle their own auth)
-     * - badge-maker dynamic routes handled separately
      */
     '/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|api/).*)',
   ],

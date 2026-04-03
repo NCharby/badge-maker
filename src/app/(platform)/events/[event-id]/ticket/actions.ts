@@ -6,6 +6,7 @@ import { createInPlatformNotification } from '@/lib/notifications'
 import { getPaymentProvider, getEpPaymentProvider } from '@/lib/payments'
 import { revalidatePath } from 'next/cache'
 import { sendTelegramDM, sendEventChannelMessage } from '@/lib/telegram/send'
+import { checkProfileCompleteness } from '@/lib/profile-completeness'
 
 // 6-char uppercase alphanumeric excluding visually ambiguous chars (0, O, 1, I, L)
 const ROOMMATE_CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -49,6 +50,17 @@ export async function purchaseTicket(
 
   if (!attendee) {
     // No attendee record yet — completing a ticket purchase IS the enrollment action.
+    // Verify profile completeness before allowing enrollment.
+    const { data: profile } = await adminSupabase
+      .from('platform_users')
+      .select('first_name, last_name, emergency_contact, emergency_phone')
+      .eq('id', user.id)
+      .single()
+    const completeness = checkProfileCompleteness(profile ?? {})
+    if (!completeness.complete) {
+      return { error: `Please complete your profile before purchasing: ${completeness.missing.join(', ')}.` }
+    }
+
     const { error: enrollError } = await adminSupabase
       .from('event_attendees')
       .insert({ event_id: eventId, user_id: user.id })
@@ -306,9 +318,14 @@ export async function purchaseTicket(
     confirmedRoomId = roomId
   }
 
-  // 5.6. Validate and soft-lock Room Lead's selected room (if room_required_at_purchase)
+  // 5.6. Validate and soft-lock selected room (Room Lead room_required_at_purchase, OR event-level require_room_at_checkout)
+  const { data: eventCfgRow } = await admin.from('platform_events').select('module_config').eq('id', eventId).single()
+  const allModCfg = (eventCfgRow?.module_config ?? {}) as Record<string, { require_room_at_checkout?: boolean; room_selection_workflow?: boolean } | undefined>
+  const roomModCfg = allModCfg.room_selection ?? allModCfg.venue
+  const eventRequiresRoom = roomModCfg?.room_selection_workflow && roomModCfg?.require_room_at_checkout
+
   let confirmedLeadRoomId: string | null = null
-  if (selectedRoomId && ticketType.room_lead) {
+  if (selectedRoomId && (ticketType.room_lead || eventRequiresRoom)) {
     // Verify room belongs to this event (venue-scoped or event-scoped)
     const { data: selectedRoom } = await admin
       .from('rooms')
@@ -451,7 +468,7 @@ export async function purchaseTicket(
     }).eq('event_id', eventId).eq('user_id', user.id)
   }
 
-  // 10.5b. Assign Room Lead's selected room (if room_required_at_purchase)
+  // 10.5b. Assign selected room (Room Lead room_required_at_purchase, or event-level require_room_at_checkout)
   if (confirmedLeadRoomId) {
     await supabase.from('event_attendees').update({
       room_id: confirmedLeadRoomId,

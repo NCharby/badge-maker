@@ -1,4 +1,4 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import VenueSelectClient from './VenueSelectClient'
@@ -10,25 +10,16 @@ export default async function EpEventVenuePage({
   params: Promise<{ 'event-id': string }>
 }) {
   const { 'event-id': eventId } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  const { authorized, user, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin || !user) return null
 
-  // Allow system_admin to access any event; EP must own it
-  const { data: pu } = await supabase
-    .from('platform_users').select('role').eq('id', user.id).single()
-  const isAdmin = pu?.role === 'system_admin'
-
-  let eventQuery = supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, title, venue_id, module_config')
     .eq('id', eventId)
-  if (!isAdmin) eventQuery = eventQuery.eq('owner_id', user.id)
-  const { data: event } = await eventQuery.single()
+    .single()
 
   if (!event) notFound()
-
-  const admin = createAdminClient()
 
   // Fetch all venues owned by this user for the selector
   const { data: venuesData } = await admin
@@ -100,7 +91,7 @@ export default async function EpEventVenuePage({
         .eq('event_id', eventId)
         .in('room_id', roomIds),
       admin.from('event_attendees')
-        .select('user_id, room_id, room_status, is_room_lead, placed_via_code')
+        .select('user_id, room_id, room_status, is_room_lead, placed_via_code, user_locked, room_lead_locked')
         .eq('event_id', eventId)
         .in('room_status', ['Selected', 'Locked In', 'Verified'])
         .not('room_id', 'is', null)
@@ -141,6 +132,8 @@ export default async function EpEventVenuePage({
         room_status: a.room_status,
         placed_via_code: a.placed_via_code ?? false,
         is_room_lead: a.is_room_lead ?? false,
+        user_locked: a.user_locked ?? false,
+        room_lead_locked: a.room_lead_locked ?? false,
       }))
       return {
         id: r.id,

@@ -1,8 +1,9 @@
 'use server'
 
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { parseCSV } from '@/lib/csv/parseCSV'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 
 export type ActivityInput = {
   name: string
@@ -15,14 +16,9 @@ export type ActivityInput = {
   volunteer_shift_date_time: string
 }
 
-async function verifyEpOwnership(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, eventId: string) {
-  const { data } = await supabase
-    .from('platform_events')
-    .select('id')
-    .eq('id', eventId)
-    .eq('owner_id', userId)
-    .single()
-  return !!data
+async function verifyEpOwnership(eventId: string) {
+  const { authorized } = await epEventGuard(eventId)
+  return authorized
 }
 
 function parseActivityInput(data: ActivityInput): { error: string } | {
@@ -79,16 +75,14 @@ export async function createActivity(
   eventId: string,
   data: ActivityInput,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyEpOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
+  if (!await verifyEpOwnership(eventId)) return { error: 'Access denied.' }
 
   const parsed = parseActivityInput(data)
   if (parsed.error) return { error: parsed.error }
   if (!('values' in parsed)) return { error: 'Invalid input.' }
 
-  const { data: newActivity, error } = await supabase
+  const admin = createAdminClient()
+  const { data: newActivity, error } = await admin
     .from('schedule_activities')
     .insert({ event_id: eventId, ...parsed.values })
     .select('id')
@@ -97,7 +91,6 @@ export async function createActivity(
   if (error) return { error: error.message }
 
   if (parsed.values.volunteers_requested && newActivity) {
-    const admin = createAdminClient()
     const { error: shiftError } = await admin.from('volunteer_shifts').insert({
       event_id: eventId,
       schedule_activity_id: newActivity.id,
@@ -119,24 +112,21 @@ export async function updateActivity(
   eventId: string,
   data: ActivityInput,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyEpOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
+  if (!await verifyEpOwnership(eventId)) return { error: 'Access denied.' }
 
   const parsed = parseActivityInput(data)
   if (parsed.error) return { error: parsed.error }
   if (!('values' in parsed)) return { error: 'Invalid input.' }
 
-  const { error } = await supabase
+  const admin = createAdminClient()
+
+  const { error } = await admin
     .from('schedule_activities')
     .update(parsed.values)
     .eq('id', activityId)
     .eq('event_id', eventId)
 
   if (error) return { error: error.message }
-
-  const admin = createAdminClient()
 
   if (parsed.values.volunteers_requested) {
     const { data: existing } = await admin
@@ -180,10 +170,7 @@ export async function deleteActivity(
   activityId: string,
   eventId: string,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyEpOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
+  if (!await verifyEpOwnership(eventId)) return { error: 'Access denied.' }
 
   const admin = createAdminClient()
   await admin
@@ -192,7 +179,7 @@ export async function deleteActivity(
     .eq('schedule_activity_id', activityId)
     .eq('event_id', eventId)
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('schedule_activities')
     .delete()
     .eq('id', activityId)
@@ -224,10 +211,7 @@ export async function importScheduleCSV(
   eventId: string,
   csvText: string,
 ): Promise<ImportResult | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyEpOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
+  if (!await verifyEpOwnership(eventId)) return { error: 'Access denied.' }
 
   const rows = parseCSV(csvText)
   if (rows.length === 0) return { imported: 0, errors: [] }

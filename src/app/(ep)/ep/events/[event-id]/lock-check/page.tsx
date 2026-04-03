@@ -1,4 +1,4 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import LockCheckClient, { type LockCheckRow, type RequiredModule } from './LockCheckClient'
@@ -18,15 +18,13 @@ export default async function LockCheckPage({
   params: Promise<{ 'event-id': string }>
 }) {
   const { 'event-id': eventId } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return null
 
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, title, status, module_config')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
   if (!event) notFound()
 
@@ -50,8 +48,6 @@ export default async function LockCheckPage({
       requiredModules.push({ key, label })
     }
   }
-
-  const admin = createAdminClient()
 
   // Fetch all attendees with module statuses
   const { data: attendees } = await admin

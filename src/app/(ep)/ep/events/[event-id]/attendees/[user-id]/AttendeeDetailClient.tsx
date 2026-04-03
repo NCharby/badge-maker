@@ -28,6 +28,8 @@ interface Props {
   targetUserId: string
   applicationStatus: string
   ticketStatus: string
+  waiverStatus: string
+  badgeStatus: string
   lockStatus: string
   roomStatus: string
 }
@@ -37,6 +39,8 @@ export default function AttendeeDetailClient({
   targetUserId,
   applicationStatus,
   ticketStatus,
+  waiverStatus,
+  badgeStatus,
   lockStatus,
   roomStatus,
 }: Props) {
@@ -131,6 +135,8 @@ export default function AttendeeDetailClient({
       {/* Other statuses (read-only) */}
       {[
         { label: 'Ticket', value: ticketStatus },
+        { label: 'Waiver', value: waiverStatus },
+        { label: 'Badge', value: badgeStatus },
         { label: 'Lock', value: lockStatus },
         { label: 'Room', value: roomStatus },
       ].map(item => (

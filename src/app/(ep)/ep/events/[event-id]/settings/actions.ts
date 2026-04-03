@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 
 export async function updateEventDetails(
   eventId: string,
@@ -13,17 +13,8 @@ export async function updateEventDetails(
     room_lock_in_date: string
   },
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
-
-  const { data: event } = await supabase
-    .from('platform_events')
-    .select('id')
-    .eq('id', eventId)
-    .eq('owner_id', user.id)
-    .single()
-  if (!event) return { error: 'Access denied.' }
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return { error: 'Access denied.' }
 
   const title = data.title.trim()
   if (!title) return { error: 'Event title is required.' }
@@ -31,7 +22,7 @@ export async function updateEventDetails(
   if (!data.end_date) return { error: 'End date is required.' }
   if (data.end_date < data.start_date) return { error: 'End date must be on or after start date.' }
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('platform_events')
     .update({
       title,

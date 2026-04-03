@@ -10,6 +10,8 @@ export interface PlatformUser {
   id: string
   role: PlatformRole
   email: string
+  first_name: string | null
+  last_name: string | null
   telegram_handle: string | null
   telegram_verified: boolean
   date_of_birth: string // ISO date
@@ -20,6 +22,8 @@ export interface PlatformUser {
   phone: string | null
   address: string | null
   zip_code: string | null
+  emergency_contact: string | null
+  emergency_phone: string | null
   social_media: { key: string; value: string }[] | null
   profile_picture_url: string | null
   roommate_finder_hidden: boolean
@@ -39,6 +43,25 @@ export function getDisplayName(user: Pick<PlatformUser, 'preferred_scene_name' |
   return user.email.split('@')[0]
 }
 
+/**
+ * Derives first and last name from a scene name or email.
+ * Splits preferred_scene_name on first space; falls back to email-before-@.
+ */
+export function deriveFirstLastName(
+  sceneName?: string | null,
+  fallbackEmail?: string,
+): { firstName: string; lastName: string } {
+  const trimmed = sceneName?.trim()
+  if (trimmed) {
+    const spaceIdx = trimmed.indexOf(' ')
+    if (spaceIdx > 0) {
+      return { firstName: trimmed.substring(0, spaceIdx), lastName: trimmed.substring(spaceIdx + 1) }
+    }
+    return { firstName: trimmed, lastName: '' }
+  }
+  return { firstName: fallbackEmail?.split('@')[0] ?? '', lastName: '' }
+}
+
 export type ApplicationStatus =
   | 'Incomplete'
   | 'In Progress'
@@ -50,6 +73,7 @@ export type ApplicationStatus =
 
 export type WaiverStatus = 'Incomplete' | 'Completed' | 'Declined'
 export type TicketStatus = 'Incomplete' | 'Complete'
+export type BadgeStatus = 'Incomplete' | 'Complete'
 export type RoomStatus = 'Not Selected' | 'Selected' | 'Locked In' | 'Verified' | 'Critical Issue'
 export type LockStatus = 'Unlocked' | 'Ready to Lock' | 'Locked'
 
@@ -75,12 +99,16 @@ export interface ModuleConfig {
   required: boolean
   opens_at_status: string | null // UUID from workflow_statuses, or system-fixed status name; null if not yet configured
   closes_at_status: string | null
+  // Room locking config (room_selection / venue modules only)
+  room_lead_can_lock?: boolean              // Whether Room Leads can send lock requests to occupants
+  room_lead_can_lock_with_open_spots?: boolean  // Whether Room Leads can lock a room that still has open bed spots
 }
 
 export interface PlatformEvent {
   id: string
   slug: string
   owner_id: string
+  organization_id: string
   title: string
   description: string | null
   start_date: string
@@ -125,3 +153,68 @@ export type VolunteerSignupStatus = 'pending_checkout' | 'confirmed' | 'no_show'
 
 export type OrderStatus = 'pending' | 'complete' | 'refunded' | 'partial_refund' | 'cancelled'
 export type PaymentProvider = 'square' | 'paypal'
+
+// ── Organization types ──────────────────────────────────────────────────────
+
+export type OrgAccessLevel = 'organization_lead' | 'event_promoter' | 'module_lead'
+
+export interface Organization {
+  id: string
+  name: string
+  slug: string
+  website: string | null
+  logo_url: string | null
+  social_media: { key: string; value: string }[] | null
+  payment_provider: PaymentProvider | null
+  tier_id: string
+  archived: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface OrganizationTier {
+  id: string
+  name: string
+  billing_interval: 'monthly' | 'yearly' | null
+  price_cents: number | null
+  max_members: number | null
+  max_events: number | null
+  max_tickets_per_event: number | null
+  allowed_modules: string[] | null
+  max_attendees_per_event: number | null
+  max_storage_mb: number | null
+  created_at: string
+}
+
+export interface OrganizationMember {
+  id: string
+  organization_id: string
+  user_id: string
+  access_level: OrgAccessLevel
+  promoted_via_org: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface OrganizationModuleAccess {
+  id: string
+  organization_member_id: string
+  event_id: string
+  module_key: string
+  created_at: string
+}
+
+export type OrgInvitationStatus = 'pending' | 'accepted' | 'declined' | 'expired'
+
+export interface OrganizationInvitation {
+  id: string
+  organization_id: string
+  invited_by: string
+  email: string
+  access_level: 'event_promoter' | 'module_lead'
+  status: OrgInvitationStatus
+  token: string | null
+  created_at: string
+  expires_at: string | null
+  resolved_at: string | null
+}

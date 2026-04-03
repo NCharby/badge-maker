@@ -1,10 +1,11 @@
 'use server'
 
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { parseCSV } from '@/lib/csv/parseCSV'
 import { createInPlatformNotification } from '@/lib/notifications'
 import { sendTelegramDM } from '@/lib/telegram/send'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 
 export type ShiftInput = {
   name: string
@@ -13,14 +14,9 @@ export type ShiftInput = {
   capacity: string
 }
 
-async function verifyEpOwnership(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, eventId: string) {
-  const { data } = await supabase
-    .from('platform_events')
-    .select('id')
-    .eq('id', eventId)
-    .eq('owner_id', userId)
-    .single()
-  return !!data
+async function verifyEpOwnership(eventId: string) {
+  const { authorized } = await epEventGuard(eventId)
+  return authorized
 }
 
 function parseShiftInput(data: ShiftInput): { error: string } | {
@@ -41,16 +37,14 @@ export async function createShift(
   eventId: string,
   data: ShiftInput,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyEpOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
+  if (!await verifyEpOwnership(eventId)) return { error: 'Access denied.' }
 
   const parsed = parseShiftInput(data)
   if (parsed.error) return { error: parsed.error }
   if (!('values' in parsed)) return { error: 'Invalid input.' }
 
-  const { error } = await supabase
+  const admin = createAdminClient()
+  const { error } = await admin
     .from('volunteer_shifts')
     .insert({ event_id: eventId, ...parsed.values })
 
@@ -65,16 +59,14 @@ export async function updateShift(
   eventId: string,
   data: ShiftInput,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyEpOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
+  if (!await verifyEpOwnership(eventId)) return { error: 'Access denied.' }
 
   const parsed = parseShiftInput(data)
   if (parsed.error) return { error: parsed.error }
   if (!('values' in parsed)) return { error: 'Invalid input.' }
 
-  const { error } = await supabase
+  const admin = createAdminClient()
+  const { error } = await admin
     .from('volunteer_shifts')
     .update(parsed.values)
     .eq('id', shiftId)
@@ -90,13 +82,12 @@ export async function deleteShift(
   shiftId: string,
   eventId: string,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyEpOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
+  if (!await verifyEpOwnership(eventId)) return { error: 'Access denied.' }
+
+  const admin = createAdminClient()
 
   // Block deletion if confirmed signups exist
-  const { count } = await supabase
+  const { count } = await admin
     .from('user_volunteer_signups')
     .select('*', { count: 'exact', head: true })
     .eq('shift_id', shiftId)
@@ -104,7 +95,7 @@ export async function deleteShift(
 
   if ((count ?? 0) > 0) return { error: 'Cannot delete a shift with confirmed signups.' }
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('volunteer_shifts')
     .delete()
     .eq('id', shiftId)
@@ -121,11 +112,9 @@ export async function updateSignupStatus(
   eventId: string,
   status: 'confirmed' | 'no_show',
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
+  if (!await verifyEpOwnership(eventId)) return { error: 'Access denied.' }
+
   const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyEpOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
 
   // Verify the signup belongs to a shift in this event
   const { data: signup } = await admin
@@ -171,10 +160,7 @@ export async function importVolunteerCSV(
   eventId: string,
   csvText: string,
 ): Promise<ImportResult | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyEpOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
+  if (!await verifyEpOwnership(eventId)) return { error: 'Access denied.' }
 
   const rows = parseCSV(csvText)
   if (rows.length === 0) return { imported: 0, errors: [] }
@@ -233,11 +219,9 @@ export async function toggleAreaLead(
   eventId: string,
   isLead: boolean,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
+  if (!await verifyEpOwnership(eventId)) return { error: 'Access denied.' }
+
   const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyEpOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
 
   // Verify the signup belongs to a shift in this event; fetch user_id for notifications
   const { data: signup } = await admin

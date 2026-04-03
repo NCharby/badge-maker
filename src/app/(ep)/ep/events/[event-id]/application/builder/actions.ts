@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 
 export interface FormFieldInput {
   id: string
@@ -18,18 +19,8 @@ export async function saveForm(
   fields: FormFieldInput[],
   sourceFormId?: string
 ) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
-
-  // Verify EP owns this event
-  const { data: event } = await supabase
-    .from('platform_events')
-    .select('id')
-    .eq('id', eventId)
-    .eq('owner_id', user.id)
-    .single()
-  if (!event) return { error: 'Access denied.' }
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return { error: 'Access denied.' }
 
   if (!title.trim()) return { error: 'Form title is required.' }
   if (fields.length === 0) return { error: 'Add at least one field.' }
@@ -41,7 +32,7 @@ export async function saveForm(
     }
   }
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('application_forms')
     .upsert(
       {

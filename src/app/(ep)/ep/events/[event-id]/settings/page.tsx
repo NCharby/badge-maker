@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 import Link from 'next/link'
 import EditEventClient from './EditEventClient'
 
@@ -8,15 +8,13 @@ export default async function EventSettingsPage({
   params: Promise<{ 'event-id': string }>
 }) {
   const { 'event-id': eventId } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return null
 
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, title, description, start_date, end_date, status, room_lock_in_date')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
 
   if (!event) {

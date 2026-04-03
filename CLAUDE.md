@@ -2,7 +2,7 @@
 ## AI-Assisted Development Reference Document
 **Organization:** Shiny Dog Productions Inc.
 **Document Status:** Revised Draft — Payment integration, notification enrichment, webhook dedup fix, QA/security audit, EP settings/notifications split, schedule day-grouping and search, workflow UX improvements
-**Last Updated:** March 2026 (schedule search/day-grouping; EP event settings and notifications pages split; Room Lock-In Date wired to settings; lock countdown notification context; workflow Add Status form relocated to top)
+**Last Updated:** April 2026 (Lekd branding; first/last name and profile completeness gate; room locking system with user self-lock, Room Lead lock requests, and EP lock/unlock; private storage bucket signed URLs; emergency contact fields; badge and waiver fixes)
 
 ---
 
@@ -28,6 +28,8 @@
 ## 1. Project Overview
 
 The SD Platform is a event management platform developed by Shiny Dog Productions. The platform is a white-box solution for event promoters to build and manage the event and all aspects of the event.
+
+> **User-facing brand name:** The platform is branded **"Lekd"** in all user-facing locations (navigation, auth pages, page metadata, Telegram bot messages, copyright footer). Internal documentation (this file, `REMAINING_WORK.md`, code comments, agent files) retains "SD Platform" naming for continuity. When writing user-visible strings (page titles, button labels, bot replies), use "Lekd" — not "SD Platform."
 
 ### Goals
 
@@ -68,6 +70,12 @@ All Odoo services connect to the SD Platform via API.
 ---
 
 ## 2. Technical Stack & Architecture
+
+> **`docs/` folder:** Contains context and specifications you must read and be aware of when working on this codebase. Files in `docs/stale/` are outdated and should be ignored.
+
+> **Multi-agent execution:** Specialized agents are defined in `.claude/agents/` for frontend, API, database, QA, product owner, and documentation work. When a task spans multiple independent concerns (e.g., a new feature requiring a migration, a server action, and a UI component), spawn the relevant agents in parallel rather than sequentially. Each agent has full awareness of this document and the `docs/` folder. Prefer parallel execution whenever agent tasks have no data dependency on each other. After significant feature work, run the **documentation agent** to sync `CLAUDE.md`, `REMAINING_WORK.md`, and code-level documentation with the actual implementation.
+
+> **MANDATORY: Documentation sync after code changes.** After any code modification that changes features, database schema, workflows, notifications, module behavior, or API contracts, the **documentation agent** (`.claude/agents/documentation.md`) **must** be run before the task is considered complete. This ensures `CLAUDE.md` and `REMAINING_WORK.md` stay accurate. Failing to run the documentation agent after feature work creates drift between the spec and the codebase, which causes downstream errors in all other agents that rely on these documents.
 
 The new platform is built as an extension of the existing badge-maker Next.js codebase. The badge maker is a feature module within the new platform, not a separate system.
 
@@ -148,30 +156,36 @@ Core tables defined in `supabase/schema.sql` (see §3 for full inventory and pla
 - `analytics` — badge-maker usage metrics
 - `telegram_invites` — Telegram invite link tracking
 
-> **RLS note:** All badge-maker tables use permissive public RLS (public INSERT/SELECT/UPDATE/DELETE). Do not modify these policies. New platform tables must implement role-based RLS per the Permissions Matrix in §5.
+> **RLS note:** All badge-maker tables use permissive public RLS (public INSERT/SELECT/UPDATE/DELETE). Do not modify these policies.
 
-**RLS Pattern Blocks for New Platform Tables**
+**RLS Architecture — Option C (MANDATORY)**
 
-Platform roles are stored in a `platform_users` table (`id UUID FK → auth.users`, `role TEXT CHECK (role IN ('user', 'event_promoter', 'system_admin'))`). This table backs all platform accounts and extends Supabase Auth with profile data and role assignment.
+> **CRITICAL RULE: No RLS policy may contain a subquery that reads a different RLS-protected table.** Violating this rule causes circular policy evaluation that silently returns null data, breaking authentication and authorization across the platform. This has caused multiple production-blocking incidents.
 
-All new platform migrations compose RLS policies from these reusable building blocks:
+The platform uses a two-tier authorization model:
 
-| Block | Label | Expression |
-|---|---|---|
-| A | User owns row | `auth.uid() = user_id` |
-| B | Is System Administrator | `(SELECT role FROM platform_users WHERE id = auth.uid()) = 'system_admin'` |
-| C | Is Event Promoter or System Administrator | `(SELECT role FROM platform_users WHERE id = auth.uid()) IN ('event_promoter', 'system_admin')` |
-| D | EP owns the event referenced by this row | `EXISTS (SELECT 1 FROM platform_events WHERE id = event_id AND owner_id = auth.uid())` |
-| E | Caller is an attendee of the event referenced by this row | `EXISTS (SELECT 1 FROM event_attendees WHERE event_id = [table].event_id AND user_id = auth.uid())` |
+**Tier 1 — RLS (database-level safety net):** Simple own-row access and role-based gates. RLS policies use ONLY:
+- `auth.uid() = id` or `auth.uid() = user_id` — user owns the row
+- `public.user_role() = 'system_admin'` — SA reads/writes all (SECURITY DEFINER, bypasses RLS)
+- `public.user_role() IN ('event_promoter', 'system_admin')` — EP/SA role gate
+- `public.is_org_member(org_id)` — org membership check (SECURITY DEFINER)
+- `public.org_access_level(org_id)` — org access level check (SECURITY DEFINER)
+- `public.current_user_email()` — returns caller's email (SECURITY DEFINER)
 
-Composition patterns by table type:
+**Tier 2 — Application code (cross-entity authorization):** All cross-table authorization (EP reading attendee profiles, org member managing events, Module Lead accessing specific modules) is enforced in Server Actions and Route Handlers using:
+- The **admin client** (`createAdminClient()` / service role key) which bypasses RLS entirely
+- The **`checkEventAccess()`** helper (`src/lib/auth/event-access.ts`) which validates ownership, org membership, and module-lead grants before allowing access
 
-| Table type | SELECT | INSERT | UPDATE | DELETE |
-|---|---|---|---|---|
-| User-owned data (profile, own attendee record) | A OR B | A | A OR B | A OR B |
-| Event-scoped data (volunteer signups, room selections, locks) | A OR D OR B | A | A OR D OR B | A OR D OR B |
-| Event metadata (readable by attendees) | E OR D OR B | D OR B | D OR B | D OR B |
-| Venue / Room data | C OR B | D OR B | D OR B | D OR B |
+**What is NOT allowed in RLS policies:**
+- `EXISTS (SELECT ... FROM other_rls_table ...)` — cross-table subqueries
+- `(SELECT column FROM platform_users WHERE ...)` — inline reads of RLS-protected tables (use `user_role()` instead)
+- Any JOIN to a table that has its own RLS policies
+
+**SECURITY DEFINER functions** (defined in migrations, bypass RLS):
+- `user_role()` — returns the caller's platform role from `platform_users`
+- `is_org_member(org_id)` — returns boolean for org membership
+- `org_access_level(org_id)` — returns the caller's access level in an org
+- `current_user_email()` — returns the caller's email from `platform_users`
 
 New platform tables will be added via `supabase/migrations/` (see §3).
 
@@ -352,6 +366,8 @@ The badge-maker `events` table is **not** the new platform's Event model. The ne
 - `badge-images` — 5MB limit, JPEG/PNG/WebP/GIF
 - `waiver-documents` — 10MB limit, PDF only
 
+These buckets are **private** (not publicly accessible). All display-time access must use **signed URLs** generated via `supabase.storage.from(bucket).createSignedUrl(path, expiresIn)`. Code must store the **storage path** (e.g., `badges/abc.png`), not a public URL, because public URLs will return 403 for private buckets. The badge-maker confirmation flow and waiver PDF viewing both use this pattern.
+
 These buckets and their RLS policies must not be modified. New platform storage needs go in new buckets.
 
 **`platform_events` table schema** (new platform table, created via migration):
@@ -520,8 +536,12 @@ A User is a registered account on the platform. Users are uniquely identified by
 **Required Fields:**
 - `email` — unique identifier
 - `password` (hashed)
+- `first_name` — required at registration; used in administrative contexts and EP attendee views
+- `last_name` — required at registration; used in administrative contexts and EP attendee views
 - `telegram_handle` — stored without the `@` prefix (platform strips it if the user includes it); bot-verified: after account creation, the Telegram bot sends a one-time confirmation code to the provided username; the user enters the code in the platform to verify the handle; account activation is gated on email verification only — Telegram verification is independent and can be completed later from the Profile Management page; unverified handles are flagged and will not receive Telegram notifications until verified; uniqueness is not enforced (two accounts may share a handle, e.g., a couple sharing one Telegram account)
 - `date_of_birth` — must be 21+ to register
+
+**Profile Completeness Gate:** Before a user can enroll in any event (via `submitApplication()` or `purchaseTicket()`), the following fields must be filled on their profile: `first_name`, `last_name`, `emergency_contact`, `emergency_phone`. If any are missing, the Server Action returns an error directing the user to complete their profile first. A missing `telegram_handle` triggers a warning (not a blocker). The gate logic lives in `src/lib/profile-completeness.ts` and is called at the top of both enrollment Server Actions.
 
 **Optional Fields:**
 - `preferred_scene_name` — the name displayed for this user in all platform contexts (Roommate Finder, attendance slip, EP panel, notifications); if blank, the platform falls back to the portion of the user's email address before the `@`
@@ -529,6 +549,8 @@ A User is a registered account on the platform. Users are uniquely identified by
 - `phone`
 - `address`
 - `zip_code`
+- `emergency_contact` — name of emergency contact person; required for profile completeness gate but not at registration
+- `emergency_phone` — phone number for emergency contact; required for profile completeness gate but not at registration
 - `social_media[]` — key/value pairs
   - Default Keys:
     - Twitter / X
@@ -642,6 +664,12 @@ An Event is created by an Event Promoter and is a collection of configured modul
 }
 ```
 Keys absent from the object = module disabled for this event. `closes_at_status: null` = module remains open until `Event Locked`.
+
+**Room locking configuration fields** (stored at the top level of `module_config`, not inside a module key):
+- `room_lead_can_lock` (boolean, default: `false`) — when true, Room Leads can send lock requests to their room occupants; when false, only the EP can lock rooms
+- `room_lead_can_lock_with_open_spots` (boolean, default: `false`) — when true, Room Leads can lock even when their room has unfilled spots; when false, Room Lead lock is blocked until the room is full; only meaningful when `room_lead_can_lock = true`
+
+These are configured on the EP Module Configuration page (`/ep/events/[event-id]/modules`) as toggles in the Room Selection section.
 
 **Status renaming protection:** When an EP renames a custom workflow status, the system checks whether any `module_config` `opens_at_status`/`closes_at_status` or any `cancellation_policy` checkpoint references the status UUID. If yes, the EP is warned: "Renaming will update the display name only — all module triggers and policy checkpoints remain intact via their UUID references." No UUID references are changed on rename.
 
@@ -982,6 +1010,11 @@ All new platform tables are created via timestamped migration files in `supabase
 20260101000020_event_scoped_rooms.sql
 20260101000021_fix_rls_gaps.sql              — bed_blocks UPDATE policy; platform_users EP SELECT policy
 20260101000022_create_platform_notifications.sql
+20260401000000_add_badge_waiver_tracking.sql
+20260401000001_create_waiver_and_badge_templates.sql
+20260401000002_add_emergency_contact_to_users.sql
+20260401000003_add_first_last_name_to_users.sql
+20260401000004_room_locking_system.sql       — user_locked/room_lead_locked on event_attendees; room_lock_requests table
 ```
 
 ### `platform_users` (full schema)
@@ -993,6 +1026,8 @@ CREATE TABLE platform_users (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   role TEXT NOT NULL CHECK (role IN ('user', 'event_promoter', 'system_admin')) DEFAULT 'user',
   email TEXT UNIQUE NOT NULL,           -- mirrored from auth.users for query convenience
+  first_name TEXT,                       -- required at registration; migration adds as nullable for existing rows
+  last_name TEXT,                        -- required at registration; migration adds as nullable for existing rows
   telegram_handle TEXT,                  -- stored without '@'; stripped on input
   telegram_verified BOOLEAN DEFAULT false,
   date_of_birth DATE NOT NULL,
@@ -1004,6 +1039,8 @@ CREATE TABLE platform_users (
   phone TEXT,
   address TEXT,
   zip_code TEXT,
+  emergency_contact TEXT,                -- name of emergency contact person
+  emergency_phone TEXT,                  -- phone number for emergency contact
   social_media JSONB,                    -- [{ "key": string, "value": string }]
   profile_picture_url TEXT,
   roommate_finder_hidden BOOLEAN DEFAULT false,
@@ -1111,6 +1148,10 @@ CREATE TABLE event_attendees (
   roommate_code TEXT,  -- 6-char uppercase alphanumeric code assigned to Room Lead attendees after checkout; null if not applicable
 
   volunteer_hours_required INTEGER NOT NULL DEFAULT 0,  -- copied from ticket_types at purchase
+
+  -- Room locking
+  user_locked BOOLEAN NOT NULL DEFAULT false,       -- user self-lock: indication of intent; does not prevent RL/EP moves
+  room_lead_locked BOOLEAN NOT NULL DEFAULT false,  -- Room Lead lock: confirms room assignment; prevents user from leaving
 
   -- MVP 2 only — do not implement logic in MVP 1
   checked_in BOOLEAN DEFAULT false,
@@ -1379,6 +1420,33 @@ CREATE TABLE locks (
 
 ---
 
+### `room_lock_requests` (full schema)
+
+Tracks Room Lead lock requests sent to occupants. A Room Lead may request that an occupant lock themselves into the room. The occupant accepts or declines.
+
+```sql
+CREATE TABLE room_lock_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id UUID NOT NULL REFERENCES platform_events(id) ON DELETE CASCADE,
+  room_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  requested_by UUID NOT NULL REFERENCES platform_users(id),  -- Room Lead
+  target_user_id UUID NOT NULL REFERENCES platform_users(id),  -- occupant
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'accepted', 'declined')),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  resolved_at TIMESTAMPTZ,
+  UNIQUE(event_id, room_id, target_user_id, status)
+);
+
+CREATE INDEX room_lock_requests_target_pending_idx
+  ON room_lock_requests(target_user_id, event_id)
+  WHERE status = 'pending';
+```
+
+**RLS:** Users can SELECT requests where they are either `target_user_id` or `requested_by`. Users can UPDATE requests where they are `target_user_id` (accept/decline). Authenticated users can INSERT requests where they are `requested_by`.
+
+---
+
 ### `platform_notifications` (full schema)
 
 Persistent in-platform notification store. All notification types write a record here regardless of whether email/Telegram is also sent. The service role inserts records; users may read and update (mark-read, dismiss) only their own rows.
@@ -1430,6 +1498,9 @@ CREATE INDEX platform_notifications_user_unread_idx
 | `ticket_purchased` | 15 | User | Event hub |
 | `attendee_locked` | 14 | Attendee | Event hub |
 | `application_submitted` | 4 | EP (owner) | EP attendee detail |
+| `room_lock_request` | 34 | Occupant | Room detail |
+| `room_lock_request_accepted` | 35 | Room Lead | Room detail |
+| `room_lock_request_declined` | 36 | Room Lead | Room detail |
 
 Rows 12, 13, 17–21, 23 are scheduler-triggered and remain `console.log` stubs pending external scheduler integration.
 
@@ -1700,6 +1771,38 @@ The action available on each card differs by role:
 - Post-lock: no user changes to room selection; Event Promoter approval required for any modifications
 - On Lock-In Date: system sends an attendance slip to all locked users via **email (Resend) and Telegram message**; content is system-generated with no Event Promoter template required; content includes: user's scene name, event name, room number, room type, room code, check-in date, check-out date, and instruction to present the room code to hotel desk staff at check-in
 - Users without locked rooms receive automated notifications prompting resolution
+
+**Room Locking System (Implemented):**
+
+Room locking uses two independent boolean flags on `event_attendees`: `user_locked` and `room_lead_locked`. These operate independently and serve different purposes. The event hub card color reflects the combined state.
+
+**User Self-Lock** (`userSelfLock` Server Action):
+- Any attendee with a room (`room_id IS NOT NULL`) can self-lock by setting `user_locked = true`
+- This is an **indication of intent** — it signals the user is happy with their room choice
+- Self-locking does NOT prevent the Room Lead or EP from moving the user to a different room
+- Room Leads auto-lock (`user_locked = true`) when they first select a room
+
+**Room Lead Lock Request Flow** (gated by EP config):
+- Requires `module_config.room_lead_can_lock = true` on the event
+- If `room_lead_can_lock_with_open_spots = false`, the Room Lead can only send lock requests when the room is full (all bed spots occupied)
+- The Room Lead sends a lock request to a specific occupant via `roomLeadSendLockRequest` Server Action, which creates a `room_lock_requests` record with `status = 'pending'`
+- The target occupant receives a `room_lock_request` notification (row 34)
+- **Accept** (`acceptLockRequest`): sets `room_lead_locked = true` on the occupant's attendee record; Room Lead notified (row 35)
+- **Decline** (`declineLockRequest`): the occupant is **removed from the room** (`room_id = null`, `room_status = 'Not Selected'`, `is_room_lead = false`, `user_locked = false`); Room Lead notified (row 36)
+
+**EP Lock/Unlock** (`epLockRoom` / `epUnlockRoom` Server Actions):
+- EP can lock any attendee's room (`room_lead_locked = true`) regardless of config settings
+- EP can unlock any attendee's room (`room_lead_locked = false`)
+- No notification is sent for EP lock/unlock actions (EP is presumed to communicate directly)
+
+**Event Hub Card Color States:**
+- **Red** — room is required by ticket type but not yet selected (`room_id IS NULL`)
+- **Amber** — room is selected but neither user-locked nor RL-locked
+- **Blue** — user has self-locked (`user_locked = true`) but Room Lead has not locked (`room_lead_locked = false`); awaiting RL confirmation
+- **Green** — Room Lead has locked (`room_lead_locked = true`); room assignment is confirmed
+
+**Rooms Page Behavior:**
+- When an attendee has `user_locked = true`, the Roommate Finder grid is hidden and only their assigned room detail is shown (prevents browsing other rooms after committing)
 
 **Room Closed Date:** Goal is confirmed room locks for all attendees by this date. Event Promoter manages resolution of any outstanding issues.
 
@@ -1989,6 +2092,9 @@ Complete inventory of all platform notifications. Every entry must be implemente
 | 31 | Claimed user declines Room Lead's claim | Room Lead | Email + in-platform | Declined user's scene name, event name |
 | 32 | Roommate Code used — roommate successfully placed in room | Room Lead | Email + Telegram + in-platform | Roommate's scene name, event name, room number |
 | 33 | Roommate Code used but room is full (code attempted, room at capacity) | Room Lead | Email + Telegram + in-platform | Event name, room number |
+| 34 | Room Lead sends lock request to occupant | Occupant | In-platform | Room Lead scene name, room name/number, event name, "Accept or decline" |
+| 35 | Occupant accepts Room Lead lock request | Room Lead | In-platform | Occupant scene name, event name, room number |
+| 36 | Occupant declines Room Lead lock request (removed from room) | Room Lead | In-platform | Occupant scene name, event name, room number |
 
 > **"Room Selection Opens" is not a separate Telegram notification type.** When rooms open, the event transitions to a new workflow status, which fires the Event Status Transition notification (row 25). No standalone "rooms_open" Telegram notification exists — row 25 covers it.
 

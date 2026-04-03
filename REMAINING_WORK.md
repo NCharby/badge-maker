@@ -1,7 +1,7 @@
 # SD Platform — Remaining Work to MVP 1
 
-**Generated:** March 2026
-**Audit basis:** Full QA/PM regression of codebase as of March 2026
+**Generated:** March 2026 | **Last updated:** April 2026
+**Audit basis:** Full QA/PM regression of codebase as of March 2026; April 2026 documentation sync
 
 This document tracks all outstanding work required before the MVP 1 target (May Ticket Opening). Items are prioritized by whether they block launch or can be completed in parallel.
 
@@ -24,7 +24,7 @@ import { Bot, webhookCallback } from 'grammy'
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!)
 
 bot.command('start', async (ctx) => {
-  await ctx.reply('Welcome to the SD Platform bot. ...')
+  await ctx.reply('Welcome to the Lekd bot. ...')
 })
 
 // Route inbound help-desk messages to Odoo (stub until Odoo is connected)
@@ -139,6 +139,9 @@ Every Server Action that fires an in-platform notification also has a `// TODO: 
 | 33 | `ticket/validateRoommateCode.ts` | Event name, room number (room full attempt) |
 | `application_approved` | `ep/attendees/[user-id]/actions.ts` | Event name, next steps |
 | `application_declined` | `ep/attendees/[user-id]/actions.ts` | Event name |
+| 34 | `rooms/actions.ts` — `roomLeadSendLockRequest` | Room Lead name, room name/number, event name |
+| 35 | `rooms/actions.ts` — `acceptLockRequest` | Acceptor name, event name, room number |
+| 36 | `rooms/actions.ts` — `declineLockRequest` | Decliner name, event name, room number |
 
 **Implementation pattern** (add after each `createInPlatformNotification` call):
 ```typescript
@@ -166,6 +169,9 @@ Once the bot is active, wire outbound sends for:
 | 29 | Claimed user | `rooms/actions.ts` — `claimRoommateByEmail` |
 | 32 | Room Lead | `ticket/actions.ts` — `purchaseTicket` |
 | 33 | Room Lead | `ticket/validateRoommateCode.ts` |
+| 34 | Occupant | `rooms/actions.ts` — `roomLeadSendLockRequest` |
+| 35 | Room Lead | `rooms/actions.ts` — `acceptLockRequest` |
+| 36 | Room Lead | `rooms/actions.ts` — `declineLockRequest` |
 
 **Implementation pattern:**
 ```typescript
@@ -263,6 +269,26 @@ The following security issues were identified in the QA audit and have been fixe
 | `/api/events/[slug]` returned `telegram_config` (Telegram group IDs) to unauthenticated callers | MEDIUM | `telegram_config` removed from response |
 | `registerDevUser` gated only by `NEXT_PUBLIC_DEBUG` (public env var, baked at build) | MEDIUM | Server action now requires server-only `DEBUG_REGISTRATION_KEY` env var |
 
+### Completed — April 2026
+
+| Change | Details |
+|---|---|
+| Platform branded "Lekd" | Nav, auth pages, metadata, Telegram bot, copyright footer — all user-facing strings updated |
+| Copyright footer | Added to root layout |
+| Private bucket fix | `badge-images` and `waiver-documents` use signed URLs at display time; storage paths stored instead of public URLs |
+| Waiver PDF viewing | Users can view their signed waiver PDF on their waiver page |
+| Profile page restructured | Single-column accordion layout; warning cards; address fields removed; first/last name added |
+| `first_name` / `last_name` columns | Migration `20260401000003`; `PlatformUser` type; registration form (required); auth callback; profile page |
+| Emergency contact fields | Migration `20260401000002`; `emergency_contact` and `emergency_phone` on `platform_users` |
+| Profile completeness gate | `src/lib/profile-completeness.ts` — first_name, last_name, emergency_contact, emergency_phone required before event enrollment; enforced in `submitApplication()` and `purchaseTicket()` |
+| Room locking system | Migration `20260401000004` — `user_locked`, `room_lead_locked` on `event_attendees`; `room_lock_requests` table; Server Actions: `userSelfLock`, `roomLeadSendLockRequest`, `acceptLockRequest`, `declineLockRequest`, `epLockRoom`, `epUnlockRoom` |
+| Room locking EP config | `module_config` fields `room_lead_can_lock` and `room_lead_can_lock_with_open_spots`; toggles in EP module config page |
+| Room locking UI | Event hub card colors (red/amber/blue/green); room detail page lock management; rooms page hides grid when user locked |
+| New notification types | `room_lock_request` (row 34), `room_lock_request_accepted` (row 35), `room_lock_request_declined` (row 36) — in-platform delivery wired |
+| Puppeteer fix | `require('puppeteer')` instead of ESM import for compatibility |
+| Badge confirmation fix | Removed client-side success state; uses `router.refresh()` |
+| Documentation agent | `.claude/agents/documentation.md` created |
+
 ### Remaining Security Recommendations (not yet addressed)
 
 | Issue | Severity | Recommendation |
@@ -277,9 +303,10 @@ The following security issues were identified in the QA audit and have been fixe
 | Tier | Count | Status |
 |---|---|---|
 | Tier 1 — Blockers | 5 items | Not started |
-| Tier 2 — Significant | 3 items | `// TODO` stubs |
+| Tier 2 — Significant | 3 items | `// TODO` stubs (now includes rows 34–36 for email/Telegram) |
 | Tier 3 — Moderate | 4 items | Not started / needs verification |
-| Security (completed) | 5 fixes | Done |
+| Security (completed Mar 2026) | 5 fixes | Done |
+| Completed Apr 2026 | 16 items | Done (branding, profile, room locking, storage, bug fixes) |
 | Security (recommended) | 2 items | Optional hardening |
 
-**Estimated state:** ~75% of MVP 1 functionality is implemented. The platform is feature-complete for the happy-path ticket/room/volunteer/application flows. The gaps are primarily in outbound communication (email, Telegram), reporting, and the Telegram bot receive path.
+**Estimated state:** ~80% of MVP 1 functionality is implemented. The platform is feature-complete for the happy-path ticket/room/volunteer/application/room-locking flows. Profile completeness gating and the room locking system are now in place. The gaps are primarily in outbound communication (email, Telegram), reporting, and the Telegram bot receive path.

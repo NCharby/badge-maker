@@ -1,7 +1,8 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import VenueDetailClient from './VenueDetailClient'
+import { epVenueGuard } from '@/lib/auth/ep-guard'
 
 export default async function VenueDetailPage({
   params,
@@ -12,20 +13,19 @@ export default async function VenueDetailPage({
 }) {
   const { 'venue-id': venueId } = await params
   const { returnTo } = await searchParams
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
 
-  const { data: venue } = await supabase
+  const { authorized } = await epVenueGuard(venueId)
+  if (!authorized) notFound()
+
+  const admin = createAdminClient()
+
+  const { data: venue } = await admin
     .from('venues')
     .select('id, name, physical_address, website, email, phone, poc_name, poc_phone, poc_email, status, notification_config')
     .eq('id', venueId)
-    .eq('owner_id', user.id)
     .single()
 
   if (!venue) notFound()
-
-  const admin = createAdminClient()
   const { data: rooms } = await admin
     .from('rooms')
     .select('id, number, name, description, bed_spot_count, min_occupancy, room_code, lodging_type, bed_type, has_kitchen, location_zone, room_group')

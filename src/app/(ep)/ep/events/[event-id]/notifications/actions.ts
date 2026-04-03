@@ -1,7 +1,7 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 
 export type TelegramNotificationTypeConfig = {
   send_to_channel: boolean
@@ -24,24 +24,13 @@ export async function updateEventTelegramConfig(
   telegramChatLink: string,
   config: TelegramNotificationConfig
 ) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized' }
-
-  // Verify EP owns this event
-  const { data: event } = await supabase
-    .from('platform_events')
-    .select('id')
-    .eq('id', eventId)
-    .eq('owner_id', user.id)
-    .single()
-
-  if (!event) return { error: 'Event not found or access denied.' }
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return { error: 'Access denied.' }
 
   const cleanGroup = telegramGroup.trim()
   const cleanChatLink = telegramChatLink.trim()
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('platform_events')
     .update({
       telegram_group: cleanGroup || null,

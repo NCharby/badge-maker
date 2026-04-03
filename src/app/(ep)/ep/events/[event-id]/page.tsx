@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 import Link from 'next/link'
 import EventStatusClient from './EventStatusClient'
 import type { WorkflowStatus } from '@/types/platform'
@@ -9,15 +9,13 @@ export default async function EpEventPage({
   params: Promise<{ 'event-id': string }>
 }) {
   const { 'event-id': eventId } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return null
 
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, title, status, start_date, end_date, location, module_config, workflow_statuses')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
 
   if (!event) {
@@ -72,11 +70,11 @@ export default async function EpEventPage({
           { label: 'Venue', href: `/ep/events/${eventId}/venue`, icon: '🏛️', desc: 'Manage venue, room matrix, and room assignments' },
           { label: 'Application Form', href: `/ep/events/${eventId}/application/builder`, icon: '📋', desc: 'Build & edit the application form' },
           { label: 'Tickets', href: `/ep/events/${eventId}/tickets`, icon: '🎟️', desc: 'Configure ticket types & pricing' },
-          { label: 'Waiver', href: `/ep/events/${eventId}/waiver`, icon: '✍️', desc: 'Waiver configuration and status' },
+          { label: 'Waiver', href: `/ep/events/${eventId}/waiver`, icon: '✍️', desc: 'View attendee waiver status and signed documents' },
           { label: 'Basic Event Rooms', href: `/ep/events/${eventId}/rooms`, icon: '🏨', desc: 'Manage the event room matrix' },
           { label: 'Volunteer', href: `/ep/events/${eventId}/volunteer`, icon: '🙋', desc: 'Manage volunteer shifts' },
           { label: 'Schedule', href: `/ep/events/${eventId}/schedule`, icon: '📅', desc: 'Event schedule' },
-          { label: 'Badge', href: `/ep/events/${eventId}/badge`, icon: '🎫', desc: 'Badge Maker module' },
+          { label: 'Badge', href: `/ep/events/${eventId}/badge`, icon: '🎫', desc: 'View attendee badge status and created badges' },
           { label: 'Notifications', href: `/ep/events/${eventId}/notifications`, icon: '🔔', desc: 'Configure Telegram channel notifications' },
           { label: 'Lock Check', href: `/ep/events/${eventId}/lock-check`, icon: '🔍', desc: 'Review attendee module completion and send reminders' },
         ]

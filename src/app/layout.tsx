@@ -14,8 +14,8 @@ const openSans = Open_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'SD Platform',
-  description: 'Create your conference badge with a live preview',
+  title: 'Lekd',
+  description: 'Event management platform by Shiny Dog Productions',
 }
 
 export default function RootLayout({
@@ -29,6 +29,17 @@ export default function RootLayout({
         <ErrorBoundary>
           {children}
         </ErrorBoundary>
+        <footer
+          style={{
+            textAlign: 'center',
+            padding: '1.5rem 1rem',
+            fontSize: '12px',
+            color: '#9CA3AF',
+            borderTop: '1px solid var(--sd-border)',
+          }}
+        >
+          &copy; {new Date().getFullYear()} Shiny Dog Productions Inc. All rights reserved.
+        </footer>
       </body>
     </html>
   )

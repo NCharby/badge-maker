@@ -81,11 +81,14 @@ type AttendeeRow = {
   ticket_status: string
   room_status: string
   lock_status: string
+  badge_status: string
   volunteer_hours_required: number
   ticket_purchased_at: string | null
   order_id: string | null
   is_room_lead: boolean
   roommate_code: string | null
+  user_locked: boolean
+  room_lead_locked: boolean
   ticket_types: { name: string }[] | null
 }
 
@@ -203,25 +206,36 @@ function buildModuleCard(
 
     case 'waiver': {
       const s = attendee.waiver_status
-      if (s === 'Completed') card = { ...base, key, label, icon, isRequired, isClosed, isComplete: true, isActionRequired: false, statusLabel: 'Completed', statusStyle: green, iconStyle: { background: 'var(--sd-green-light)' }, description: 'Waiver signed and verified.' }
+      if (s === 'Completed') card = { ...base, key, label, icon, isRequired, isClosed, isComplete: true, isActionRequired: false, statusLabel: 'Completed', statusStyle: green, iconStyle: { background: 'var(--sd-green-light)' }, description: 'Waiver signed and verified.', ctaLabel: 'View waiver', ctaHref: `/events/${eventId}/waiver` }
       else if (s === 'Declined') card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: false, statusLabel: 'Declined', statusStyle: red, description: 'You declined to sign the waiver.' }
-      else card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: !isClosed, statusLabel: isClosed ? 'Closed' : 'Incomplete', statusStyle: gray, description: isClosed ? 'Waiver signing is closed.' : 'Sign your event waiver to complete this step.', ctaLabel: isClosed ? undefined : 'Sign waiver →' /* Odoo stub */ }
+      else card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: !isClosed, statusLabel: isClosed ? 'Closed' : 'Incomplete', statusStyle: gray, description: isClosed ? 'Waiver signing is closed.' : 'Sign your event waiver to complete this step.', ctaLabel: isClosed ? undefined : 'Sign waiver →', ctaHref: isClosed ? undefined : `/events/${eventId}/waiver` }
       break
     }
 
     case 'room_selection': {
       const s = attendee.room_status
-      const locked = s === 'Locked In' || s === 'Verified'
-      if (locked) card = { ...base, key, label, icon, isRequired, isClosed, isComplete: true, isActionRequired: false, statusLabel: s, statusStyle: green, iconStyle: { background: 'var(--sd-green-light)' }, description: 'Your room selection is confirmed.', ctaLabel: 'View room details →', ctaHref: `/events/${eventId}/rooms` }
-      else if (s === 'Critical Issue') card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: true, statusLabel: 'Critical Issue', statusStyle: red, description: 'There is a critical issue with your room. Contact the event promoter.', ctaHref: `/events/${eventId}/rooms` }
-      else if (s === 'Selected') {
-        const days = roomLockInDate ? daysUntil(roomLockInDate) : null
-        const deadlineNote = days !== null ? (days > 0 ? `⏰ Lock-in deadline: ${formatDate(roomLockInDate!)} (${days} day${days !== 1 ? 's' : ''} remaining)` : '⏰ Lock-in deadline has passed') : undefined
-        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: !isClosed, statusLabel: 'Selected', statusStyle: amber, iconStyle: { background: 'var(--sd-amber-light)' }, description: 'Room selected — awaiting lock-in confirmation.', ctaLabel: 'View room →', ctaHref: `/events/${eventId}/rooms`, detail: deadlineNote ? <span style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>{deadlineNote}</span> : undefined }
+      const epLocked = s === 'Locked In' || s === 'Verified'
+      const userLocked = attendee.user_locked ?? false
+      const rlLocked = attendee.room_lead_locked ?? false
+      const days = roomLockInDate ? daysUntil(roomLockInDate) : null
+      const deadlineNote = days !== null ? (days > 0 ? `Lock-in deadline: ${formatDate(roomLockInDate!)} (${days} day${days !== 1 ? 's' : ''} remaining)` : 'Lock-in deadline has passed') : undefined
+      const deadlineDetail = deadlineNote ? <span style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>{deadlineNote}</span> : undefined
+
+      if (epLocked || rlLocked) {
+        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: true, isActionRequired: false, statusLabel: epLocked ? s : 'Locked', statusStyle: green, iconStyle: { background: 'var(--sd-green-light)' }, description: 'Your room is fully locked and confirmed.', ctaLabel: 'View room details →', ctaHref: `/events/${eventId}/rooms` }
+      } else if (s === 'Critical Issue') {
+        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: true, statusLabel: 'Critical Issue', statusStyle: red, description: 'There is a critical issue with your room. Contact the event promoter.', ctaHref: `/events/${eventId}/rooms` }
+      } else if (s === 'Selected' && userLocked) {
+        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: false, statusLabel: 'You Locked In', statusStyle: blue, iconStyle: { background: 'var(--sd-blue-light)' }, description: 'You are locked to your room. Awaiting Room Lead confirmation.', ctaLabel: 'View room →', ctaHref: `/events/${eventId}/rooms`, detail: deadlineDetail }
+      } else if (s === 'Selected') {
+        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: !isClosed, statusLabel: 'Selected', statusStyle: amber, iconStyle: { background: 'var(--sd-amber-light)' }, description: 'Room selected — lock in to confirm.', ctaLabel: 'View room →', ctaHref: `/events/${eventId}/rooms`, detail: deadlineDetail }
+      } else if (isClosed) {
+        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: false, statusLabel: 'Closed', statusStyle: gray, iconStyle: { background: '#F3F4F6' }, description: 'Room selection is closed.' }
       } else {
-        const days = roomLockInDate ? daysUntil(roomLockInDate) : null
-        const deadlineNote = days !== null ? (days > 0 ? `⏰ Lock-in deadline: ${formatDate(roomLockInDate!)} (${days} day${days !== 1 ? 's' : ''} remaining)` : '⏰ Lock-in deadline has passed') : undefined
-        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: !isClosed, statusLabel: isClosed ? 'Closed' : 'Not Selected', statusStyle: isClosed ? gray : amber, iconStyle: { background: isClosed ? '#F3F4F6' : 'var(--sd-amber-light)' }, description: isClosed ? 'Room selection is closed.' : 'Rooms are open! Select your room before the lock-in deadline.', ctaLabel: isClosed ? undefined : 'Browse rooms →', ctaHref: isClosed ? undefined : `/events/${eventId}/rooms`, detail: (!isClosed && deadlineNote) ? <span style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>{deadlineNote}</span> : undefined }
+        // Not Selected — red if required, amber otherwise
+        const notSelectedStyle = isRequired ? { background: 'var(--sd-red-light)', color: 'var(--sd-red)' } : amber
+        const notSelectedIcon = isRequired ? { background: 'var(--sd-red-light)' } : { background: 'var(--sd-amber-light)' }
+        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: true, statusLabel: 'Not Selected', statusStyle: notSelectedStyle, iconStyle: notSelectedIcon, description: isRequired ? 'Room required but not yet selected.' : 'Rooms are open! Select your room before the lock-in deadline.', ctaLabel: 'Browse rooms →', ctaHref: `/events/${eventId}/rooms`, detail: deadlineDetail }
       }
       break
     }
@@ -245,9 +259,15 @@ function buildModuleCard(
       card = { ...base, key, label, icon, isRequired: false, isClosed, isComplete: true, isActionRequired: false, statusLabel: 'Available', statusStyle: blue, iconStyle: { background: 'var(--sd-blue-light)' }, description: 'View the event schedule and activities.', ctaLabel: 'View schedule →', ctaHref: `/events/${eventId}/schedule` }
       break
 
-    case 'badge':
-      card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: false, statusLabel: 'Incomplete', statusStyle: gray, description: 'Create your event badge.', ctaLabel: isClosed ? undefined : 'Create badge →', ctaHref: isClosed ? undefined : `/${eventSlug}/badge-creator` }
+    case 'badge': {
+      const badgeComplete = attendee.badge_status === 'Complete'
+      if (badgeComplete) {
+        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: true, isActionRequired: false, statusLabel: 'Complete', statusStyle: green, iconStyle: { background: 'var(--sd-green-light)' }, description: 'Your badge has been created.', ctaLabel: 'View badge', ctaHref: `/events/${eventId}/badge` }
+      } else {
+        card = { ...base, key, label, icon, isRequired, isClosed, isComplete: false, isActionRequired: !isClosed, statusLabel: 'Incomplete', statusStyle: gray, description: 'Create your event badge.', ctaLabel: isClosed ? undefined : 'Create badge →', ctaHref: isClosed ? undefined : `/events/${eventId}/badge` }
+      }
       break
+    }
   }
 
   return card
@@ -319,7 +339,7 @@ export default async function EventAttendeePage({
   // Fetch attendee record (user owns their own row) — may be null for unenrolled users
   const { data: attendee } = await supabase
     .from('event_attendees')
-    .select('application_status, waiver_status, ticket_status, room_status, lock_status, volunteer_hours_required, ticket_purchased_at, order_id, is_room_lead, roommate_code, ticket_types(name)')
+    .select('application_status, waiver_status, ticket_status, room_status, lock_status, badge_status, volunteer_hours_required, ticket_purchased_at, order_id, is_room_lead, roommate_code, user_locked, room_lead_locked, ticket_types(name)')
     .eq('event_id', eventId)
     .eq('user_id', user.id)
     .single()

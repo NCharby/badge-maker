@@ -1,8 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
 import type { WorkflowStatus } from '@/types/platform'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 
 function revalidateAll(eventId: string) {
   revalidatePath(`/ep/events/${eventId}`)
@@ -10,19 +10,17 @@ function revalidateAll(eventId: string) {
 }
 
 async function fetchEventWithStatuses(eventId: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' as const, supabase, user: null, event: null }
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return { error: 'Access denied.' as const, admin: null, event: null }
 
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, workflow_statuses, module_config, cancellation_policy')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
 
-  if (!event) return { error: 'Access denied.' as const, supabase, user, event: null }
-  return { error: null, supabase, user, event }
+  if (!event) return { error: 'Event not found.' as const, admin, event: null }
+  return { error: null, admin, event }
 }
 
 function isStatusReferenced(
@@ -49,7 +47,7 @@ export async function addWorkflowStatus(
   const trimmedName = name.trim()
   if (!trimmedName) return { error: 'Status name is required.' }
 
-  const { error, supabase, event } = await fetchEventWithStatuses(eventId)
+  const { error, admin, event } = await fetchEventWithStatuses(eventId)
   if (error || !event) return { error: error ?? 'Not found.' }
 
   const existing = (event.workflow_statuses ?? []) as WorkflowStatus[]
@@ -62,7 +60,7 @@ export async function addWorkflowStatus(
     description: description.trim(),
   }
 
-  const { error: updateError } = await supabase
+  const { error: updateError } = await admin!
     .from('platform_events')
     .update({ workflow_statuses: [...existing, newStatus] })
     .eq('id', eventId)
@@ -81,7 +79,7 @@ export async function renameWorkflowStatus(
   const trimmedName = newName.trim()
   if (!trimmedName) return { error: 'Status name is required.' }
 
-  const { error, supabase, event } = await fetchEventWithStatuses(eventId)
+  const { error, admin, event } = await fetchEventWithStatuses(eventId)
   if (error || !event) return { error: error ?? 'Not found.' }
 
   const statuses = (event.workflow_statuses ?? []) as WorkflowStatus[]
@@ -90,7 +88,7 @@ export async function renameWorkflowStatus(
 
   const updated = statuses.map(s => s.id === statusId ? { ...s, name: trimmedName } : s)
 
-  const { error: updateError } = await supabase
+  const { error: updateError } = await admin!
     .from('platform_events')
     .update({ workflow_statuses: updated })
     .eq('id', eventId)
@@ -111,7 +109,7 @@ export async function deleteWorkflowStatus(
   eventId: string,
   statusId: string,
 ): Promise<{ success: true } | { error: string }> {
-  const { error, supabase, event } = await fetchEventWithStatuses(eventId)
+  const { error, admin, event } = await fetchEventWithStatuses(eventId)
   if (error || !event) return { error: error ?? 'Not found.' }
 
   const hasRefs = isStatusReferenced(
@@ -127,7 +125,7 @@ export async function deleteWorkflowStatus(
   const filtered = statuses.filter(s => s.id !== statusId)
   const reindexed = filtered.map((s, i) => ({ ...s, order: i + 1 }))
 
-  const { error: updateError } = await supabase
+  const { error: updateError } = await admin!
     .from('platform_events')
     .update({ workflow_statuses: reindexed })
     .eq('id', eventId)
@@ -142,7 +140,7 @@ export async function reorderWorkflowStatuses(
   eventId: string,
   orderedIds: string[],
 ): Promise<{ success: true } | { error: string }> {
-  const { error, supabase, event } = await fetchEventWithStatuses(eventId)
+  const { error, admin, event } = await fetchEventWithStatuses(eventId)
   if (error || !event) return { error: error ?? 'Not found.' }
 
   const statuses = (event.workflow_statuses ?? []) as WorkflowStatus[]
@@ -155,7 +153,7 @@ export async function reorderWorkflowStatuses(
 
   const reordered = orderedIds.map((id, i) => ({ ...statusMap.get(id)!, order: i + 1 }))
 
-  const { error: updateError } = await supabase
+  const { error: updateError } = await admin!
     .from('platform_events')
     .update({ workflow_statuses: reordered })
     .eq('id', eventId)

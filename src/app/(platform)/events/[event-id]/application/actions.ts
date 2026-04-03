@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createInPlatformNotification, epWantsInPlatform } from '@/lib/notifications'
 import { sendEventChannelMessage } from '@/lib/telegram/send'
+import { checkProfileCompleteness } from '@/lib/profile-completeness'
 
 export async function saveDraft(
   eventId: string,
@@ -70,6 +71,17 @@ export async function submitApplication(
 
   if (!attendee) {
     // First submission — create the attendee record. Submitting an application IS the enrollment action.
+    // Verify profile completeness before allowing enrollment.
+    const { data: profile } = await admin
+      .from('platform_users')
+      .select('first_name, last_name, emergency_contact, emergency_phone')
+      .eq('id', user.id)
+      .single()
+    const completeness = checkProfileCompleteness(profile ?? {})
+    if (!completeness.complete) {
+      return { error: `Please complete your profile before applying: ${completeness.missing.join(', ')}.` }
+    }
+
     const { error: enrollError } = await admin
       .from('event_attendees')
       .insert({ event_id: eventId, user_id: user.id })

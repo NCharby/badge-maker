@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import ModuleConfigClient from './ModuleConfigClient'
@@ -10,15 +10,13 @@ export default async function ModulesPage({
   params: Promise<{ 'event-id': string }>
 }) {
   const { 'event-id': eventId } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) redirect('/login')
 
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, title, module_config, workflow_statuses')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
 
   if (!event) {

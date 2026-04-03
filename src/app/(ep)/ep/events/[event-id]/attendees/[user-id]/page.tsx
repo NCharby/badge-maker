@@ -1,4 +1,4 @@
-import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 import { getDisplayName } from '@/types/platform'
 import Link from 'next/link'
 import AttendeeDetailClient from './AttendeeDetailClient'
@@ -9,16 +9,13 @@ export default async function EpAttendeeDetailPage({
   params: Promise<{ 'event-id': string; 'user-id': string }>
 }) {
   const { 'event-id': eventId, 'user-id': targetUserId } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return null
 
-  // Verify EP owns this event
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, title')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
 
   if (!event) {
@@ -31,10 +28,9 @@ export default async function EpAttendeeDetailPage({
   }
 
   // Fetch the attendee's full platform_users profile (EP can see everything)
-  // Must use adminSupabase — platform_users RLS only allows users to read own row;
+  // Must use admin client — platform_users RLS only allows users to read own row;
   // there is no policy granting EPs cross-user reads. Service role bypasses RLS.
-  const adminSupabase = createAdminClient()
-  const { data: profile } = await adminSupabase
+  const { data: profile } = await admin
     .from('platform_users')
     .select('id, email, preferred_scene_name, other_scene_names, phone, address, zip_code, date_of_birth, telegram_handle, telegram_verified, social_media, profile_picture_url, role')
     .eq('id', targetUserId)
@@ -50,9 +46,9 @@ export default async function EpAttendeeDetailPage({
   }
 
   // Fetch attendee record
-  const { data: attendee } = await supabase
+  const { data: attendee } = await admin
     .from('event_attendees')
-    .select('application_status, ticket_status, lock_status, room_status, volunteer_hours_required, order_id')
+    .select('application_status, ticket_status, waiver_status, badge_status, lock_status, room_status, volunteer_hours_required, order_id, badge_maker_badge_id, badge_maker_waiver_id')
     .eq('event_id', eventId)
     .eq('user_id', targetUserId)
     .single()
@@ -67,13 +63,13 @@ export default async function EpAttendeeDetailPage({
   }
 
   // Fetch application form + response
-  const { data: form } = await supabase
+  const { data: form } = await admin
     .from('application_forms')
     .select('id, title, fields')
     .eq('event_id', eventId)
     .single()
 
-  const { data: responseRow } = await supabase
+  const { data: responseRow } = await admin
     .from('application_responses')
     .select('responses, submitted_at')
     .eq('event_id', eventId)
@@ -192,6 +188,8 @@ export default async function EpAttendeeDetailPage({
           targetUserId={targetUserId}
           applicationStatus={attendee.application_status}
           ticketStatus={attendee.ticket_status}
+          waiverStatus={attendee.waiver_status}
+          badgeStatus={attendee.badge_status}
           lockStatus={attendee.lock_status}
           roomStatus={attendee.room_status}
         />

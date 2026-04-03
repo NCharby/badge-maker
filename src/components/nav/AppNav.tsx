@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { getDisplayName } from '@/types/platform'
-import { signOut } from '@/app/actions/auth'
+import AvatarMenu from './AvatarMenu'
 
 interface AppNavProps {
   user: {
@@ -50,7 +50,7 @@ export default function AppNav({ user, unreadCount = 0 }: AppNavProps) {
             textDecoration: 'none',
           }}
         >
-          🐕 SD Platform
+          Lekd
         </Link>
         {isAdmin && (
           <span
@@ -85,12 +85,14 @@ export default function AppNav({ user, unreadCount = 0 }: AppNavProps) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+        {isAdmin && (
+          <Link href="/admin/dashboard" style={{ color: linkColor, textDecoration: 'none', fontSize: '0.9rem' }}>
+            Admin
+          </Link>
+        )}
         {(isAdmin || isEp) && (
-          <Link
-            href={isAdmin ? '/admin/dashboard' : '/ep/dashboard'}
-            style={{ color: linkColor, textDecoration: 'none', fontSize: '0.9rem' }}
-          >
-            {isAdmin ? 'Admin Dashboard' : 'EP Dashboard'}
+          <Link href="/ep/dashboard" style={{ color: linkColor, textDecoration: 'none', fontSize: '0.9rem' }}>
+            EP Dashboard
           </Link>
         )}
         <Link href="/events/browse" style={{ color: linkColor, textDecoration: 'none', fontSize: '0.9rem' }}>
@@ -124,33 +126,7 @@ export default function AppNav({ user, unreadCount = 0 }: AppNavProps) {
             </span>
           )}
         </Link>
-        <Link href="/profile" title={displayName}>
-          <div
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              background: avatarBg,
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              textDecoration: 'none',
-            }}
-          >
-            {initials}
-          </div>
-        </Link>
-        <form action={signOut}>
-          <button type="submit" style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: linkColor, fontSize: '0.9rem', padding: 0,
-          }}>
-            Sign out
-          </button>
-        </form>
+        <AvatarMenu initials={initials} displayName={displayName} avatarBg={avatarBg} />
       </div>
     </nav>
   )

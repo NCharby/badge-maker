@@ -17,10 +17,10 @@ const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN)
 
 bot.command('start', async (ctx) => {
   await ctx.reply(
-    'Welcome to the SD Platform bot! 🐕\n\n' +
+    'Welcome to the Lekd bot!\n\n' +
       'You can use this bot to receive personal event notifications.\n\n' +
       'To verify your Telegram account:\n' +
-      '1. Visit your Profile page on the SD Platform\n' +
+      '1. Visit your Profile page on Lekd\n' +
       '2. Click "Get verification code"\n' +
       '3. Send <code>/verify YOUR_CODE</code> here\n\n' +
       'If you need help with your registration or have a question, send a message and our team will follow up via email.'

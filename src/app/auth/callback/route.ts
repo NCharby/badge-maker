@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { createOrgForUser } from '@/app/(auth)/register/actions'
 
 /**
  * Auth callback handler.
@@ -53,14 +54,24 @@ export async function GET(request: Request) {
           .maybeSingle()
         if (!existing) {
           const meta = user.user_metadata ?? {}
+          const wantsOrg = !!meta.org_name
+          const role = wantsOrg ? 'event_promoter' : 'user'
+
           await admin.from('platform_users').insert({
             id: user.id,
             email: user.email!,
+            first_name: meta.first_name ?? null,
+            last_name: meta.last_name ?? null,
             date_of_birth: meta.date_of_birth,
             telegram_handle: meta.telegram_handle ?? null,
             preferred_scene_name: meta.preferred_scene_name ?? null,
-            role: 'user',
+            role,
           })
+
+          // Create organization if requested during registration
+          if (wantsOrg) {
+            await createOrgForUser(admin, user.id, meta.org_name)
+          }
         }
       }
       return NextResponse.redirect(`${origin}${next}`)

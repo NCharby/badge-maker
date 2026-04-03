@@ -1,7 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 
 export interface TicketTypeInput {
   name: string
@@ -69,19 +70,15 @@ export async function createTicketType(
   eventId: string,
   data: TicketTypeInput,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
-
-  const { data: event } = await supabase
-    .from('platform_events').select('id').eq('id', eventId).eq('owner_id', user.id).single()
-  if (!event) return { error: 'Access denied.' }
+  const { authorized } = await epEventGuard(eventId)
+  if (!authorized) return { error: 'Access denied.' }
 
   const parsed = parseTicketTypeInput(data)
   if (parsed.error) return { error: parsed.error }
   if (!('values' in parsed)) return { error: 'Invalid input.' }
 
-  const { error } = await supabase.from('ticket_types').insert({ event_id: eventId, ...parsed.values })
+  const admin = createAdminClient()
+  const { error } = await admin.from('ticket_types').insert({ event_id: eventId, ...parsed.values })
   if (error) return { error: error.message }
 
   revalidatePath(`/ep/events/${eventId}/tickets`)
@@ -93,19 +90,15 @@ export async function updateTicketType(
   eventId: string,
   data: TicketTypeInput,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
-
-  const { data: event } = await supabase
-    .from('platform_events').select('id').eq('id', eventId).eq('owner_id', user.id).single()
-  if (!event) return { error: 'Access denied.' }
+  const { authorized } = await epEventGuard(eventId)
+  if (!authorized) return { error: 'Access denied.' }
 
   const parsed = parseTicketTypeInput(data)
   if (parsed.error) return { error: parsed.error }
   if (!('values' in parsed)) return { error: 'Invalid input.' }
 
-  const { error } = await supabase
+  const admin = createAdminClient()
+  const { error } = await admin
     .from('ticket_types').update(parsed.values).eq('id', ticketTypeId).eq('event_id', eventId)
   if (error) return { error: error.message }
 
@@ -117,23 +110,20 @@ export async function deleteTicketType(
   ticketTypeId: string,
   eventId: string,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
+  const { authorized } = await epEventGuard(eventId)
+  if (!authorized) return { error: 'Access denied.' }
 
-  const { data: event } = await supabase
-    .from('platform_events').select('id').eq('id', eventId).eq('owner_id', user.id).single()
-  if (!event) return { error: 'Access denied.' }
+  const admin = createAdminClient()
 
   // Block deletion if this ticket type has been purchased
-  const { count } = await supabase
+  const { count } = await admin
     .from('event_attendees')
     .select('*', { count: 'exact', head: true })
     .eq('ticket_type_id', ticketTypeId)
     .eq('ticket_status', 'Complete')
   if ((count ?? 0) > 0) return { error: 'Cannot delete a ticket type that has been purchased.' }
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('ticket_types').delete().eq('id', ticketTypeId).eq('event_id', eventId)
   if (error) return { error: error.message }
 

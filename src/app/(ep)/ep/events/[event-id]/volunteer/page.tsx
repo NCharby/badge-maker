@@ -1,4 +1,4 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import VolunteerManageClient from './VolunteerManageClient'
@@ -15,23 +15,19 @@ export default async function EpVolunteerPage({
 }) {
   const { 'event-id': eventId } = await params
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return null
 
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, title')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
 
   if (!event) notFound()
 
-  const admin = createAdminClient()
-
   // Fetch shifts
-  const { data: shifts } = await supabase
+  const { data: shifts } = await admin
     .from('volunteer_shifts')
     .select('id, name, date_time, duration_minutes, capacity')
     .eq('event_id', eventId)

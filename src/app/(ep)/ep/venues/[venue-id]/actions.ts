@@ -1,17 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { parseCSV } from '@/lib/csv/parseCSV'
+import { epVenueGuard } from '@/lib/auth/ep-guard'
 
-async function verifyVenueOwnership(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, venueId: string) {
-  const { data } = await supabase
-    .from('venues')
-    .select('id')
-    .eq('id', venueId)
-    .eq('owner_id', userId)
-    .single()
-  return !!data
+async function verifyVenueAccess(venueId: string) {
+  const { authorized, user, admin } = await epVenueGuard(venueId)
+  if (!authorized || !user || !admin) return null
+  return { userId: user.id, admin }
 }
 
 export type VenueInput = {
@@ -89,17 +85,15 @@ export async function updateVenue(
   venueId: string,
   data: VenueInput,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyVenueOwnership(supabase, user.id, venueId)) return { error: 'Access denied.' }
+  const access = await verifyVenueAccess(venueId)
+  if (!access) return { error: 'Access denied.' }
 
   const name = data.name.trim()
   if (!name) return { error: 'Venue name is required.' }
   const physical_address = data.physical_address.trim()
   if (!physical_address) return { error: 'Physical address is required.' }
 
-  const { error } = await supabase
+  const { error } = await access.admin
     .from('venues')
     .update({
       name,
@@ -124,12 +118,10 @@ export async function updateVenue(
 export async function archiveVenue(
   venueId: string,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyVenueOwnership(supabase, user.id, venueId)) return { error: 'Access denied.' }
+  const access = await verifyVenueAccess(venueId)
+  if (!access) return { error: 'Access denied.' }
 
-  const admin = createAdminClient()
+  const admin = access.admin
 
   // Guard: only archive if no events or only archived events reference this venue
   const { data: activeEvents } = await admin
@@ -142,7 +134,7 @@ export async function archiveVenue(
     return { error: 'Cannot archive a venue that has active events. Archive all associated events first.' }
   }
 
-  const { error } = await supabase
+  const { error } = await access.admin
     .from('venues')
     .update({ status: 'archived' })
     .eq('id', venueId)
@@ -158,12 +150,10 @@ export async function archiveVenue(
 export async function unarchiveVenue(
   venueId: string,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyVenueOwnership(supabase, user.id, venueId)) return { error: 'Access denied.' }
+  const access = await verifyVenueAccess(venueId)
+  if (!access) return { error: 'Access denied.' }
 
-  const { error } = await supabase
+  const { error } = await access.admin
     .from('venues')
     .update({ status: 'active' })
     .eq('id', venueId)
@@ -179,12 +169,10 @@ export async function unarchiveVenue(
 export async function deleteVenue(
   venueId: string,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyVenueOwnership(supabase, user.id, venueId)) return { error: 'Access denied.' }
+  const access = await verifyVenueAccess(venueId)
+  if (!access) return { error: 'Access denied.' }
 
-  const admin = createAdminClient()
+  const admin = access.admin
 
   // Guard: cannot delete if any events reference this venue (any status)
   const { count } = await admin
@@ -215,16 +203,14 @@ export async function createRoom(
   venueId: string,
   data: RoomInput,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyVenueOwnership(supabase, user.id, venueId)) return { error: 'Access denied.' }
+  const access = await verifyVenueAccess(venueId)
+  if (!access) return { error: 'Access denied.' }
 
   const parsed = parseRoomInput(data)
   if (parsed.error) return { error: parsed.error }
   if (!('values' in parsed)) return { error: 'Invalid input.' }
 
-  const admin = createAdminClient()
+  const admin = access.admin
   const { error } = await admin
     .from('rooms')
     .insert({ venue_id: venueId, ...parsed.values })
@@ -240,16 +226,14 @@ export async function updateRoom(
   venueId: string,
   data: RoomInput,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyVenueOwnership(supabase, user.id, venueId)) return { error: 'Access denied.' }
+  const access = await verifyVenueAccess(venueId)
+  if (!access) return { error: 'Access denied.' }
 
   const parsed = parseRoomInput(data)
   if (parsed.error) return { error: parsed.error }
   if (!('values' in parsed)) return { error: 'Invalid input.' }
 
-  const admin = createAdminClient()
+  const admin = access.admin
   const { error } = await admin
     .from('rooms')
     .update(parsed.values)
@@ -266,12 +250,10 @@ export async function deleteRoom(
   roomId: string,
   venueId: string,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyVenueOwnership(supabase, user.id, venueId)) return { error: 'Access denied.' }
+  const access = await verifyVenueAccess(venueId)
+  if (!access) return { error: 'Access denied.' }
 
-  const admin = createAdminClient()
+  const admin = access.admin
 
   // Guard: no active event_attendees referencing this room
   const { count } = await admin
@@ -313,10 +295,8 @@ export async function importRoomCSV(
   venueId: string,
   csvText: string,
 ): Promise<ImportResult | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyVenueOwnership(supabase, user.id, venueId)) return { error: 'Access denied.' }
+  const access = await verifyVenueAccess(venueId)
+  if (!access) return { error: 'Access denied.' }
 
   const rows = parseCSV(csvText)
   if (rows.length === 0) return { imported: 0, errors: [] }
@@ -350,7 +330,7 @@ export async function importRoomCSV(
   const seenNumbers = new Set<string>()
 
   // Pre-populate seenNumbers with room numbers already in the DB so re-uploads are caught
-  const admin = createAdminClient()
+  const admin = access.admin
   const { data: existingRooms } = await admin
     .from('rooms')
     .select('number')

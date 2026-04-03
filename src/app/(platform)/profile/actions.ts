@@ -4,11 +4,14 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
 export type ProfileUpdateData = {
+  first_name: string
+  last_name: string
   preferred_scene_name: string
   other_scene_names: string[]
   phone: string
-  address: string
   zip_code: string
+  emergency_contact: string
+  emergency_phone: string
   social_media: { key: string; value: string }[]
   telegram_handle: string
   roommate_finder_hidden: boolean
@@ -39,11 +42,14 @@ export async function updateProfile(data: ProfileUpdateData) {
   const { error } = await supabase
     .from('platform_users')
     .update({
+      first_name: data.first_name.trim() || null,
+      last_name: data.last_name.trim() || null,
       preferred_scene_name: data.preferred_scene_name.trim() || null,
       other_scene_names: data.other_scene_names.length ? data.other_scene_names : null,
       phone: data.phone.trim() || null,
-      address: data.address.trim() || null,
       zip_code: data.zip_code.trim() || null,
+      emergency_contact: data.emergency_contact.trim() || null,
+      emergency_phone: data.emergency_phone.trim() || null,
       social_media: cleanSocials.length ? cleanSocials : null,
       telegram_handle: cleanHandle || null,
       roommate_finder_hidden: data.roommate_finder_hidden,

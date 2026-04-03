@@ -1,4 +1,4 @@
-import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 import { getDisplayName } from '@/types/platform'
 import Link from 'next/link'
 
@@ -31,16 +31,13 @@ export default async function EpAttendeesPage({
   const { tab: rawTab } = await searchParams
   const activeTab: Tab = TABS.includes(rawTab as Tab) ? (rawTab as Tab) : 'All'
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return null
 
-  // Verify EP owns this event
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, title')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
 
   if (!event) {
@@ -53,15 +50,16 @@ export default async function EpAttendeesPage({
   }
 
   // Fetch attendees with user profile
-  // Must use adminSupabase — platform_users RLS only allows users to read own row;
+  // Must use admin client — platform_users RLS only allows users to read own row;
   // there is no policy granting EPs cross-user reads. Service role bypasses RLS.
-  const adminSupabase = createAdminClient()
-  const { data: attendees } = await adminSupabase
+  const { data: attendees } = await admin
     .from('event_attendees')
     .select(`
       user_id,
       application_status,
       ticket_status,
+      waiver_status,
+      badge_status,
       lock_status,
       platform_users!inner(id, email, preferred_scene_name)
     `)
@@ -72,6 +70,8 @@ export default async function EpAttendeesPage({
     user_id: string
     application_status: string
     ticket_status: string
+    waiver_status: string
+    badge_status: string
     lock_status: string
     platform_users: { id: string; email: string; preferred_scene_name: string | null }
   }[]
@@ -152,7 +152,7 @@ export default async function EpAttendeesPage({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--sd-border)', background: 'var(--sd-card2)' }}>
-                {['Scene name', 'Email', 'Application', 'Ticket', 'Lock'].map(h => (
+                {['Scene name', 'Email', 'Application', 'Ticket', 'Waiver', 'Badge', 'Lock'].map(h => (
                   <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: 'var(--sd-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     {h}
                   </th>
@@ -165,6 +165,8 @@ export default async function EpAttendeesPage({
                 const displayName = pu ? getDisplayName(pu) : row.user_id.slice(0, 8)
                 const appBadge = STATUS_COLORS[row.application_status] ?? STATUS_COLORS['Incomplete']
                 const tktBadge = TICKET_COLORS[row.ticket_status] ?? TICKET_COLORS['Incomplete']
+                const wvrBadge = STATUS_COLORS[row.waiver_status] ?? STATUS_COLORS['Incomplete']
+                const bdgBadge = TICKET_COLORS[row.badge_status] ?? TICKET_COLORS['Incomplete']
                 return (
                   <tr
                     key={row.user_id}
@@ -189,6 +191,16 @@ export default async function EpAttendeesPage({
                     <td style={{ padding: '12px 16px' }}>
                       <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: tktBadge.bg, color: tktBadge.color }}>
                         {row.ticket_status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: wvrBadge.bg, color: wvrBadge.color }}>
+                        {row.waiver_status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: bdgBadge.bg, color: bdgBadge.color }}>
+                        {row.badge_status}
                       </span>
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: '13px', color: 'var(--sd-muted)' }}>

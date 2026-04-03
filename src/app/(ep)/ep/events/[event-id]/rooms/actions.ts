@@ -1,22 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { parseCSV } from '@/lib/csv/parseCSV'
-
-async function verifyEventOwnership(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
-  eventId: string,
-) {
-  const { data } = await supabase
-    .from('platform_events')
-    .select('id')
-    .eq('id', eventId)
-    .eq('owner_id', userId)
-    .single()
-  return !!data
-}
+import { epEventGuard } from '@/lib/auth/ep-guard'
 
 export type RoomInput = {
   number: string
@@ -78,10 +65,8 @@ export async function createEventRoom(
   eventId: string,
   data: RoomInput,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyEventOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
+  const { authorized } = await epEventGuard(eventId)
+  if (!authorized) return { error: 'Access denied.' }
 
   const parsed = parseRoomInput(data)
   if (parsed.error) return { error: parsed.error }
@@ -103,10 +88,8 @@ export async function updateEventRoom(
   eventId: string,
   data: RoomInput,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyEventOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
+  const { authorized } = await epEventGuard(eventId)
+  if (!authorized) return { error: 'Access denied.' }
 
   const parsed = parseRoomInput(data)
   if (parsed.error) return { error: parsed.error }
@@ -129,10 +112,8 @@ export async function deleteEventRoom(
   roomId: string,
   eventId: string,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyEventOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
+  const { authorized } = await epEventGuard(eventId)
+  if (!authorized) return { error: 'Access denied.' }
 
   const admin = createAdminClient()
 
@@ -176,10 +157,8 @@ export async function importEventRoomCSV(
   eventId: string,
   csvText: string,
 ): Promise<ImportResult | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
-  if (!await verifyEventOwnership(supabase, user.id, eventId)) return { error: 'Access denied.' }
+  const { authorized } = await epEventGuard(eventId)
+  if (!authorized) return { error: 'Access denied.' }
 
   const rows = parseCSV(csvText)
   if (rows.length === 0) return { imported: 0, errors: [] }

@@ -32,20 +32,15 @@ export function ImageUpload() {
 
   const handleFileSelect = (file: File) => {
     if (file) {
-      // Validate file type - only allow specific image formats
       const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']
       if (!allowedTypes.includes(file.type)) {
         alert('Please select a valid image file (PNG, JPG, JPEG, WebP, or GIF)')
         return
       }
-
-      // Validate file size (5MB limit)
       if (file.size > 5 * 1024 * 1024) {
         alert('File size must be less than 5MB')
         return
       }
-
-      // Validate minimum file size (10KB to prevent very small files)
       if (file.size < 10 * 1024) {
         alert('File size must be at least 10KB')
         return
@@ -60,42 +55,26 @@ export function ImageUpload() {
 
   const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (file) {
-      handleFileSelect(file)
-    }
+    if (file) handleFileSelect(file)
   }
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(true)
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(false)
-  }
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true) }
+  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(false) }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragOver(false)
-    
     const files = e.dataTransfer.files
-    if (files.length > 0) {
-      handleFileSelect(files[0])
-    }
+    if (files.length > 0) handleFileSelect(files[0])
   }
 
   const handleRemoveImage = () => {
     setOriginalImage(undefined)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleCropClick = () => {
-    if (originalImage) {
-      setShowCropper(true)
-    }
+    if (originalImage) setShowCropper(true)
   }
 
   return (
@@ -109,19 +88,24 @@ export function ImageUpload() {
       />
 
       {!originalImage ? (
-        <div 
-          className={`border-[#747474] border-dashed border rounded-lg p-10 text-center relative transition-colors duration-200 ${
-            isDragOver ? 'border-white bg-[#1a1a1a]' : ''
-          }`}
+        <div
+          style={{
+            border: '2px dashed var(--sd-border)',
+            borderRadius: 'var(--sd-radius)',
+            padding: '2.5rem',
+            textAlign: 'center',
+            transition: 'border-color 0.2s',
+            ...(isDragOver ? { borderColor: 'var(--sd-green)', background: 'var(--sd-green-light)' } : {}),
+          }}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
           <div className="flex flex-col items-center justify-center gap-2.5">
-            <p className="text-[20px] text-white font-open-sans font-normal leading-[normal] mb-2.5">
+            <p style={{ fontSize: '18px', color: 'var(--sd-text)', marginBottom: '8px' }}>
               Drag & Drop file here
             </p>
-            <p className="text-[16px] text-white font-open-sans font-normal leading-[normal] mb-2.5">
+            <p style={{ fontSize: '14px', color: 'var(--sd-muted)', marginBottom: '8px' }}>
               or
             </p>
             <Button
@@ -129,7 +113,12 @@ export function ImageUpload() {
               variant="outline"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
-              className="px-5 py-2.5 bg-transparent border-[#767676] text-white font-open-sans text-[16px] rounded-[3px] hover:bg-[#767676] hover:text-black"
+              style={{
+                color: 'var(--sd-text)',
+                borderColor: 'var(--sd-border)',
+                background: 'transparent',
+                borderRadius: 'var(--sd-radius)',
+              }}
             >
               {isUploading ? 'Uploading...' : 'Browse Files'}
             </Button>
@@ -137,7 +126,10 @@ export function ImageUpload() {
         </div>
       ) : (
         <div className="space-y-2">
-          <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+          <div
+            className="flex items-center justify-between p-3 rounded-lg"
+            style={{ background: 'var(--sd-card2)' }}
+          >
             <div className="flex items-center space-x-3">
               <img
                 src={URL.createObjectURL(originalImage)}
@@ -145,8 +137,10 @@ export function ImageUpload() {
                 className="w-24 h-24 rounded object-cover"
               />
               <div>
-                <p className="text-sm font-medium text-[#949494]">{originalImage.name}</p>
-                <p className="text-xs text-[#949494]">
+                <p className="text-sm font-medium" style={{ color: 'var(--sd-text)' }}>
+                  {originalImage.name}
+                </p>
+                <p className="text-xs" style={{ color: 'var(--sd-muted)' }}>
                   {(originalImage.size / 1024 / 1024).toFixed(2)} MB
                   {imageDimensions && (
                     <span className="ml-2">
@@ -161,19 +155,25 @@ export function ImageUpload() {
               variant="ghost"
               size="sm"
               onClick={handleRemoveImage}
-              className="text-white hover:text-red-400"
+              style={{ color: 'var(--sd-muted)' }}
+              className="hover:text-red-400"
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
-          
+
           <div className="flex justify-center gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              className="bg-transparent border-[#767676] text-white font-open-sans text-[16px] rounded-[3px] hover:bg-[#767676] hover:text-black"
+              style={{
+                color: 'var(--sd-text)',
+                borderColor: 'var(--sd-border)',
+                background: 'transparent',
+                borderRadius: 'var(--sd-radius)',
+              }}
             >
               Change Photo
             </Button>
@@ -182,7 +182,12 @@ export function ImageUpload() {
               variant="outline"
               size="sm"
               onClick={handleCropClick}
-              className="bg-transparent border-[#767676] text-white font-open-sans text-[16px] rounded-[3px] hover:bg-[#767676] hover:text-black"
+              style={{
+                color: 'var(--sd-text)',
+                borderColor: 'var(--sd-border)',
+                background: 'transparent',
+                borderRadius: 'var(--sd-radius)',
+              }}
             >
               <Crop className="h-4 w-4 mr-1" />
               Crop Photo
@@ -191,10 +196,9 @@ export function ImageUpload() {
         </div>
       )}
 
-      {/* Image Cropper Modal */}
-      <ImageCropper 
-        isOpen={showCropper} 
-        onClose={() => setShowCropper(false)} 
+      <ImageCropper
+        isOpen={showCropper}
+        onClose={() => setShowCropper(false)}
       />
     </div>
   )

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { claimRoommateByEmail, acceptApplication, declineApplication, releaseRoom } from '../actions'
+import { claimRoommateByEmail, acceptApplication, declineApplication, releaseRoom, userSelfLock, roomLeadSendLockRequest } from '../actions'
 import type { AttendeeRoomState } from '../actions'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -37,6 +37,8 @@ type ResolvedOccupant = {
   displayName: string
   isRoomLead: boolean
   roomStatus: string
+  userLocked: boolean
+  roomLeadLocked: boolean
 }
 
 type ResolvedApplication = {
@@ -58,6 +60,7 @@ interface RoomDetailClientProps {
   isMyRoom: boolean
   eventStartDate: string
   eventEndDate: string
+  roomLockingConfig: { room_lead_can_lock: boolean; room_lead_can_lock_with_open_spots: boolean }
 }
 
 export default function RoomDetailClient({
@@ -69,6 +72,7 @@ export default function RoomDetailClient({
   isMyRoom,
   eventStartDate,
   eventEndDate,
+  roomLockingConfig,
 }: RoomDetailClientProps) {
   const router = useRouter()
   const dateMap = buildDayDateMap(eventStartDate, eventEndDate)
@@ -88,6 +92,11 @@ export default function RoomDetailClient({
   const [releasePending, startReleaseTransition] = useTransition()
   const [releaseError, setReleaseError] = useState<string | null>(null)
 
+  // Lock management
+  const [lockPending, startLockTransition] = useTransition()
+  const [lockError, setLockError] = useState<string | null>(null)
+  const [lockRequestSent, setLockRequestSent] = useState(false)
+
   const handleRelease = () => {
     setReleaseError(null)
     startReleaseTransition(async () => {
@@ -100,6 +109,30 @@ export default function RoomDetailClient({
     })
   }
 
+  const handleSelfLock = () => {
+    setLockError(null)
+    startLockTransition(async () => {
+      const result = await userSelfLock(eventId)
+      if (result && 'error' in result) setLockError(result.error || null)
+      else router.refresh()
+    })
+  }
+
+  const handleSendLockRequest = () => {
+    setLockError(null)
+    startLockTransition(async () => {
+      const result = await roomLeadSendLockRequest(eventId)
+      if (result && 'error' in result) setLockError(result.error || null)
+      else { setLockRequestSent(true); router.refresh() }
+    })
+  }
+
+  const nonLeadOccupants = occupants.filter(o => !o.isRoomLead)
+  const unlockedOccupants = nonLeadOccupants.filter(o => !o.roomLeadLocked)
+  const hasUnlockedOccupants = unlockedOccupants.length > 0
+  const allOccupantsSelfLocked = nonLeadOccupants.length > 0 && nonLeadOccupants.every(o => o.userLocked)
+  const isFullyLocked = attendee.room_lead_locked
+
   const totalNightly = room.room_daily_rates && room.room_daily_rates.length > 0
     ? room.room_daily_rates.reduce((sum, r) => sum + r.amount, 0)
     : null
@@ -109,8 +142,8 @@ export default function RoomDetailClient({
   const slots = Array.from({ length: room.bed_spot_count }, (_, i) => {
     const occ = sortedOccupants[i]
     return occ
-      ? { display: occ.displayName, isLead: occ.isRoomLead, status: occ.roomStatus }
-      : { display: 'OPEN', isLead: false, status: 'open' }
+      ? { display: occ.displayName, isLead: occ.isRoomLead, status: occ.roomStatus, userLocked: occ.userLocked, roomLeadLocked: occ.roomLeadLocked }
+      : { display: 'OPEN', isLead: false, status: 'open', userLocked: false, roomLeadLocked: false }
   })
 
   const handleClaim = (e: React.FormEvent) => {
@@ -244,27 +277,44 @@ export default function RoomDetailClient({
         Bed Spots ({occupants.length}/{room.bed_spot_count} filled)
       </h2>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px' }}>
-        {slots.map((slot, idx) => (
-          <div
-            key={idx}
-            style={{
-              padding: '8px 14px',
-              borderRadius: '6px',
-              background: slot.display === 'OPEN' ? '#fef3c7' : 'var(--sd-card)',
-              border: `1px solid ${slot.display === 'OPEN' ? '#fcd34d' : 'var(--sd-border)'}`,
-              fontSize: '13px',
-              fontWeight: slot.display === 'OPEN' ? 600 : 400,
-              color: slot.display === 'OPEN' ? '#92400e' : 'var(--sd-text)',
-            }}
-          >
-            {slot.isLead && <span style={{ fontSize: '11px', color: 'var(--sd-green)', fontWeight: 700, marginRight: '4px' }}>RL</span>}
-            {slot.display}
-          </div>
-        ))}
+        {slots.map((slot, idx) => {
+          const bgColor = slot.display === 'OPEN'
+            ? 'var(--sd-amber-light)'
+            : slot.roomLeadLocked ? 'var(--sd-green-light)'
+            : slot.userLocked ? 'var(--sd-blue-light)'
+            : 'var(--sd-card)'
+          const borderColor = slot.display === 'OPEN'
+            ? '#fcd34d'
+            : slot.roomLeadLocked ? 'var(--sd-green)'
+            : slot.userLocked ? 'var(--sd-blue)'
+            : 'var(--sd-border)'
+          return (
+            <div
+              key={idx}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '6px',
+                background: bgColor,
+                border: `1px solid ${borderColor}`,
+                fontSize: '13px',
+                fontWeight: slot.display === 'OPEN' ? 600 : 400,
+                color: slot.display === 'OPEN' ? '#92400e' : 'var(--sd-text)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              {slot.isLead && <span style={{ fontSize: '11px', color: 'var(--sd-green)', fontWeight: 700 }}>RL</span>}
+              {slot.display}
+              {slot.roomLeadLocked && <span title="Locked" style={{ fontSize: '12px' }}>&#128274;</span>}
+              {slot.userLocked && !slot.roomLeadLocked && <span title="Self-locked" style={{ fontSize: '12px', opacity: 0.6 }}>&#128274;</span>}
+            </div>
+          )
+        })}
       </div>
 
-      {/* Release room */}
-      {isMyRoom && attendee.lock_status !== 'Locked' && (
+      {/* Release room — hidden when fully locked */}
+      {isMyRoom && attendee.lock_status !== 'Locked' && !isFullyLocked && (
         <div style={{ marginBottom: '24px' }}>
           <button
             onClick={handleRelease}
@@ -290,8 +340,171 @@ export default function RoomDetailClient({
         </div>
       )}
 
-      {/* Room Lead: Find a Roommate panel */}
-      {isMyRoom && attendee.is_room_lead && (
+      {/* User self-lock (non-RL occupant with Selected room, not yet locked) */}
+      {isMyRoom && !attendee.is_room_lead && attendee.room_status === 'Selected' && !attendee.user_locked && attendee.lock_status !== 'Locked' && (
+        <div style={{
+          background: 'var(--sd-card)',
+          border: '1px solid var(--sd-border)',
+          borderRadius: 'var(--sd-radius)',
+          padding: '16px 20px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+        }}>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--sd-text)' }}>Lock yourself to this room</div>
+            <div style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '2px' }}>
+              Signals to your Room Lead you intend to stay. They or the EP can still move you if needed.
+            </div>
+          </div>
+          <button
+            onClick={handleSelfLock}
+            disabled={lockPending}
+            style={{
+              padding: '7px 16px', borderRadius: '6px', border: 'none', whiteSpace: 'nowrap',
+              background: lockPending ? 'var(--sd-muted)' : 'var(--sd-green)', color: '#fff',
+              fontSize: '13px', fontWeight: 600,
+              cursor: lockPending ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {lockPending ? 'Locking...' : 'Lock In'}
+          </button>
+        </div>
+      )}
+
+      {/* User locked confirmation */}
+      {isMyRoom && attendee.user_locked && !attendee.room_lead_locked && (
+        <div style={{
+          background: 'var(--sd-blue-light)',
+          border: '1px solid var(--sd-blue)',
+          borderRadius: 'var(--sd-radius)',
+          padding: '12px 16px',
+          marginBottom: '20px',
+          fontSize: '13px',
+          color: '#1e40af',
+        }}>
+          You are locked to this room. Awaiting Room Lead confirmation.
+        </div>
+      )}
+
+      {/* Room Lead locked confirmation */}
+      {isMyRoom && attendee.room_lead_locked && (
+        <div style={{
+          background: 'var(--sd-green-light)',
+          border: '1px solid var(--sd-green)',
+          borderRadius: 'var(--sd-radius)',
+          padding: '12px 16px',
+          marginBottom: '20px',
+          fontSize: '13px',
+          color: 'var(--sd-green-dark)',
+        }}>
+          Your room is fully locked and confirmed.
+        </div>
+      )}
+
+      {/* Room Lead: Lock Management */}
+      {isMyRoom && attendee.is_room_lead && attendee.lock_status !== 'Locked' && (
+        <div style={{
+          background: 'var(--sd-card)',
+          border: '1px solid var(--sd-border)',
+          borderRadius: 'var(--sd-radius)',
+          padding: '20px',
+          marginBottom: '20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+        }}>
+          <h2 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '12px' }}>
+            Room Lock Status
+          </h2>
+
+          {/* Occupant lock status list */}
+          <div style={{ marginBottom: '16px' }}>
+            {occupants.filter(o => !o.isRoomLead).length === 0 ? (
+              <p style={{ fontSize: '13px', color: 'var(--sd-muted)' }}>No occupants to lock yet.</p>
+            ) : (
+              occupants.filter(o => !o.isRoomLead).map(occ => (
+                <div
+                  key={occ.userId}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 0',
+                    borderBottom: '1px solid var(--sd-border-light)',
+                    fontSize: '13px',
+                  }}
+                >
+                  <span style={{ fontWeight: 500, color: 'var(--sd-text)' }}>{occ.displayName}</span>
+                  {occ.roomLeadLocked ? (
+                    <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '99px', background: 'var(--sd-green-light)', color: 'var(--sd-green-dark)', fontWeight: 600 }}>
+                      Locked
+                    </span>
+                  ) : occ.userLocked ? (
+                    <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '99px', background: 'var(--sd-blue-light)', color: '#1e40af', fontWeight: 600 }}>
+                      Self-locked
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '99px', background: '#F3F4F6', color: '#6B7280', fontWeight: 500 }}>
+                      Unlocked
+                    </span>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Send lock request button */}
+          {roomLockingConfig.room_lead_can_lock && hasUnlockedOccupants && !lockRequestSent && (
+            <div>
+              <button
+                onClick={handleSendLockRequest}
+                disabled={lockPending}
+                style={{
+                  padding: '9px 20px', borderRadius: '7px', border: 'none',
+                  background: lockPending ? 'var(--sd-muted)' : 'var(--sd-green)', color: '#fff',
+                  fontSize: '13px', fontWeight: 600,
+                  cursor: lockPending ? 'not-allowed' : 'pointer',
+                  width: '100%',
+                }}
+              >
+                {lockPending ? 'Sending...' : allOccupantsSelfLocked ? 'Room Ready for Lock' : 'Send Lock Request to All Occupants'}
+              </button>
+              <p style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '6px' }}>
+                {allOccupantsSelfLocked ? 'All occupants have signaled they want to stay. Lock the room to confirm.' : 'Occupants can accept to lock in, or decline and leave the room.'}
+              </p>
+            </div>
+          )}
+
+          {!roomLockingConfig.room_lead_can_lock && (
+            <p style={{ fontSize: '12px', color: 'var(--sd-muted)', fontStyle: 'italic' }}>
+              Room Lead locking is not enabled for this event. Contact the event promoter to enable it.
+            </p>
+          )}
+
+          {lockRequestSent && (
+            <div style={{
+              background: 'var(--sd-green-light)',
+              border: '1px solid var(--sd-green)',
+              borderRadius: 'var(--sd-radius)',
+              padding: '10px 14px',
+              fontSize: '13px',
+              color: 'var(--sd-green-dark)',
+            }}>
+              Lock requests sent to your roommates.
+            </div>
+          )}
+
+          {lockError && (
+            <p style={{ color: 'var(--sd-red)', fontSize: '12px', marginTop: '8px', marginBottom: 0 }}>
+              {lockError}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Room Lead: Find a Roommate panel — hidden when fully locked */}
+      {isMyRoom && attendee.is_room_lead && !isFullyLocked && (
         <div style={{
           background: 'var(--sd-card)',
           border: '1px solid var(--sd-border)',

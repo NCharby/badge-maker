@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 
 export default async function VenuesPage() {
@@ -6,11 +6,50 @@ export default async function VenuesPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { data: venues } = await supabase
-    .from('venues')
-    .select('id, name, physical_address, status')
-    .eq('owner_id', user.id)
-    .order('name', { ascending: true })
+  const admin = createAdminClient()
+
+  const { data: pu } = await supabase
+    .from('platform_users')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  let venues: { id: string; name: string; physical_address: string; status: string }[] | null = null
+
+  if (pu?.role === 'system_admin') {
+    // Admin sees all venues
+    const { data } = await admin
+      .from('venues')
+      .select('id, name, physical_address, status')
+      .order('name', { ascending: true })
+    venues = data
+  } else {
+    // EP sees venues from their orgs + own venues
+    const { data: memberships } = await admin
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id)
+      .in('access_level', ['organization_lead', 'event_promoter'])
+
+    const orgIds = (memberships ?? []).map(m => m.organization_id)
+
+    if (orgIds.length > 0) {
+      const { data } = await admin
+        .from('venues')
+        .select('id, name, physical_address, status')
+        .in('organization_id', orgIds)
+        .order('name', { ascending: true })
+      venues = data
+    } else {
+      // Fallback: own venues only
+      const { data } = await supabase
+        .from('venues')
+        .select('id, name, physical_address, status')
+        .eq('owner_id', user.id)
+        .order('name', { ascending: true })
+      venues = data
+    }
+  }
 
   const activeVenues = (venues ?? []).filter(v => v.status === 'active')
   const archivedVenues = (venues ?? []).filter(v => v.status === 'archived')

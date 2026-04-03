@@ -1,8 +1,8 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { createInPlatformNotification } from '@/lib/notifications'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 
 const REQUIRED_MODULE_LABELS: Record<string, string> = {
   application:    'Application',
@@ -17,19 +17,17 @@ export async function notifyIncomplete(
   eventId: string,
   userId: string | null,
 ): Promise<{ success: true; count: number } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
+  const { authorized } = await epEventGuard(eventId)
+  if (!authorized) return { error: 'Access denied.' }
 
-  const { data: event } = await supabase
+  const admin = createAdminClient()
+
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, title, module_config')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
-  if (!event) return { error: 'Access denied.' }
-
-  const admin = createAdminClient()
+  if (!event) return { error: 'Event not found.' }
 
   // Determine required modules
   const moduleConfig = (event.module_config ?? {}) as Record<string, {

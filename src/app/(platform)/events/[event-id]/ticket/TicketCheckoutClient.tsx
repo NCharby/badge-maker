@@ -77,7 +77,8 @@ interface Props {
   ticketTypes: TicketType[]
   merchandise: MerchandiseItem[]
   volunteerShifts: VolunteerShift[]
-  checkoutRooms: CheckoutRoom[]   // pre-fetched rooms for room_required_at_purchase Room Lead step
+  checkoutRooms: CheckoutRoom[]   // pre-fetched rooms for room selection at checkout
+  eventRequiresRoomAtCheckout: boolean  // event-level setting: all attendees must select a room
   hasRoommateCodeFeature: boolean  // true if any Room Lead ticket type has roommate_codes_enabled
   paymentProvider: 'square' | 'paypal'
   squareAppId: string
@@ -146,6 +147,7 @@ export default function TicketCheckoutClient({
   merchandise,
   volunteerShifts,
   checkoutRooms,
+  eventRequiresRoomAtCheckout,
   hasRoommateCodeFeature,
   paymentProvider,
   squareAppId,
@@ -189,8 +191,11 @@ export default function TicketCheckoutClient({
   const selectedMerchItems = selectedMerchIds.map(id => eligibleMerch.find(m => m.id === id)).filter(Boolean) as MerchandiseItem[]
   const total = (selectedTicket ? Number(selectedTicket.price) : 0) + selectedMerchItems.reduce((s, m) => s + Number(m.price), 0)
 
-  // Show room step when: Room Lead ticket with room_required_at_purchase
-  const showRoomStep = selectedTicket?.room_lead && selectedTicket?.room_required_at_purchase && checkoutRooms.length > 0
+  // Show room step when: Room Lead ticket with room_required_at_purchase, OR event-level require_room_at_checkout (for non-RL tickets)
+  const showRoomStep = checkoutRooms.length > 0 && (
+    (selectedTicket?.room_lead && selectedTicket?.room_required_at_purchase) ||
+    (eventRequiresRoomAtCheckout && selectedTicket && !selectedTicket.room_lead)
+  )
 
   // Show roommate code step when: feature is enabled AND selected ticket is NOT a Room Lead ticket
   const showRoommateCodeStep =

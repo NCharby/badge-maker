@@ -25,11 +25,11 @@ import * as readline from 'readline'
 import { createClient } from '@supabase/supabase-js'
 
 // ── Interactive prompt helper ─────────────────────────────────────────────────
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+
 function ask(question: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
     rl.question(`  ${question} [y/N] `, (answer) => {
-      rl.close()
       const normalized = answer.trim().toLowerCase()
       resolve(normalized === 'y' || normalized === 'yes')
     })
@@ -85,6 +85,7 @@ const EXTRA_ACCOUNTS = [
 // ── Stable seed UUIDs ─────────────────────────────────────────────────────────
 // Fixed UUIDs make the seed script idempotent and allow safe re-runs.
 
+const ORG_ID          = 'aaaaaaaa-0000-0000-0000-000000000000' // Test Organization
 const VENUE_ID        = 'aaaaaaaa-0000-0000-0000-000000000001'
 const FULL_EVENT_ID   = 'aaaaaaaa-0000-0000-0000-000000000002'
 const MINIMAL_EVENT_ID = 'aaaaaaaa-0000-0000-0000-000000000003'
@@ -298,6 +299,48 @@ async function seedPlatformTables(authUserIds: Record<string, string>, createAll
       else ok(`platform_user: ${u.email} (${u.role})`)
     }
 
+    // ── organization ───────────────────────────────────────────────────────────
+    console.log('\n  organization...')
+    const promoterId = authUserIds['promoter@test.local']
+
+    // Fetch the free tier ID
+    const { data: freeTier } = await supabase
+      .from('organization_tiers')
+      .select('id')
+      .eq('name', 'free')
+      .single()
+
+    if (!freeTier) fail('Free tier not found. Run migrations first.')
+
+    const { error: orgError } = await supabase
+      .from('organizations')
+      .upsert({
+        id: ORG_ID,
+        name: 'Test Organization',
+        slug: 'test-org',
+        website: 'https://test-org.example.com',
+        payment_provider: 'square',
+        tier_id: freeTier.id,
+        archived: false,
+      }, { onConflict: 'id' })
+    if (orgError) warn(`organizations upsert failed: ${orgError.message}`)
+    else ok('organization: Test Organization')
+
+    // ── organization members ─────────────────────────────────────────────────
+    console.log('\n  organization members...')
+    const orgMembers = [
+      { organization_id: ORG_ID, user_id: authUserIds['admin@test.local'],    access_level: 'organization_lead', promoted_via_org: false },
+      ...(promoterId ? [{ organization_id: ORG_ID, user_id: promoterId, access_level: 'organization_lead' as const, promoted_via_org: true }] : []),
+    ].filter(m => m.user_id)
+
+    for (const m of orgMembers) {
+      const { error } = await supabase
+        .from('organization_members')
+        .upsert(m, { onConflict: 'organization_id,user_id' })
+      if (error) warn(`org_members upsert failed for ${m.user_id}: ${error.message}`)
+      else ok(`org_member: ${m.user_id} (${m.access_level})`)
+    }
+
     if (!seedData) {
       ok('Phase 2 complete.')
       return
@@ -305,7 +348,6 @@ async function seedPlatformTables(authUserIds: Record<string, string>, createAll
 
     // ── venue ─────────────────────────────────────────────────────────────────
     console.log('\n  venues...')
-    const promoterId = authUserIds['promoter@test.local']
     if (promoterId) {
       const { error } = await supabase
         .from('venues')
@@ -313,6 +355,7 @@ async function seedPlatformTables(authUserIds: Record<string, string>, createAll
           {
             id: VENUE_ID,
             owner_id: promoterId,
+            organization_id: ORG_ID,
             name: 'Test Venue',
             physical_address: '123 Test Street, Test City, TX 75001',
             email: 'hotel@test.local',
@@ -418,6 +461,7 @@ async function seedPlatformTables(authUserIds: Record<string, string>, createAll
             id: FULL_EVENT_ID,
             slug: 'test-full-event',
             owner_id: promoterId,
+            organization_id: ORG_ID,
             title: 'Full Test Event',
             description: 'All modules enabled — used for manual flow verification',
             start_date: '2026-10-01',
@@ -446,6 +490,7 @@ async function seedPlatformTables(authUserIds: Record<string, string>, createAll
             id: MINIMAL_EVENT_ID,
             slug: 'test-minimal-event',
             owner_id: promoterId,
+            organization_id: ORG_ID,
             title: 'Minimal Test Event',
             description: 'Ticketing only',
             start_date: '2026-11-01',
@@ -580,14 +625,74 @@ async function seedPlatformTables(authUserIds: Record<string, string>, createAll
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+async function truncateAll() {
+  section('Truncating all platform data + auth users')
+
+  const tables = [
+    'platform_notifications',
+    'room_lock_requests',
+    'roommate_applications',
+    'user_volunteer_signups',
+    'volunteer_shifts',
+    'schedule_activities',
+    'application_responses',
+    'application_forms',
+    'locks',
+    'bed_blocks',
+    'event_room_config',
+    'merchandise',
+    'order_items',
+    'orders',
+    'ticket_types',
+    'ticket_groups',
+    'event_attendees',
+    'organization_module_access',
+    'organization_invitations',
+    'organization_members',
+    'platform_events',
+    'rooms',
+    'venues',
+    'organizations',
+    'waiver_templates',
+    'badge_templates',
+  ]
+
+  // Truncate all platform tables via individual deletes (service role bypasses RLS)
+  for (const table of tables) {
+    const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    if (error) warn(`delete from ${table}: ${error.message}`)
+    else ok(`cleared: ${table}`)
+  }
+
+  // platform_users separately (FK target for many tables, cleared after dependents)
+  const { error: puErr } = await supabase.from('platform_users').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+  if (puErr) warn(`delete from platform_users: ${puErr.message}`)
+  else ok('cleared: platform_users')
+
+  // Clear auth users
+  const { data: authUsers } = await supabase.auth.admin.listUsers()
+  for (const u of authUsers?.users ?? []) {
+    const { error } = await supabase.auth.admin.deleteUser(u.id)
+    if (error) warn(`delete auth user ${u.email}: ${error.message}`)
+    else ok(`deleted auth user: ${u.email}`)
+  }
+
+  ok('Truncation complete.')
+}
+
 async function main() {
   console.log('\n========================================================')
-  console.log('  SD Platform — Development Seed Script')
+  console.log('  Lekd Platform — Development Seed Script')
   console.log('========================================================')
   console.log(`  Supabase URL: ${supabaseUrl}`)
   console.log(`  Test user DOB: ${dob} (30 years ago)`)
   console.log('\n  WARNING: Development only. NEVER run against production.')
   console.log('\n  admin@test.local / Admin1234! is always created.\n')
+
+  const doTruncate = await ask('Truncate all data before seeding? (full reset)')
+  if (doTruncate) {
+    await truncateAll()
+  }
 
   const createAllUsers = await ask('Create EP and basic test users? (promoter, user1, user2)')
   const seedData = createAllUsers
@@ -619,6 +724,7 @@ async function main() {
     console.log('  Log in as user1 or user2 to walk the full workflow.')
   }
   console.log('========================================================\n')
+  rl.close()
 }
 
 main().catch((err) => {

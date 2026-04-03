@@ -1,5 +1,12 @@
-import puppeteer from 'puppeteer';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const puppeteer = require('puppeteer');
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+/** Escape user-supplied text before interpolating into HTML templates. */
+function escapeHtml(text: string): string {
+  const map: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }
+  return text.replace(/[&<>"']/g, (c) => map[c])
+}
 
 export interface WaiverPDFData {
   // Participant Information
@@ -17,6 +24,9 @@ export interface WaiverPDFData {
   signedAt: string;
   ipAddress?: string;
   userAgent?: string;
+
+  // EP-configured waiver template text; when provided, replaces the hardcoded terms
+  waiverContent?: string;
 }
 
 export interface PDFGenerationResult {
@@ -223,32 +233,34 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
           <div class="info-grid">
             <div class="info-item">
               <div class="info-label">Full Legal Name</div>
-              <div class="info-value">${data.fullName}</div>
+              <div class="info-value">${escapeHtml(data.fullName)}</div>
             </div>
             <div class="info-item">
               <div class="info-label">Email Address</div>
-              <div class="info-value">${data.email}</div>
+              <div class="info-value">${escapeHtml(data.email)}</div>
             </div>
             <div class="info-item">
               <div class="info-label">Date of Birth</div>
-              <div class="info-value">${data.dateOfBirth}</div>
+              <div class="info-value">${escapeHtml(data.dateOfBirth)}</div>
             </div>
             <div class="info-item">
               <div class="info-label">Emergency Contact</div>
-              <div class="info-value">${data.emergencyContact}</div>
+              <div class="info-value">${escapeHtml(data.emergencyContact)}</div>
             </div>
             <div class="info-item">
               <div class="info-label">Emergency Phone</div>
-              <div class="info-value">${data.emergencyPhone}</div>
+              <div class="info-value">${escapeHtml(data.emergencyPhone)}</div>
             </div>
           </div>
         </div>
       </div>
 
       <div class="section">
-        <h2>Shiny Dog Productions Release of Liability</h2>
+        <h2>Event Waiver & Release of Liability</h2>
         <div class="terms-content">
-          <p>I am or will be over 21 years of age as of the first day of the start of the event. A government-issued photo id is required for verification at registration.</p>
+          ${data.waiverContent
+            ? `<div style="white-space: pre-wrap;">${escapeHtml(data.waiverContent)}</div>`
+            : `<p>I am or will be over 21 years of age as of the first day of the start of the event. A government-issued photo id is required for verification at registration.</p>
 
           <p><strong>Email hello@shinydogproductions.com for anything</strong><br/>
           All refund requests and absentee notifications must be sent to hello@shinydogproductions.com to be honored. No other forms of communication will be accepted. (i.e. Telegram, Text or Verbal)</p>
@@ -265,81 +277,36 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
 
           <p>I agree not to rely upon the representations of anyone else in making such judgments. I further agree to treat respectfully and avoid damage to any equipment or facilities provided to me for use. I will clean any equipment or facilities and the surrounding area after the use of any fluids, refuse, or my own private property. I understand that I will be invoiced for any damage or excessive cleaning that I have caused.</p>
 
-          <p>I understand that COG Weekend is a private event open only to those who have been approved by Shiny Dog Productions. I understand only COG Weekend attendees and staff, CCBC staff, and contracted security may enter the area from the gate at 14 to the north exit of the Nature Walk. I agree to abide by and follow all the posted safety and use instructions. I further understand that Shiny Dog Productions and the premises owner are not responsible for any lost, damaged or stolen personal property.</p>
-
-          <p>As consideration for my being permitted to participate in and/or attend this event, I agree to release hold harmless and indemnify Shiny Dog Productions, CCBC, and other participants from any and all claims, including claims based upon negligence, arising out of my participation, in and/or attendance at this event or any activities associated with this event. This agreement is also binding upon my family members, heirs, and executors.</p>
+          <p>As consideration for my being permitted to participate in and/or attend this event, I agree to release hold harmless and indemnify the event organizers, venue, and other participants from any and all claims, including claims based upon negligence, arising out of my participation, in and/or attendance at this event or any activities associated with this event. This agreement is also binding upon my family members, heirs, and executors.</p>
 
           <p>In the event of any litigation, dispute, or arbitration arising out of this agreement or my participation in and/or attendance at this event, I agree that the sole venue shall be litigation in King County, Washington. Should any portion of this agreement be invalidated all remaining portions of this agreement shall remain in full force and effect.</p>
 
           <h3>Code of Conduct</h3>
           <p>Upon attending any event hosted by Shiny Dog Productions INC, you affirm your understanding of and consent to the subsequent conditions, which encompass grounds for potential removal or prohibition:</p>
 
-          <ol>
-            <li><strong>Excessive Drunkenness</strong>: Acknowledgment that excessive alcohol consumption leading to disruptive or unsafe behavior jeopardizes the safety and enjoyment of other attendees and staff.</li>
-            <li><strong>Unwanted Sexual Advances</strong>: Understanding that engaging in unwelcome sexual advances, comments, or behavior that makes other participants uncomfortable or violated is strictly prohibited.</li>
-            <li><strong>Failure to Respect Consent</strong>: Recognition that personal boundaries, consent, and the right to revoke consent at any time must be upheld at all times.</li>
-            <li><strong>Do not interrupt a scene in progress</strong> - do not engage the players in the scene, physically or verbally intrude, or watch from within 3 feet of the act. If a scene concerns you, SAY SOMETHING TO STAFF, do not intervene personally</li>
-            <li><strong>COG Weekend Private Play Spaces have a mandatory Dress Code</strong>. You will be asked to leave and return in more complete gear if arriving with too much skin showing or a lack of scene appropriate attire. Street clothes will not be admitted</li>
-            <li><strong>You are expected to clean up after your scene</strong>. You must sanitize any equipment you use. Any fluids (biological or otherwise) cleaned. Your gear and toys returned to your room</li>
-            <li><strong>All photos or videos you will take will be for non-commercial personal use</strong>. I will ask prior to taking photos or videos of others. Those with a Blue Wristband do not wish to have photos taken of themselves.</li>
-            <li><strong>Destructive Behavior to Venue</strong>: Agreement that actions resulting in damage, defacement, or destruction of the event venue's property are not tolerated.</li>
-            <li><strong>Destructive Behavior to Self</strong>: Acknowledgment of the prohibition against actions that pose harm to oneself or others, including behaviors leading to injury or self-endangerment.</li>
-            <li><strong>Destructive Behavior to Other Attendees or Their Belongings</strong>: Understanding that causing harm to other participants, their personal property, or belongings is strictly prohibited.</li>
-            <li><strong>Excessive Noise</strong>: Acknowledgment of the responsibility to avoid creating excessive noise that disrupts the event environment or neighboring areas.</li>
-            <li><strong>Disrespecting Staff</strong>: Understanding that displaying disrespectful behavior or language towards event staff, volunteers, or organizers is not acceptable.</li>
-            <li><strong>Not Respecting Play Space Etiquette</strong>: Agreement to adhere to established guidelines and rules for respectful behavior within designated play spaces.</li>
-            <li><strong>Substances</strong>: Acknowledgment that possession, use, or distribution of illegal substances during the event is strictly prohibited.</li>
-          </ol>
-
-          <h3>Cancellation & Refund Policy</h3>
           <ul>
-            <li><strong>Refund Deadlines</strong>
-              <ul>
-                <li>Refund requests after purchase will be honored at 75% & less processing fees.</li>
-                <li>Refunds after September 1st, 2025 (Midnight PST) will not be available.</li>
-                <li>Any refunds will be less processing fees.</li>
-                <li>Merchandise sales are final.</li>
-              </ul>
-            </li>
-            <li><strong>Event Cancellation/Rescheduling</strong>: Shiny Dog Productions INC. hereon "COG Weekend" reserves the right to cancel or reschedule an event due to Act of God, domestic or international security concern, epidemic or pandemic (Defined by local government, CDC and/or WHO), venue and/or sub-supplier Force Majeure, low attendance and/or other circumstances which would make the event non-viable defined by COG Weekend.</li>
-            <li><strong>If we have to move COG, we'll try to move your room too</strong>: COG Weekend reserves the right to reschedule an event to any later date deemed viable and safe. In the event of a rescheduling, COG Weekend will act in good faith to schedule new dates with our venue that meets the needs of both COG Weekend and all ticket holders; hereon "You". COG Weekend will not attempt to collect any additional charges from You for admission. COG Weekend will attempt to work with our venue to move existing room reservations to the new date. No guarantee is given that a room reservation rescheduling will incur no additional cost to You nor that the same room will be assigned to You.</li>
-            <li><strong>Please don't ghost us</strong>: Should You decide not to attend COG Weekend for any reason after January 2nd (pending a rescheduling or cancellation), you will not be considered for attendance the following iteration of the event. If You notify COG Weekend between September 2nd and 10 days of the event of your absence, we will wave this clause.</li>
-            <li><strong>Refunds will be performed via our payment processor</strong></li>
-            <li><strong>We'll refund as much as possible if we cancel</strong>: In the event that COG Weekend is canceled, COG Weekend will offer You a refund of the purchased ticket price less processing fees. COG Weekend will attempt to negotiate with our venue to avoid cancellation fees for You, but no guarantee is ensured.</li>
-            <li><strong>Travel is on you</strong>: COG Weekend is not responsible for any travel-related charges you may incur. This includes circumstances where rescheduling or cancellation has occurred. COG Weekend reserves the right to change its Cancellation Policy at any time without notice. COG Weekend also reserves the right to supersede its Cancellation Policy in response to unseen circumstances in a good faith effort to protect both the ticket holders and the continued existence of COG Weekend.</li>
+            <li>Excessive drunkenness or disruptive behaviour</li>
+            <li>Unwanted sexual advances</li>
+            <li>Failure to respect consent</li>
+            <li>Do not interrupt a scene in progress</li>
+            <li>Mandatory dress code in private play spaces</li>
+            <li>Clean up after your scene</li>
+            <li>Photos and videos for personal, non-commercial use only; ask consent first</li>
+            <li>Destructive behaviour to venue, self, or other attendees</li>
+            <li>Excessive noise</li>
+            <li>Disrespecting staff or volunteers</li>
+            <li>Not respecting play space etiquette</li>
+            <li>Possession, use, or distribution of illegal substances</li>
           </ul>
 
-          <h3>Rooms</h3>
-          <ul>
-            <li>If you selected a room the hotel will reach out after registration is complete.</li>
-            <li>Please DO NOT call the resort. They will call you. Please sit tight.</li>
-            <li>If you have a ticket for a room, it is blocked for you.</li>
-            <li>If the resort has not called you after two weeks of ticket booking, please email hello@shinydogproductions.com</li>
-          </ul>
-
-          <p><strong>Minimum Level Hotel Per Room for Weekend Period (Th-Sat Nights)</strong></p>
-          <ul>
-            <li>King Rooms - Minimum Two (2) Attendees / Maximum Three (3) Attendees</li>
-            <li>2x Queen Rooms - Minimum Four (4) Attendees / Maximum Four (4) Attendees</li>
-            <li>RV+ - Minimum One (1) Attendees / Maximum Two (2) Attendees</li>
-          </ul>
-
-          <p>If I'm a room lead/holder, I understand that will do my best to fill the room to the minimum level on the weekends. This does not apply Monday-Wens.</p>
-
-          <h3>Communication</h3>
-          <p>Our primary form of communication is email (formally) & our Telegram group (informally).</p>
-          <p>All attendees must join the 2025 Telegram group via the link in the Waiver approval email.</p>
-
-          <h3>I, the undersigned, have;</h3>
+          <h3>I, the undersigned, have:</h3>
           <ul>
             <li>Carefully read this document, fully understand its content, and agree to be bound by the terms.</li>
             <li>My signature below is my true legal name.</li>
             <li>Understand that upon check-in I must present a government-issued photo ID that matches the waiver and registration information or be denied entrance.</li>
-            <li>Understand that COG is an event for men in gear and will be expected to participate in wearing gear during the event weekend.</li>
-            <li>The COG playspace and scheduled events require a majority coverage of fetish gear and admittance to events and playspace will be denied if I am not in gear. (no only jockstraps, etc.) Basically, if you plan to wear just a jock and harness, COG Weekend is not for you.</li>
           </ul>
 
-          <p>Questions - hello@shinydogproductions.com</p>
+          <p>Questions - hello@shinydogproductions.com</p>`}
         </div>
       </div>
 
@@ -353,15 +320,15 @@ function createWaiverHTMLTemplate(data: WaiverPDFData): string {
         </div>
         
         <div class="signature-details">
-          <p><strong>Signed by:</strong> ${data.fullName}</p>
-          <p><strong>Date:</strong> ${data.signedAt}</p>
-          <p><strong>IP Address:</strong> ${data.ipAddress || 'Not recorded'}</p>
-          <p><strong>Waiver Version:</strong> ${data.waiverVersion}</p>
+          <p><strong>Signed by:</strong> ${escapeHtml(data.fullName)}</p>
+          <p><strong>Date:</strong> ${escapeHtml(data.signedAt)}</p>
+          <p><strong>IP Address:</strong> ${escapeHtml(data.ipAddress || 'Not recorded')}</p>
+          <p><strong>Waiver Version:</strong> ${escapeHtml(data.waiverVersion)}</p>
         </div>
       </div>
 
       <div class="footer">
-        <p>This document was electronically generated and signed on ${data.signedAt}</p>
+        <p>This document was electronically generated and signed on ${escapeHtml(data.signedAt)}</p>
         <p>Shiny Dog Productions INC - Event Waiver System</p>
         <p>Document ID: ${generateDocumentId()}</p>
       </div>
@@ -470,37 +437,8 @@ async function uploadPDFToStorage(pdfBuffer: Buffer, data: WaiverPDFData, supaba
   }
 
 
-  // Try to get a public URL first, then fall back to signed URL
-  
-  try {
-    // Get the public URL (this should work immediately after upload)
-    const { data: publicUrlData } = supabase.storage
-      .from('waiver-documents')
-      .getPublicUrl(uploadData.path);
-    
-    if (publicUrlData?.publicUrl) {
-      return publicUrlData.publicUrl;
-    }
-  } catch (publicUrlError) {
-    console.warn('Public URL generation failed, trying signed URL:', publicUrlError);
-  }
-
-  // Fall back to signed URL if public URL fails
-  const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-    .from('waiver-documents')
-    .createSignedUrl(uploadData.path, 24 * 60 * 60); // 24 hours expiry
-
-  if (signedUrlError) {
-    console.error('Signed URL generation error:', signedUrlError);
-    throw new Error(`Failed to generate signed URL for PDF: ${signedUrlError.message}`);
-  }
-
-  if (!signedUrlData?.signedUrl) {
-    console.error('No signed URL data returned:', signedUrlData);
-    throw new Error('Failed to generate signed URL for PDF: No data returned');
-  }
-
-  return signedUrlData.signedUrl;
+  // Store the storage path — signed URLs are generated at display time
+  return uploadData.path;
 }
 
 /**

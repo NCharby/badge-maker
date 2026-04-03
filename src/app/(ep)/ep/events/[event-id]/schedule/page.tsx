@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import ScheduleManageClient from './ScheduleManageClient'
@@ -11,20 +11,18 @@ export default async function EpSchedulePage({
 }) {
   const { 'event-id': eventId } = await params
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return null
 
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, title')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
 
   if (!event) notFound()
 
-  const { data: activities } = await supabase
+  const { data: activities } = await admin
     .from('schedule_activities')
     .select('id, name, date_time, duration_minutes, description, volunteers_requested, volunteer_count, volunteer_shift_duration_minutes, volunteer_shift_date_time')
     .eq('event_id', eventId)

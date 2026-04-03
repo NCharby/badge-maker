@@ -6,6 +6,7 @@ import {
   epReserveRoom, epUnreserveRoom,
   epBlockBed, epUnblockBed,
   epAssignAttendee, epRemoveAttendee,
+  epLockRoom, epUnlockRoom,
   type EpAssignWarning,
 } from './actions'
 
@@ -17,6 +18,8 @@ export interface EpRoomOccupant {
   room_status: string
   placed_via_code: boolean
   is_room_lead: boolean
+  user_locked: boolean
+  room_lead_locked: boolean
 }
 
 export interface EpRoomCard {
@@ -116,6 +119,16 @@ function RoomManageCard({
 
   function handleUnblockBed(bedNum: number) {
     doAction(() => epUnblockBed(eventId, room.id, bedNum))
+  }
+
+  const allOccupantsLocked = room.occupants.length > 0 && room.occupants.every(o => o.room_lead_locked)
+
+  function handleLockRoom() {
+    doAction(() => epLockRoom(eventId, room.id))
+  }
+
+  function handleUnlockRoom() {
+    doAction(() => epUnlockRoom(eventId, room.id))
   }
 
   function handleAssignSubmit() {
@@ -352,10 +365,16 @@ function RoomManageCard({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
               {room.occupants.map(o => (
                 <div key={o.user_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                  <span style={{ fontSize: '13px', color: 'var(--sd-text)' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--sd-text)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     {o.is_room_lead ? '★ ' : ''}{o.display_name}
-                    {o.placed_via_code && <span style={{ fontSize: '11px', color: 'var(--sd-muted)', marginLeft: '6px' }}>via code</span>}
-                    <span style={{ fontSize: '11px', color: 'var(--sd-muted)', marginLeft: '6px' }}>{o.room_status}</span>
+                    {o.placed_via_code && <span style={{ fontSize: '11px', color: 'var(--sd-muted)' }}>via code</span>}
+                    {o.room_lead_locked ? (
+                      <span style={{ fontSize: '10px', fontWeight: 600, padding: '1px 6px', borderRadius: '99px', background: 'var(--sd-green-light)', color: 'var(--sd-green-dark)' }}>Locked</span>
+                    ) : o.user_locked ? (
+                      <span style={{ fontSize: '10px', fontWeight: 600, padding: '1px 6px', borderRadius: '99px', background: 'var(--sd-blue-light)', color: '#1e40af' }}>Self-locked</span>
+                    ) : (
+                      <span style={{ fontSize: '10px', fontWeight: 600, padding: '1px 6px', borderRadius: '99px', background: '#F3F4F6', color: '#6B7280' }}>Unlocked</span>
+                    )}
                   </span>
                   <button
                     onClick={() => handleRemoveOccupant(o.user_id)}
@@ -366,6 +385,29 @@ function RoomManageCard({
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Lock / Unlock room occupancy */}
+          {room.occupants.length > 0 && (
+            <div style={{ marginBottom: '10px', paddingTop: '8px', borderTop: '1px solid var(--sd-border)' }}>
+              {allOccupantsLocked ? (
+                <button
+                  onClick={handleUnlockRoom}
+                  disabled={isPending}
+                  style={{ padding: '5px 14px', borderRadius: '6px', border: '1px solid var(--sd-border)', background: '#fff', color: 'var(--sd-text)', fontSize: '12px', fontWeight: 600, cursor: isPending ? 'not-allowed' : 'pointer' }}
+                >
+                  Unlock All Occupants
+                </button>
+              ) : (
+                <button
+                  onClick={handleLockRoom}
+                  disabled={isPending}
+                  style={{ padding: '5px 14px', borderRadius: '6px', border: 'none', background: isPending ? 'var(--sd-muted)' : 'var(--sd-purple)', color: '#fff', fontSize: '12px', fontWeight: 600, cursor: isPending ? 'not-allowed' : 'pointer' }}
+                >
+                  Lock All Occupants
+                </button>
+              )}
             </div>
           )}
 

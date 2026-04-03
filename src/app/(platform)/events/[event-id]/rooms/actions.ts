@@ -56,6 +56,16 @@ export type AttendeeRoomState = {
   ticket_status: string
   ticket_type_name: string | null
   roommate_code: string | null
+  user_locked: boolean
+  room_lead_locked: boolean
+}
+
+export type RoomLockRequest = {
+  id: string
+  room_id: string
+  requested_by: string
+  status: string
+  created_at: string
 }
 
 // ── 1. selectRoom ─────────────────────────────────────────────────────────────
@@ -95,9 +105,10 @@ export async function selectRoom(
     return { error: 'This room already has a Room Lead.' }
   }
 
+  // Room Leads auto-lock to their room on selection
   const { error: updateError } = await supabase
     .from('event_attendees')
-    .update({ room_id: roomId, room_status: 'Selected' })
+    .update({ room_id: roomId, room_status: 'Selected', user_locked: true })
     .eq('event_id', eventId)
     .eq('user_id', user.id)
 
@@ -916,6 +927,7 @@ export async function releaseRoom(
   roomId: string,
 ): Promise<{ error?: string } | void> {
   const supabase = await createClient()
+  const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated.' }
 
@@ -932,12 +944,303 @@ export async function releaseRoom(
 
   const { error: updateError } = await supabase
     .from('event_attendees')
-    .update({ room_id: null, room_status: 'Not Selected', is_room_lead: false })
+    .update({ room_id: null, room_status: 'Not Selected', is_room_lead: false, user_locked: false, room_lead_locked: false })
     .eq('event_id', eventId)
     .eq('user_id', user.id)
 
   if (updateError) return { error: 'Failed to release room. Please try again.' }
 
+  // Cancel any pending lock requests for this user in this room
+  await admin
+    .from('room_lock_requests')
+    .update({ status: 'declined', resolved_at: new Date().toISOString() })
+    .eq('event_id', eventId)
+    .eq('room_id', roomId)
+    .eq('target_user_id', user.id)
+    .eq('status', 'pending')
+
   revalidatePath(`/events/${eventId}/rooms`)
   revalidatePath(`/events/${eventId}/rooms/${roomId}`)
+}
+
+// ── User self-lock ──────────────────────────────────────────────────────────
+
+export async function userSelfLock(
+  eventId: string,
+): Promise<{ error?: string } | void> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  const { data: attendee } = await supabase
+    .from('event_attendees')
+    .select('room_id, room_status, lock_status, user_locked')
+    .eq('event_id', eventId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!attendee) return { error: 'No attendee record found.' }
+  if (!attendee.room_id) return { error: 'You have no room selected.' }
+  if (attendee.room_status !== 'Selected') return { error: 'Room cannot be locked in its current status.' }
+  if (attendee.lock_status === 'Locked') return { error: 'Your attendance is already locked by the Event Promoter.' }
+  if (attendee.user_locked) return { error: 'You are already locked to your room.' }
+
+  await supabase
+    .from('event_attendees')
+    .update({ user_locked: true })
+    .eq('event_id', eventId)
+    .eq('user_id', user.id)
+
+  revalidatePath(`/events/${eventId}/rooms`)
+  revalidatePath(`/events/${eventId}`)
+}
+
+// ── Room Lead send lock request ─────────────────────────────────────────────
+
+export async function roomLeadSendLockRequest(
+  eventId: string,
+): Promise<{ error?: string; sent?: number } | void> {
+  const supabase = await createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  const { data: attendee } = await supabase
+    .from('event_attendees')
+    .select('room_id, is_room_lead, lock_status')
+    .eq('event_id', eventId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!attendee?.is_room_lead) return { error: 'Only Room Leads can send lock requests.' }
+  if (!attendee.room_id) return { error: 'You have no room selected.' }
+  if (attendee.lock_status === 'Locked') return { error: 'Your attendance is already locked.' }
+
+  // Check EP config
+  const { data: event } = await admin
+    .from('platform_events')
+    .select('title, module_config')
+    .eq('id', eventId)
+    .single()
+  const moduleConfig = (event?.module_config ?? {}) as Record<string, { room_lead_can_lock?: boolean; room_lead_can_lock_with_open_spots?: boolean } | undefined>
+  const roomCfg = moduleConfig.room_selection ?? moduleConfig.venue
+  if (!roomCfg?.room_lead_can_lock) return { error: 'Room Lead locking is not enabled for this event.' }
+
+  // Check open spots if required
+  if (!roomCfg.room_lead_can_lock_with_open_spots) {
+    const { data: room } = await admin
+      .from('rooms')
+      .select('bed_spot_count')
+      .eq('id', attendee.room_id)
+      .single()
+    const { count: bedBlocks } = await admin.from('bed_blocks')
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId).eq('room_id', attendee.room_id)
+    const { count: occupants } = await admin.from('event_attendees')
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId).eq('room_id', attendee.room_id)
+      .in('room_status', ['Selected', 'Locked In', 'Verified'])
+    const effectiveMax = (room?.bed_spot_count ?? 0) - (bedBlocks ?? 0)
+    if ((occupants ?? 0) < effectiveMax) {
+      return { error: 'Cannot lock the room while there are open bed spots.' }
+    }
+  }
+
+  // Find occupants who are not yet room_lead_locked
+  const { data: unlocked } = await admin
+    .from('event_attendees')
+    .select('user_id')
+    .eq('event_id', eventId)
+    .eq('room_id', attendee.room_id)
+    .eq('room_lead_locked', false)
+    .neq('user_id', user.id)
+    .in('room_status', ['Selected', 'Locked In', 'Verified'])
+
+  if (!unlocked || unlocked.length === 0) return { error: 'All occupants are already locked.' }
+
+  // Mark RL as user_locked (they already are from selectRoom, but ensure it)
+  // room_lead_locked is NOT set here — it is set when all occupants accept
+  await supabase
+    .from('event_attendees')
+    .update({ user_locked: true })
+    .eq('event_id', eventId)
+    .eq('user_id', user.id)
+
+  let sentCount = 0
+  for (const occ of unlocked) {
+    // Check for existing pending request
+    const { data: existing } = await admin
+      .from('room_lock_requests')
+      .select('id')
+      .eq('event_id', eventId)
+      .eq('room_id', attendee.room_id)
+      .eq('target_user_id', occ.user_id)
+      .eq('status', 'pending')
+      .maybeSingle()
+    if (existing) continue
+
+    await admin.from('room_lock_requests').insert({
+      event_id: eventId,
+      room_id: attendee.room_id,
+      requested_by: user.id,
+      target_user_id: occ.user_id,
+    })
+
+    void createInPlatformNotification({
+      userId: occ.user_id,
+      type: 'room_lock_request',
+      title: 'Room Lock Request',
+      body: `Your Room Lead has requested that you lock in to your room for ${event?.title ?? 'the event'}. Accept to confirm or decline to leave the room.`,
+      actionUrl: `/events/${eventId}/rooms`,
+      actionLabel: 'Review Request',
+      eventId,
+    })
+    sentCount++
+  }
+
+  revalidatePath(`/events/${eventId}/rooms`)
+  return { sent: sentCount }
+}
+
+// ── Accept lock request ─────────────────────────────────────────────────────
+
+export async function acceptLockRequest(
+  requestId: string,
+  eventId: string,
+): Promise<{ error?: string } | void> {
+  const supabase = await createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  const { data: req } = await supabase
+    .from('room_lock_requests')
+    .select('id, room_id, requested_by, target_user_id, status')
+    .eq('id', requestId)
+    .single()
+
+  if (!req) return { error: 'Lock request not found.' }
+  if (req.target_user_id !== user.id) return { error: 'This request is not for you.' }
+  if (req.status !== 'pending') return { error: 'This request has already been resolved.' }
+
+  // Update request
+  await supabase
+    .from('room_lock_requests')
+    .update({ status: 'accepted', resolved_at: new Date().toISOString() })
+    .eq('id', requestId)
+
+  // Lock the user
+  await supabase
+    .from('event_attendees')
+    .update({ user_locked: true, room_lead_locked: true })
+    .eq('event_id', eventId)
+    .eq('user_id', user.id)
+
+  // Notify Room Lead
+  const { data: event } = await admin
+    .from('platform_events')
+    .select('title')
+    .eq('id', eventId)
+    .single()
+  const { data: profile } = await admin
+    .from('platform_users')
+    .select('preferred_scene_name, email')
+    .eq('id', user.id)
+    .single()
+  const displayName = profile?.preferred_scene_name?.trim() || profile?.email?.split('@')[0] || 'A roommate'
+
+  void createInPlatformNotification({
+    userId: req.requested_by,
+    type: 'room_lock_request_accepted',
+    title: 'Lock Request Accepted',
+    body: `${displayName} has accepted your lock request for ${event?.title ?? 'the event'}.`,
+    actionUrl: `/events/${eventId}/rooms/${req.room_id}`,
+    actionLabel: 'View Room',
+    eventId,
+  })
+
+  // Check if all non-RL occupants in this room are now room_lead_locked.
+  // If so, also lock the Room Lead to complete the room lock.
+  const { data: remaining } = await admin
+    .from('event_attendees')
+    .select('user_id')
+    .eq('event_id', eventId)
+    .eq('room_id', req.room_id)
+    .eq('room_lead_locked', false)
+    .in('room_status', ['Selected', 'Locked In', 'Verified'])
+
+  if (!remaining || remaining.length === 0) {
+    // All occupants (including RL) are locked — nothing to do
+  } else if (remaining.length === 1 && remaining[0].user_id === req.requested_by) {
+    // Only the RL remains unlocked — lock them now
+    await admin
+      .from('event_attendees')
+      .update({ room_lead_locked: true })
+      .eq('event_id', eventId)
+      .eq('user_id', req.requested_by)
+  }
+
+  revalidatePath(`/events/${eventId}/rooms`)
+  revalidatePath(`/events/${eventId}`)
+}
+
+// ── Decline lock request ────────────────────────────────────────────────────
+
+export async function declineLockRequest(
+  requestId: string,
+  eventId: string,
+): Promise<{ error?: string } | void> {
+  const supabase = await createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated.' }
+
+  const { data: req } = await supabase
+    .from('room_lock_requests')
+    .select('id, room_id, requested_by, target_user_id, status')
+    .eq('id', requestId)
+    .single()
+
+  if (!req) return { error: 'Lock request not found.' }
+  if (req.target_user_id !== user.id) return { error: 'This request is not for you.' }
+  if (req.status !== 'pending') return { error: 'This request has already been resolved.' }
+
+  // Update request
+  await supabase
+    .from('room_lock_requests')
+    .update({ status: 'declined', resolved_at: new Date().toISOString() })
+    .eq('id', requestId)
+
+  // Remove user from room
+  await supabase
+    .from('event_attendees')
+    .update({ room_id: null, room_status: 'Not Selected', user_locked: false, room_lead_locked: false })
+    .eq('event_id', eventId)
+    .eq('user_id', user.id)
+
+  // Notify Room Lead
+  const { data: event } = await admin
+    .from('platform_events')
+    .select('title')
+    .eq('id', eventId)
+    .single()
+  const { data: profile } = await admin
+    .from('platform_users')
+    .select('preferred_scene_name, email')
+    .eq('id', user.id)
+    .single()
+  const displayName = profile?.preferred_scene_name?.trim() || profile?.email?.split('@')[0] || 'A roommate'
+
+  void createInPlatformNotification({
+    userId: req.requested_by,
+    type: 'room_lock_request_declined',
+    title: 'Lock Request Declined',
+    body: `${displayName} has declined your lock request and left the room for ${event?.title ?? 'the event'}.`,
+    actionUrl: `/events/${eventId}/rooms/${req.room_id}`,
+    actionLabel: 'View Room',
+    eventId,
+  })
+
+  revalidatePath(`/events/${eventId}/rooms`)
+  revalidatePath(`/events/${eventId}`)
 }

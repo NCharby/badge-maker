@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 import Link from 'next/link'
 import NotificationsClient from './NotificationsClient'
 
@@ -20,16 +20,14 @@ export default async function EventNotificationsPage({
   params: Promise<{ 'event-id': string }>
 }) {
   const { 'event-id': eventId } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return null
 
   const [{ data: event }, botUsername] = await Promise.all([
-    supabase
+    admin
       .from('platform_events')
       .select('id, title, telegram_group, telegram_chat_link, telegram_notification_config, room_lock_in_date')
       .eq('id', eventId)
-      .eq('owner_id', user.id)
       .single(),
     getBotUsername(),
   ])

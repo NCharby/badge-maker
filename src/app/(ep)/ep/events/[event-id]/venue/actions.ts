@@ -1,23 +1,22 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 
 export async function updateEventVenue(
   eventId: string,
   venueId: string | null,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
+  const { authorized, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin) return { error: 'Access denied.' }
 
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, module_config')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
-  if (!event) return { error: 'Access denied.' }
+  if (!event) return { error: 'Event not found.' }
 
   // Sync module_config: if venueId set, ensure venue module present; if cleared, remove it
   const mc = (event.module_config ?? {}) as Record<string, unknown>
@@ -29,7 +28,7 @@ export async function updateEventVenue(
     delete mc.venue
   }
 
-  const { error } = await supabase
+  const { error } = await admin
     .from('platform_events')
     .update({ venue_id: venueId, module_config: mc })
     .eq('id', eventId)
@@ -41,28 +40,10 @@ export async function updateEventVenue(
 }
 
 // ─── EP guard helper ──────────────────────────────────────────────────────────
-// Returns the user ID if the caller owns the event (Block D) or is system_admin
-// (Block B). Returns null if access is denied.
 async function epGuard(eventId: string): Promise<string | null> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const { data: pu } = await supabase
-    .from('platform_users')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-  if (!pu) return null
-  if (pu.role === 'system_admin') return user.id
-
-  const { data: event } = await supabase
-    .from('platform_events')
-    .select('id')
-    .eq('id', eventId)
-    .eq('owner_id', user.id)
-    .single()
-  return event ? user.id : null
+  const { authorized, user } = await epEventGuard(eventId)
+  if (!authorized || !user) return null
+  return user.id
 }
 
 // ─── Room blocking ────────────────────────────────────────────────────────────
@@ -325,6 +306,52 @@ export async function epRemoveAttendee(
     .eq('event_id', eventId)
     .eq('user_id', userId)
     .eq('room_id', roomId)
+  if (error) return { error: error.message }
+
+  revalidatePath(`/ep/events/${eventId}/venue`)
+  revalidatePath(`/ep/events/${eventId}/rooms`)
+  return { success: true }
+}
+
+// ─── EP room lock / unlock ────────────────────────────────────────────────────
+
+/** EP locks all occupants of a room (sets room_lead_locked + user_locked on every occupant). */
+export async function epLockRoom(
+  eventId: string,
+  roomId: string,
+): Promise<{ success: true } | { error: string }> {
+  const epUserId = await epGuard(eventId)
+  if (!epUserId) return { error: 'Access denied.' }
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('event_attendees')
+    .update({ user_locked: true, room_lead_locked: true })
+    .eq('event_id', eventId)
+    .eq('room_id', roomId)
+    .in('room_status', ['Selected', 'Locked In', 'Verified'])
+  if (error) return { error: error.message }
+
+  revalidatePath(`/ep/events/${eventId}/venue`)
+  revalidatePath(`/ep/events/${eventId}/rooms`)
+  return { success: true }
+}
+
+/** EP unlocks all occupants of a room (clears room_lead_locked + user_locked). */
+export async function epUnlockRoom(
+  eventId: string,
+  roomId: string,
+): Promise<{ success: true } | { error: string }> {
+  const epUserId = await epGuard(eventId)
+  if (!epUserId) return { error: 'Access denied.' }
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('event_attendees')
+    .update({ user_locked: false, room_lead_locked: false })
+    .eq('event_id', eventId)
+    .eq('room_id', roomId)
+    .in('room_status', ['Selected', 'Locked In', 'Verified'])
   if (error) return { error: error.message }
 
   revalidatePath(`/ep/events/${eventId}/venue`)

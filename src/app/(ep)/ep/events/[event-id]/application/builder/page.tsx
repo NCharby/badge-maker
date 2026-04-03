@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { epEventGuard } from '@/lib/auth/ep-guard'
 import Link from 'next/link'
 import FormBuilderClient from './FormBuilderClient'
 
@@ -8,16 +8,13 @@ export default async function FormBuilderPage({
   params: Promise<{ 'event-id': string }>
 }) {
   const { 'event-id': eventId } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  const { authorized, user, admin } = await epEventGuard(eventId)
+  if (!authorized || !admin || !user) return null
 
-  // Verify EP owns this event
-  const { data: event } = await supabase
+  const { data: event } = await admin
     .from('platform_events')
     .select('id, title')
     .eq('id', eventId)
-    .eq('owner_id', user.id)
     .single()
 
   if (!event) {
@@ -30,14 +27,14 @@ export default async function FormBuilderPage({
   }
 
   // Fetch existing form (if any)
-  const { data: existingForm } = await supabase
+  const { data: existingForm } = await admin
     .from('application_forms')
     .select('id, title, fields, source_form_id')
     .eq('event_id', eventId)
     .single()
 
   // Fetch past forms from other events owned by this EP (for copy-on-assign)
-  const { data: epEvents } = await supabase
+  const { data: epEvents } = await admin
     .from('platform_events')
     .select('id, title')
     .eq('owner_id', user.id)
@@ -46,7 +43,7 @@ export default async function FormBuilderPage({
   const pastForms: { id: string; eventTitle: string; title: string; fields: unknown[] }[] = []
   if (epEvents && epEvents.length > 0) {
     const epEventIds = epEvents.map(e => e.id)
-    const { data: forms } = await supabase
+    const { data: forms } = await admin
       .from('application_forms')
       .select('id, event_id, title, fields')
       .in('event_id', epEventIds)
