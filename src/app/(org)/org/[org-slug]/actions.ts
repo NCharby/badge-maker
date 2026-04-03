@@ -152,12 +152,26 @@ export async function changeOrgMemberLevel(
   const auth = await requireOrgAccess(orgSlug)
   if ('error' in auth) return { error: auth.error }
 
-  // EPs can only set module_lead; OLs can set anything
-  if (auth.accessLevel === 'event_promoter' && newLevel !== 'module_lead') {
-    return { error: 'Event Promoters can only assign Module Lead access.' }
+  // EPs can only set module_lead or user; OLs can set anything
+  if (auth.accessLevel === 'event_promoter' && newLevel !== 'module_lead' && newLevel !== 'user') {
+    return { error: 'Event Promoters can only assign Module Lead or Member access.' }
   }
 
   const admin = createAdminClient()
+
+  // EPs cannot modify OL or EP members
+  if (auth.accessLevel === 'event_promoter') {
+    const { data: target } = await admin
+      .from('organization_members')
+      .select('access_level')
+      .eq('id', memberId)
+      .eq('organization_id', auth.orgId)
+      .single()
+    if (target && (target.access_level === 'organization_lead' || target.access_level === 'event_promoter')) {
+      return { error: 'You cannot modify the access level of Organization Leads or Event Promoters.' }
+    }
+  }
+
   const { error } = await admin
     .from('organization_members')
     .update({ access_level: newLevel })

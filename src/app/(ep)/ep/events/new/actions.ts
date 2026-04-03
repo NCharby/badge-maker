@@ -1,7 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { checkOrgAccess } from '@/lib/auth/event-access'
+import { applyTemplate } from '@/lib/templates/apply'
+import type { EventTemplate } from '@/types/platform'
 
 interface ModuleInput {
   venue: boolean
@@ -14,26 +17,33 @@ interface ModuleInput {
 }
 
 export async function createEvent(data: {
+  organization_id: string
   title: string
   description: string
   start_date: string
   end_date: string
   venue_id?: string
   modules: ModuleInput
+  template_id?: string
 }): Promise<{ success: true; eventId: string } | { error: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated' }
 
-  // Verify EP or SA role
-  const { data: platformUser } = await supabase
-    .from('platform_users')
-    .select('role')
-    .eq('id', user.id)
+  if (!data.organization_id) return { error: 'Organization is required.' }
+
+  // Verify user has OL or EP access to this org (or is SA)
+  const orgAccess = await checkOrgAccess(user.id, data.organization_id)
+  if (!orgAccess.authorized) return { error: 'Access denied.' }
+
+  // Check org is not archived
+  const admin = createAdminClient()
+  const { data: org } = await admin
+    .from('organizations')
+    .select('archived')
+    .eq('id', data.organization_id)
     .single()
-  if (!platformUser || !['event_promoter', 'system_admin'].includes(platformUser.role)) {
-    return { error: 'Access denied.' }
-  }
+  if (org?.archived) return { error: 'This organization is archived. No new events can be created.' }
 
   const title = data.title.trim()
   if (!title) return { error: 'Event title is required.' }
@@ -50,7 +60,7 @@ export async function createEvent(data: {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 60)
-  const { count: slugCount } = await supabase
+  const { count: slugCount } = await admin
     .from('platform_events')
     .select('*', { count: 'exact', head: true })
     .eq('slug', baseSlug)
@@ -85,7 +95,7 @@ export async function createEvent(data: {
     moduleConfig.badge = { enabled: true, required: false, opens_at_status: null, closes_at_status: null }
   }
 
-  const { data: event, error } = await supabase
+  const { data: event, error } = await admin
     .from('platform_events')
     .insert({
       slug,
@@ -95,6 +105,7 @@ export async function createEvent(data: {
       end_date: data.end_date,
       venue_id: data.venue_id || null,
       owner_id: user.id,
+      organization_id: data.organization_id,
       status: 'Draft',
       module_config: moduleConfig,
       workflow_statuses: [],
@@ -103,6 +114,24 @@ export async function createEvent(data: {
     .single()
 
   if (error || !event) return { error: error?.message ?? 'Failed to create event.' }
+
+  // Apply template if selected
+  if (data.template_id) {
+    const { data: template, error: tplErr } = await admin
+      .from('event_templates')
+      .select('*')
+      .eq('id', data.template_id)
+      .single()
+
+    if (!tplErr && template) {
+      try {
+        await applyTemplate(admin, event.id, template as unknown as EventTemplate)
+      } catch {
+        // Template apply failed — event still exists in Draft (partial state is acceptable)
+        console.error('Template apply failed for event', event.id)
+      }
+    }
+  }
 
   revalidatePath('/ep/dashboard')
   return { success: true, eventId: event.id }

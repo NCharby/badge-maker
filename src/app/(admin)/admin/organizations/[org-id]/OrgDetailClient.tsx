@@ -23,9 +23,10 @@ const inputStyle: React.CSSProperties = {
 }
 
 const ACCESS_LEVELS = [
-  { value: 'organization_lead', label: 'Organization Lead', color: '#4338CA', bg: '#E0E7FF' },
+  { value: 'organization_lead', label: 'Organization Lead', color: 'var(--sd-indigo)', bg: 'var(--sd-indigo-light)' },
   { value: 'event_promoter', label: 'Event Promoter', color: 'var(--sd-purple)', bg: 'var(--sd-purple-light)' },
-  { value: 'module_lead', label: 'Module Lead', color: '#92400e', bg: 'var(--sd-amber-light)' },
+  { value: 'module_lead', label: 'Module Lead', color: 'var(--sd-amber-dark)', bg: 'var(--sd-amber-light)' },
+  { value: 'user', label: 'Member', color: 'var(--sd-gray)', bg: 'var(--sd-gray-light)' },
 ] as const
 
 type OrgData = {
@@ -93,11 +94,11 @@ export default function OrgDetailClient({
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: 'var(--sd-muted)' }}>
             <span style={{ fontFamily: 'monospace' }}>{org.slug}</span>
             <span>&middot;</span>
-            <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, background: '#E0E7FF', color: '#4338CA' }}>
+            <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, background: 'var(--sd-indigo-light)', color: 'var(--sd-indigo)' }}>
               {org.tierName}
             </span>
             {org.archived && (
-              <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, background: '#F3F4F6', color: '#6B7280' }}>
+              <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, background: 'var(--sd-gray-light)', color: 'var(--sd-gray)' }}>
                 Archived
               </span>
             )}
@@ -114,7 +115,7 @@ export default function OrgDetailClient({
             borderRadius: '7px',
             fontSize: '13px',
             fontWeight: 500,
-            border: org.archived ? 'none' : '1px solid #FCA5A5',
+            border: org.archived ? 'none' : '1px solid var(--sd-red-border)',
             background: org.archived ? 'var(--sd-green)' : '#fff',
             color: org.archived ? '#fff' : 'var(--sd-red)',
             cursor: isPending ? 'not-allowed' : 'pointer',
@@ -126,12 +127,12 @@ export default function OrgDetailClient({
 
       {/* Status messages */}
       {actionError && (
-        <div style={{ padding: '10px 14px', borderRadius: '7px', fontSize: '13px', border: '1px solid #FCA5A5', background: 'var(--sd-red-light)', color: '#991b1b', marginBottom: '16px' }}>
+        <div style={{ padding: '10px 14px', borderRadius: '7px', fontSize: '13px', border: '1px solid var(--sd-red-border)', background: 'var(--sd-red-light)', color: 'var(--sd-red-dark)', marginBottom: '16px' }}>
           {actionError}
         </div>
       )}
       {actionSuccess && (
-        <div style={{ padding: '10px 14px', borderRadius: '7px', fontSize: '13px', border: '1px solid #6EE7B7', background: 'var(--sd-green-light)', color: 'var(--sd-green-dark)', marginBottom: '16px' }}>
+        <div style={{ padding: '10px 14px', borderRadius: '7px', fontSize: '13px', border: '1px solid var(--sd-green-border)', background: 'var(--sd-green-light)', color: 'var(--sd-green-dark)', marginBottom: '16px' }}>
           {actionSuccess}
         </div>
       )}

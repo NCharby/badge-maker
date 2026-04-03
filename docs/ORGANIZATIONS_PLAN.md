@@ -32,15 +32,17 @@ Users can create an organization during account registration (free tier). Platfo
 
 ## 3. Access Levels
 
-| Level | Create Events | Manage All Org Events | Promote to OL | Promote to EP | Promote to ML | Module-Scoped Access |
+| Level | Create Events | Manage All Org Events | Promote to OL | Promote to EP | Promote to ML/User | Module-Scoped Access |
 |---|---|---|---|---|---|---|
 | Organization Lead | Yes | Yes | Yes | Yes | Yes | Full |
-| Event Promoter | Yes | Yes | No | No | Yes | Full |
+| Event Promoter | Yes | Yes | No | No | Yes (ML and User only) | Full |
 | Module Lead | No | No | No | No | No | Only assigned modules per event (full EP-level write access within those modules) |
+| User (Member) | No | No | No | No | No | None — org association only |
 
-- **Organization Lead (OL)** is the owner of the organization. Multiple OLs per org are allowed.
-- **Event Promoter (EP)** within an org has the same functional capabilities as a standalone EP, scoped to the org's events.
+- **Organization Lead (OL)** is the owner of the organization. Multiple OLs per org are allowed. Only OLs can access Organization Settings. OLs can edit all members.
+- **Event Promoter (EP)** within an org has the same functional capabilities as a standalone EP, scoped to the org's events. EPs cannot edit OL or EP members. EPs can only change members to Module Lead or User.
 - **Module Lead (ML)** functions as an EP for their assigned modules only. Full read-write access to assigned modules; no access to unassigned modules.
+- **User (Member)** is associated to the organization but has no event management privileges. This level allows EP/OL to demote Module Leads while maintaining their org membership.
 
 ---
 
@@ -53,6 +55,41 @@ The platform role enum (`user`, `event_promoter`, `system_admin`) on `platform_u
 - **All Event Promoters belong to an organization.** There are no solo EPs post-implementation.
 - Users may belong to multiple organizations simultaneously.
 - A user's highest org access level across all their orgs determines their effective capabilities per-event.
+
+---
+
+## 4a. Active Organization Context
+
+The platform maintains an **active organization** selection per user session, persisted via an `active_org` cookie. This selection:
+
+- Is set via the **OrgSwitcher** dropdown on the **right side** of the top navigation bar (after notifications, before avatar)
+- Includes a "No Organization" option so the user can view pages as a general user
+- Informs all views: the EP Dashboard, event creation, venue management, and any other org-scoped page reads the active org from the cookie
+- Cannot be changed from any other location on the platform — the nav bar is the single source of truth for session org switching
+- The OrgSwitcher is only visible to users who are members of at least one organization
+- Users with no org memberships see no org-related UI in the nav
+
+**Default organization:** Each user may configure a default organization via `/profile/organization` (accessible from the avatar dropdown menu under "Organization"). The default org is stored as `platform_users.default_organization_id`. On login or when no cookie is set, the platform auto-selects the default org. If no default is set and the user has exactly one org, that org is auto-selected.
+
+**Resolution order for active org:**
+1. `active_org` cookie (explicit session selection from OrgSwitcher)
+2. `default_organization_id` from `platform_users` profile
+3. Auto-select if user has exactly one org
+4. `null` — "No Organization" mode
+
+**Role badge in AppNav:** The role badge on the left side of the nav shows the user's access level **for the selected organization**, not their platform role. When "No Organization" is selected, no role badge is shown (except for System Admins who always see "System Administrator"). For example, a user who is an EP in Org A but a Module Lead in Org B will see "Event Promoter" when Org A is selected and "Module Lead" when Org B is selected.
+
+**Avatar dropdown menu:** Includes "Organization" link (only for users with org memberships) that navigates to `/profile/organization` where the user can set their default org and view all their memberships with "Manage organization" links. This is the single location for org membership management — the EP Dashboard does NOT show an org list.
+
+**Page refresh on org change:** Changing the active organization triggers `window.location.reload()`, not `router.refresh()`. This ensures all server components re-execute with the new cookie value AND all client components re-initialize with fresh props (e.g., form fields, selected IDs). `router.refresh()` alone leaves client state stale, which would allow acting on a previously selected organization.
+
+**Implementation:**
+- `src/components/nav/OrgSwitcher.tsx` — client component on right side of nav, sets `active_org` cookie on change, triggers `window.location.reload()` for full page refresh (ensures all server AND client components re-initialize with new org context), includes "No Organization" option
+- `src/components/nav/AvatarMenu.tsx` — includes "Organization" link when `hasOrgs` is true
+- `src/lib/auth/org-context.ts` — `getOrgContext(userId, platformRole)` — reads org memberships + cookie + default org, returns `{ orgs, activeOrgId }`
+- `src/app/(platform)/profile/organization/` — default org configuration page with membership list
+- `platform_users.default_organization_id` — persisted default (migration `20260402000011`)
+- All four layouts (platform, EP, admin, org) call `getOrgContext` and pass results to AppNav
 
 ---
 

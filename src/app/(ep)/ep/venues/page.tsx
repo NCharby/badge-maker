@@ -1,5 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import Link from 'next/link'
+import { getOrgContext } from '@/lib/auth/org-context'
 
 export default async function VenuesPage() {
   const supabase = await createClient()
@@ -14,41 +15,33 @@ export default async function VenuesPage() {
     .eq('id', user.id)
     .single()
 
+  const { activeOrgId } = await getOrgContext(user.id, pu?.role ?? 'user')
+
   let venues: { id: string; name: string; physical_address: string; status: string }[] | null = null
 
-  if (pu?.role === 'system_admin') {
-    // Admin sees all venues
+  if (activeOrgId) {
+    // Filter by active org (works for admins and EPs)
+    const { data } = await admin
+      .from('venues')
+      .select('id, name, physical_address, status')
+      .eq('organization_id', activeOrgId)
+      .order('name', { ascending: true })
+    venues = data
+  } else if (pu?.role === 'system_admin') {
+    // Admin with no org selected sees all venues
     const { data } = await admin
       .from('venues')
       .select('id, name, physical_address, status')
       .order('name', { ascending: true })
     venues = data
   } else {
-    // EP sees venues from their orgs + own venues
-    const { data: memberships } = await admin
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .in('access_level', ['organization_lead', 'event_promoter'])
-
-    const orgIds = (memberships ?? []).map(m => m.organization_id)
-
-    if (orgIds.length > 0) {
-      const { data } = await admin
-        .from('venues')
-        .select('id, name, physical_address, status')
-        .in('organization_id', orgIds)
-        .order('name', { ascending: true })
-      venues = data
-    } else {
-      // Fallback: own venues only
-      const { data } = await supabase
-        .from('venues')
-        .select('id, name, physical_address, status')
-        .eq('owner_id', user.id)
-        .order('name', { ascending: true })
-      venues = data
-    }
+    // No org selected, non-admin — show own venues as fallback
+    const { data } = await supabase
+      .from('venues')
+      .select('id, name, physical_address, status')
+      .eq('owner_id', user.id)
+      .order('name', { ascending: true })
+    venues = data
   }
 
   const activeVenues = (venues ?? []).filter(v => v.status === 'active')

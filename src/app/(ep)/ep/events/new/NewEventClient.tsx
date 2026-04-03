@@ -26,16 +26,28 @@ const labelStyle: React.CSSProperties = {
   marginBottom: '6px',
 }
 
-interface Props {
-  venues: { id: string; name: string }[]
+interface TemplateOption {
+  id: string
+  name: string
+  description: string
+  included_groups: string[]
 }
 
-export default function NewEventClient({ venues }: Props) {
+interface Props {
+  venues: { id: string; name: string }[]
+  organizations: { id: string; name: string; slug: string }[]
+  defaultOrgId: string
+  templates: TemplateOption[]
+}
+
+export default function NewEventClient({ venues, organizations, defaultOrgId, templates }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
   const today = new Date().toISOString().split('T')[0]
 
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [organizationId, setOrganizationId] = useState(defaultOrgId)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [startDate, setStartDate] = useState('')
@@ -51,6 +63,40 @@ export default function NewEventClient({ venues }: Props) {
     badge: false,
   })
 
+  function handleTemplateChange(templateId: string) {
+    setSelectedTemplateId(templateId)
+    if (!templateId) return // "No template" selected — don't change modules
+
+    const tpl = templates.find(t => t.id === templateId)
+    if (!tpl) return
+
+    // Map template included_groups to module checkboxes
+    const groupToModule: Record<string, keyof typeof modules> = {
+      application_form: 'application',
+      waiver_template: 'waiver',
+      badge_template: 'badge',
+      schedule: 'schedule',
+      volunteering: 'volunteering',
+      basic_event_rooms: 'room_selection',
+    }
+
+    setModules(prev => {
+      const next = { ...prev }
+      // Auto-check modules that the template includes
+      for (const [group, moduleKey] of Object.entries(groupToModule)) {
+        if (tpl.included_groups.includes(group)) {
+          next[moduleKey] = true
+        }
+      }
+      // venue and room_selection mutex
+      if (next.venue && next.room_selection) {
+        // Template says rooms — prefer room_selection, disable venue
+        next.venue = false
+      }
+      return next
+    })
+  }
+
   function toggleModule(key: keyof typeof modules) {
     setModules(prev => {
       const next = { ...prev, [key]: !prev[key] }
@@ -63,6 +109,7 @@ export default function NewEventClient({ venues }: Props) {
 
   function handleSubmit() {
     setError('')
+    if (!organizationId) { setError('Please select an organization.'); return }
     if (!title.trim()) { setError('Event title is required.'); return }
     if (!startDate) { setError('Start date is required.'); return }
     if (startDate < today) { setError('Start date cannot be in the past.'); return }
@@ -72,12 +119,14 @@ export default function NewEventClient({ venues }: Props) {
 
     startTransition(async () => {
       const result = await createEvent({
+        organization_id: organizationId,
         title,
         description,
         start_date: startDate,
         end_date: endDate,
         venue_id: modules.venue ? venueId : undefined,
         modules,
+        template_id: selectedTemplateId || undefined,
       })
       if ('error' in result) {
         setError(result.error)
@@ -109,6 +158,53 @@ export default function NewEventClient({ venues }: Props) {
         flexDirection: 'column',
         gap: '18px',
       }}>
+        {/* Template selector */}
+        {templates.length > 0 && (
+          <div>
+            <label style={labelStyle}>Template</label>
+            <select
+              style={inputStyle}
+              value={selectedTemplateId}
+              onChange={e => handleTemplateChange(e.target.value)}
+            >
+              <option value="">-- No template --</option>
+              {templates.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+            {selectedTemplateId && (() => {
+              const tpl = templates.find(t => t.id === selectedTemplateId)
+              return tpl ? (
+                <div style={{
+                  marginTop: '6px',
+                  padding: '8px 12px',
+                  borderRadius: '7px',
+                  background: 'var(--sd-card2)',
+                  border: '1px solid var(--sd-border)',
+                  fontSize: '12px',
+                  color: 'var(--sd-muted)',
+                }}>
+                  {tpl.description}
+                </div>
+              ) : null
+            })()}
+          </div>
+        )}
+
+        {/* Organization (read-only — change via nav bar) */}
+        <div>
+          <label style={labelStyle}>Organization</label>
+          {organizationId ? (
+            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--sd-text)', padding: '8px 0' }}>
+              {organizations.find(o => o.id === organizationId)?.name ?? 'Unknown'}
+            </div>
+          ) : (
+            <div style={{ fontSize: '13px', color: 'var(--sd-muted)', padding: '8px 0' }}>
+              Select an organization from the navigation bar to create an event.
+            </div>
+          )}
+        </div>
+
         <div>
           <label style={labelStyle}>Event Title *</label>
           <input

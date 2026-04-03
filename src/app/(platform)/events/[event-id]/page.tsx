@@ -326,7 +326,7 @@ export default async function EventAttendeePage({
   // Fetch event (admin client — users have no RLS on platform_events; §3)
   const { data: event } = await adminSupabase
     .from('platform_events')
-    .select('id, slug, title, description, start_date, end_date, location, status, module_config, workflow_statuses, telegram_group, telegram_chat_link, discord_server, room_lock_in_date')
+    .select('id, slug, title, description, start_date, end_date, location, status, module_config, workflow_statuses, telegram_group, telegram_chat_link, discord_server, room_lock_in_date, organizations(name, logo_url)')
     .eq('id', eventId)
     .single()
 
@@ -391,6 +391,21 @@ export default async function EventAttendeePage({
         }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', marginBottom: event.description ? '16px' : '0' }}>
             <div>
+              {/* Organization branding */}
+              {(event as unknown as { organizations: { name: string; logo_url: string | null } | null }).organizations && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                  {(event as unknown as { organizations: { name: string; logo_url: string | null } }).organizations.logo_url && (
+                    <img
+                      src={(event as unknown as { organizations: { logo_url: string } }).organizations.logo_url}
+                      alt=""
+                      style={{ width: '24px', height: '24px', borderRadius: '4px', objectFit: 'cover' }}
+                    />
+                  )}
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--sd-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    {(event as unknown as { organizations: { name: string } }).organizations.name}
+                  </span>
+                </div>
+              )}
               <div style={{ fontSize: '24px', fontWeight: 700, marginBottom: '6px' }}>{event.title}</div>
               <div style={{ fontSize: '14px', color: 'var(--sd-muted)', display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
                 <span>📅 {formatDateRange(event.start_date, event.end_date)}</span>
@@ -634,11 +649,25 @@ export default async function EventAttendeePage({
       >
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', marginBottom: '16px' }}>
           <div>
+            {/* Organization branding */}
+            {(event as unknown as { organizations: { name: string; logo_url: string | null } | null }).organizations && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                {(event as unknown as { organizations: { logo_url: string | null } }).organizations.logo_url && (
+                  <img
+                    src={(event as unknown as { organizations: { logo_url: string } }).organizations.logo_url}
+                    alt=""
+                    style={{ width: '24px', height: '24px', borderRadius: '4px', objectFit: 'cover' }}
+                  />
+                )}
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--sd-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  {(event as unknown as { organizations: { name: string } }).organizations.name}
+                </span>
+              </div>
+            )}
             <div style={{ fontSize: '24px', fontWeight: 700, marginBottom: '6px' }}>{event.title}</div>
             <div style={{ fontSize: '14px', color: 'var(--sd-muted)', display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
               <span>📅 {formatDateRange(event.start_date, event.end_date)}</span>
               {event.location && <span>📍 {event.location}</span>}
-              <span>🧑‍💼 Organized by Shiny Dog Productions</span>
             </div>
             {(event.telegram_chat_link || event.telegram_group || event.discord_server) && (
               <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>

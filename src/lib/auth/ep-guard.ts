@@ -8,16 +8,28 @@ import { checkEventAccess } from './event-access'
  * Returns the user, admin client, and authorized flag.
  * All EP pages and server actions should use this instead of inline owner_id checks.
  */
-export async function epEventGuard(eventId: string) {
+export async function epEventGuard(eventId: string, options?: { moduleKey?: string }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { authorized: false as const, user: null, admin: null }
+  if (!user) return { authorized: false as const, user: null, admin: null, orgAccessLevel: null, moduleGrants: null }
 
-  const access = await checkEventAccess(user.id, eventId)
-  if (!access.authorized) return { authorized: false as const, user: null, admin: null }
+  const access = await checkEventAccess(user.id, eventId, options)
+  if (!access.authorized) return { authorized: false as const, user: null, admin: null, orgAccessLevel: null, moduleGrants: null }
 
   const admin = createAdminClient()
-  return { authorized: true as const, user, admin }
+
+  // For Module Leads, fetch their module grants for this event
+  let moduleGrants: string[] | null = null
+  if (access.orgAccessLevel === 'module_lead') {
+    const { data: grants } = await admin
+      .from('organization_module_access')
+      .select('module_key, organization_members!inner(user_id)')
+      .eq('event_id', eventId)
+      .eq('organization_members.user_id', user.id)
+    moduleGrants = (grants ?? []).map((g: { module_key: string }) => g.module_key)
+  }
+
+  return { authorized: true as const, user, admin, orgAccessLevel: access.orgAccessLevel ?? null, moduleGrants }
 }
 
 /**

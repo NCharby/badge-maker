@@ -17,6 +17,10 @@ export default async function AdminDashboardPage() {
     .from('organizations')
     .select('*', { count: 'exact', head: true })
 
+  const { count: templateCount } = await adminSupabase
+    .from('event_templates')
+    .select('*', { count: 'exact', head: true })
+
   return (
     <div
       style={{
@@ -44,6 +48,7 @@ export default async function AdminDashboardPage() {
           { label: 'Platform Users', value: userCount ?? '—', icon: '👥' },
           { label: 'Events', value: eventCount ?? '—', icon: '📅' },
           { label: 'Organizations', value: orgCount ?? '—', icon: '🏢' },
+          { label: 'Templates', value: templateCount ?? '—', icon: '📄' },
         ].map((stat) => (
           <div
             key={stat.label}
@@ -101,6 +106,24 @@ export default async function AdminDashboardPage() {
           <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Manage Organizations</div>
           <div style={{ fontSize: '0.825rem', color: 'var(--sd-muted)' }}>
             Create organizations, manage members, assign tiers, archive.
+          </div>
+        </a>
+        <a
+          href="/admin/templates"
+          style={{
+            display: 'block',
+            background: 'var(--sd-card)',
+            border: '1px solid var(--sd-border)',
+            borderRadius: 'var(--sd-radius)',
+            padding: '1.25rem 1.5rem',
+            textDecoration: 'none',
+            color: 'var(--sd-text)',
+          }}
+        >
+          <div style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>📄</div>
+          <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Event Templates</div>
+          <div style={{ fontSize: '0.825rem', color: 'var(--sd-muted)' }}>
+            Create and manage reusable event configuration templates.
           </div>
         </a>
       </div>

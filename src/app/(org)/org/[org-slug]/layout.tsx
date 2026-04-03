@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import AppNav from '@/components/nav/AppNav'
 import Link from 'next/link'
 import type { OrgAccessLevel } from '@/types/platform'
+import { getOrgContext } from '@/lib/auth/org-context'
 
 export default async function OrgLayout({
   children,
@@ -57,6 +58,8 @@ export default async function OrgLayout({
     .eq('is_read', false)
     .is('dismissed_at', null)
 
+  const orgCtx = await getOrgContext(user.id, platformUser?.role ?? 'user')
+
   const navItems = [
     { href: `/org/${orgSlug}/dashboard`, label: 'Overview' },
     { href: `/org/${orgSlug}/members`, label: 'Members' },
@@ -70,7 +73,7 @@ export default async function OrgLayout({
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--sd-bg)' }}>
-      <AppNav user={platformUser} unreadCount={unreadCount ?? 0} />
+      <AppNav user={platformUser} unreadCount={unreadCount ?? 0} orgs={orgCtx.orgs} activeOrgId={orgCtx.activeOrgId} />
 
       {/* Org sub-nav */}
       <div style={{
@@ -83,7 +86,7 @@ export default async function OrgLayout({
             {org.name}
           </span>
           {org.archived && (
-            <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '10px', fontWeight: 600, background: '#F3F4F6', color: '#6B7280' }}>
+            <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '10px', fontWeight: 600, background: 'var(--sd-gray-light)', color: 'var(--sd-gray)' }}>
               Archived
             </span>
           )}

@@ -109,7 +109,7 @@ export default function NewOrganizationPage() {
         </div>
 
         {error && (
-          <div style={{ padding: '10px 14px', borderRadius: '7px', fontSize: '13px', border: '1px solid #FCA5A5', background: 'var(--sd-red-light)', color: '#991b1b', marginBottom: '16px' }}>
+          <div style={{ padding: '10px 14px', borderRadius: '7px', fontSize: '13px', border: '1px solid var(--sd-red-border)', background: 'var(--sd-red-light)', color: 'var(--sd-red-dark)', marginBottom: '16px' }}>
             {error}
           </div>
         )}

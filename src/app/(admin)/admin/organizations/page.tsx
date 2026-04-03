@@ -99,7 +99,7 @@ export default async function AdminOrganizationsPage() {
                     {org.slug}
                   </td>
                   <td style={{ padding: '12px 16px', fontSize: '13px' }}>
-                    <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, background: '#E0E7FF', color: '#4338CA' }}>
+                    <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, background: 'var(--sd-indigo-light)', color: 'var(--sd-indigo)' }}>
                       {org.organization_tiers?.name ?? 'unknown'}
                     </span>
                   </td>
@@ -111,7 +111,7 @@ export default async function AdminOrganizationsPage() {
                   </td>
                   <td style={{ padding: '12px 16px' }}>
                     {org.archived ? (
-                      <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, background: '#F3F4F6', color: '#6B7280' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, background: 'var(--sd-gray-light)', color: 'var(--sd-gray)' }}>
                         Archived
                       </span>
                     ) : (

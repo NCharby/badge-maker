@@ -130,12 +130,12 @@ export default function OrgSettingsClient({
 
       {/* Status messages */}
       {error && (
-        <div style={{ padding: '10px 14px', borderRadius: '7px', fontSize: '13px', border: '1px solid #FCA5A5', background: 'var(--sd-red-light)', color: '#991b1b' }}>
+        <div style={{ padding: '10px 14px', borderRadius: '7px', fontSize: '13px', border: '1px solid var(--sd-red-border)', background: 'var(--sd-red-light)', color: 'var(--sd-red-dark)' }}>
           {error}
         </div>
       )}
       {success && (
-        <div style={{ padding: '10px 14px', borderRadius: '7px', fontSize: '13px', border: '1px solid #6EE7B7', background: 'var(--sd-green-light)', color: 'var(--sd-green-dark)' }}>
+        <div style={{ padding: '10px 14px', borderRadius: '7px', fontSize: '13px', border: '1px solid var(--sd-green-border)', background: 'var(--sd-green-light)', color: 'var(--sd-green-dark)' }}>
           Settings saved.
         </div>
       )}

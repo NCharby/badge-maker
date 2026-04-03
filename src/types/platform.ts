@@ -31,6 +31,7 @@ export interface PlatformUser {
   telegram_notifications_enabled: boolean
   notification_preferences: Record<string, { in_platform: boolean; email: boolean; telegram: boolean }> | null
   payment_provider: 'square' | 'paypal' | null
+  default_organization_id: string | null
   created_at: string
   updated_at: string
 }
@@ -156,7 +157,7 @@ export type PaymentProvider = 'square' | 'paypal'
 
 // ── Organization types ──────────────────────────────────────────────────────
 
-export type OrgAccessLevel = 'organization_lead' | 'event_promoter' | 'module_lead'
+export type OrgAccessLevel = 'organization_lead' | 'event_promoter' | 'module_lead' | 'user'
 
 export interface Organization {
   id: string
@@ -211,10 +212,95 @@ export interface OrganizationInvitation {
   organization_id: string
   invited_by: string
   email: string
-  access_level: 'event_promoter' | 'module_lead'
+  access_level: 'event_promoter' | 'module_lead' | 'user'
   status: OrgInvitationStatus
   token: string | null
   created_at: string
   expires_at: string | null
   resolved_at: string | null
+}
+
+// ── Event Template types ────────────────────────────────────────────────────
+
+export type TemplateGroup =
+  | 'core_config'
+  | 'ticketing'
+  | 'application_form'
+  | 'waiver_template'
+  | 'badge_template'
+  | 'schedule'
+  | 'volunteering'
+  | 'basic_event_rooms'
+
+export interface EventTemplateSnapshot {
+  core_config: {
+    module_config: Record<string, unknown>
+    workflow_statuses: WorkflowStatus[]
+    cancellation_policy: { checkpoints: { status_id: string; refund_percentage: number }[] } | null
+  }
+  ticketing?: {
+    ticket_groups: Array<{ name: string; available_count: number | null }>
+    ticket_types: Array<{
+      name: string; description: string | null; price: number
+      available_count: number | null; room_lead: boolean
+      roommate_codes_enabled: boolean; volunteer_hours_required: number
+      room_required_at_purchase: boolean; room_type_restriction: string[] | null
+      _snapshot_group_id?: string | null // original ticket_group_id for re-mapping
+      _snapshot_id?: string // original ticket_type id for merchandise re-mapping
+    }>
+    merchandise: Array<{
+      name: string; description: string | null; price: number
+      available_count: number | null; image_url: string | null
+      ticket_type_restriction: string[] | null; enabled: boolean
+    }>
+  }
+  application_form?: {
+    title: string | null
+    fields: unknown
+  }
+  waiver_template?: {
+    content: string
+  }
+  badge_template?: {
+    name: string | null
+    config: unknown
+    background_image_url: string | null
+  }
+  schedule?: {
+    activities: Array<{
+      name: string; date_time: string | null; duration_minutes: number
+      description: string; volunteers_requested: boolean
+      volunteer_count: number | null; volunteer_shift_duration_minutes: number | null
+      volunteer_shift_date_time: string | null
+      _snapshot_id?: string // for volunteer shift re-mapping
+    }>
+  }
+  volunteering?: {
+    volunteer_shifts: Array<{
+      name: string; date_time: string | null; duration_minutes: number; capacity: number
+      _snapshot_activity_id?: string | null // original schedule_activity_id
+    }>
+  }
+  basic_event_rooms?: {
+    rooms: Array<{
+      number: string | null; name: string; description: string | null
+      bed_spot_count: number; min_occupancy: number
+      lodging_type: string | null; bed_type: string | null
+      has_kitchen: boolean; location_zone: string | null
+      room_group: string | null; room_daily_rates: unknown
+    }>
+  }
+}
+
+export interface EventTemplate {
+  id: string
+  name: string
+  description: string
+  source_event_id: string | null
+  created_by: string
+  snapshot: EventTemplateSnapshot
+  included_groups: TemplateGroup[]
+  include_schedule_times: boolean
+  created_at: string
+  updated_at: string
 }

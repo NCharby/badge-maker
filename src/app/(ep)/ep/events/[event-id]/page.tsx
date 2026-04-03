@@ -9,8 +9,17 @@ export default async function EpEventPage({
   params: Promise<{ 'event-id': string }>
 }) {
   const { 'event-id': eventId } = await params
-  const { authorized, admin } = await epEventGuard(eventId)
-  if (!authorized || !admin) return null
+  const { authorized, admin, user, moduleGrants } = await epEventGuard(eventId)
+  if (!authorized || !admin || !user) return null
+  const isModuleLead = moduleGrants !== null
+
+  // Check if user is system_admin (for template creation card)
+  const { data: currentUser } = await admin
+    .from('platform_users')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+  const isSystemAdmin = currentUser?.role === 'system_admin'
 
   const { data: event } = await admin
     .from('platform_events')
@@ -78,17 +87,30 @@ export default async function EpEventPage({
           { label: 'Notifications', href: `/ep/events/${eventId}/notifications`, icon: '🔔', desc: 'Configure Telegram channel notifications' },
           { label: 'Lock Check', href: `/ep/events/${eventId}/lock-check`, icon: '🔍', desc: 'Review attendee module completion and send reminders' },
         ]
-          .filter(item =>
-            item.label === 'Event Details' ||
-            item.label === 'Workflow' ||
-            item.label === 'Modules' ||
-            item.label === 'Attendees' ||
-            item.label === 'Notifications' ||
-            item.label === 'Lock Check' ||
-            Object.entries(moduleConfig).some(
-              ([key, cfg]) => cfg?.enabled && MODULE_LABELS[key] === item.label
+          .filter(item => {
+            // Module Leads only see cards for their granted modules
+            if (isModuleLead) {
+              // Find the module key for this card label
+              const moduleKey = Object.entries(MODULE_LABELS).find(([, label]) => label === item.label)?.[0]
+              if (moduleKey) {
+                return moduleGrants!.includes(moduleKey) && moduleConfig[moduleKey]?.enabled
+              }
+              // Non-module cards (Attendees, Notifications, etc.) are hidden for Module Leads
+              return false
+            }
+            // OL/EP/SA see all enabled module cards + management cards
+            return (
+              item.label === 'Event Details' ||
+              item.label === 'Workflow' ||
+              item.label === 'Modules' ||
+              item.label === 'Attendees' ||
+              item.label === 'Notifications' ||
+              item.label === 'Lock Check' ||
+              Object.entries(moduleConfig).some(
+                ([key, cfg]) => cfg?.enabled && MODULE_LABELS[key] === item.label
+              )
             )
-          )
+          })
           .map(item => (
             <Link
               key={item.label}
@@ -109,6 +131,32 @@ export default async function EpEventPage({
             </Link>
           ))}
       </div>
+
+      {/* System Admin: Template creation */}
+      {isSystemAdmin && (
+        <div style={{ marginTop: '2rem' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--sd-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>
+            Admin Tools
+          </div>
+          <Link
+            href={`/ep/events/${eventId}/create-template`}
+            style={{
+              background: 'var(--sd-card)',
+              border: '1px solid var(--sd-border)',
+              borderRadius: 'var(--sd-radius)',
+              padding: '20px',
+              textDecoration: 'none',
+              display: 'block',
+              boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+              maxWidth: '200px',
+            }}
+          >
+            <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>📦</div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '4px' }}>Create Template</div>
+            <div style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>Save this event&apos;s configuration as a reusable template</div>
+          </Link>
+        </div>
+      )}
     </div>
   )
 }

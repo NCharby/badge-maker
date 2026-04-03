@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getDisplayName } from '@/types/platform'
 import AvatarMenu from './AvatarMenu'
+import OrgSwitcher, { type OrgOption } from './OrgSwitcher'
 
 interface AppNavProps {
   user: {
@@ -9,21 +10,44 @@ interface AppNavProps {
     role: string
   } | null
   unreadCount?: number
+  orgs?: OrgOption[]
+  activeOrgId?: string | null
 }
 
-export default function AppNav({ user, unreadCount = 0 }: AppNavProps) {
-  const role = user?.role ?? 'user'
+const ROLE_DISPLAY: Record<string, { label: string; bg: string; color: string }> = {
+  system_admin:       { label: 'System Administrator', bg: 'var(--sd-red-light)', color: 'var(--sd-red)' },
+  organization_lead:  { label: 'Organization Lead',    bg: 'var(--sd-indigo-light)', color: 'var(--sd-indigo)' },
+  event_promoter:     { label: 'Event Promoter',       bg: 'var(--sd-purple-light)', color: 'var(--sd-purple)' },
+  module_lead:        { label: 'Module Lead',           bg: 'var(--sd-amber-light)', color: 'var(--sd-amber-dark)' },
+  user:               { label: 'Member',                bg: 'var(--sd-gray-light)', color: 'var(--sd-gray)' },
+}
+
+export default function AppNav({ user, unreadCount = 0, orgs = [], activeOrgId }: AppNavProps) {
+  const platformRole = user?.role ?? 'user'
   const displayName = user ? getDisplayName(user) : ''
   const initials = displayName.slice(0, 2).toUpperCase()
 
-  const isAdmin = role === 'system_admin'
-  const isEp = role === 'event_promoter'
+  const isAdmin = platformRole === 'system_admin'
+  const isEpOrAbove = platformRole === 'event_promoter' || isAdmin
+
+  // Determine the role to display: org-specific if an org is selected, otherwise platform role
+  const activeOrg = activeOrgId ? orgs.find(o => o.id === activeOrgId) : null
+  const displayRole = isAdmin
+    ? 'system_admin'
+    : activeOrg
+      ? activeOrg.accessLevel
+      : null // No role badge when no org selected (for non-admins)
+
+  const roleMeta = displayRole ? ROLE_DISPLAY[displayRole] ?? null : null
 
   const navBg = isAdmin ? 'var(--sd-text)' : '#fff'
   const linkColor = isAdmin ? 'rgba(255,255,255,0.7)' : 'var(--sd-muted)'
   const logoColor = isAdmin ? '#fff' : 'var(--sd-text)'
-  const avatarBg = isAdmin ? 'var(--sd-red)' : isEp ? 'var(--sd-purple)' : 'var(--sd-green)'
-  const logoDest = isAdmin ? '/admin/dashboard' : isEp ? '/ep/dashboard' : '/dashboard'
+  const avatarBg = isAdmin ? 'var(--sd-red)' : isEpOrAbove ? 'var(--sd-purple)' : 'var(--sd-green)'
+  const logoDest = isAdmin ? '/admin/dashboard' : isEpOrAbove ? '/ep/dashboard' : '/dashboard'
+
+  // Show org switcher for users who belong to at least one org
+  const hasOrgs = orgs.length > 0
 
   return (
     <nav
@@ -40,6 +64,7 @@ export default function AppNav({ user, unreadCount = 0 }: AppNavProps) {
         zIndex: 50,
       }}
     >
+      {/* Left side: logo + role badge */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         <Link
           href={logoDest}
@@ -52,11 +77,12 @@ export default function AppNav({ user, unreadCount = 0 }: AppNavProps) {
         >
           Lekd
         </Link>
-        {isAdmin && (
+
+        {roleMeta && (
           <span
             style={{
-              background: 'var(--sd-red-light)',
-              color: 'var(--sd-red)',
+              background: roleMeta.bg,
+              color: roleMeta.color,
               fontSize: '0.7rem',
               fontWeight: 600,
               padding: '2px 8px',
@@ -64,33 +90,19 @@ export default function AppNav({ user, unreadCount = 0 }: AppNavProps) {
               letterSpacing: '0.02em',
             }}
           >
-            System Administrator
-          </span>
-        )}
-        {isEp && (
-          <span
-            style={{
-              background: 'var(--sd-purple-light)',
-              color: 'var(--sd-purple)',
-              fontSize: '0.7rem',
-              fontWeight: 600,
-              padding: '2px 8px',
-              borderRadius: '999px',
-              letterSpacing: '0.02em',
-            }}
-          >
-            Event Promoter
+            {roleMeta.label}
           </span>
         )}
       </div>
 
+      {/* Right side: nav links + notifications + org selector + avatar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
         {isAdmin && (
           <Link href="/admin/dashboard" style={{ color: linkColor, textDecoration: 'none', fontSize: '0.9rem' }}>
             Admin
           </Link>
         )}
-        {(isAdmin || isEp) && (
+        {isEpOrAbove && (
           <Link href="/ep/dashboard" style={{ color: linkColor, textDecoration: 'none', fontSize: '0.9rem' }}>
             EP Dashboard
           </Link>
@@ -101,6 +113,8 @@ export default function AppNav({ user, unreadCount = 0 }: AppNavProps) {
         <Link href="/dashboard" style={{ color: linkColor, textDecoration: 'none', fontSize: '0.9rem' }}>
           My Attendee Events
         </Link>
+
+        {/* Notifications */}
         <Link
           href="/notifications"
           title="Notifications"
@@ -126,7 +140,19 @@ export default function AppNav({ user, unreadCount = 0 }: AppNavProps) {
             </span>
           )}
         </Link>
-        <AvatarMenu initials={initials} displayName={displayName} avatarBg={avatarBg} />
+
+        {/* Org selector — right side, after notifications */}
+        {hasOrgs && (
+          <OrgSwitcher orgs={orgs} activeOrgId={activeOrgId ?? null} />
+        )}
+
+        {/* Avatar menu */}
+        <AvatarMenu
+          initials={initials}
+          displayName={displayName}
+          avatarBg={avatarBg}
+          hasOrgs={hasOrgs}
+        />
       </div>
     </nav>
   )

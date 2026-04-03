@@ -18,9 +18,10 @@ const inputStyle: React.CSSProperties = {
 }
 
 const LEVELS: { value: OrgAccessLevel; label: string; color: string; bg: string }[] = [
-  { value: 'organization_lead', label: 'Organization Lead', color: '#4338CA', bg: '#E0E7FF' },
+  { value: 'organization_lead', label: 'Organization Lead', color: 'var(--sd-indigo)', bg: 'var(--sd-indigo-light)' },
   { value: 'event_promoter', label: 'Event Promoter', color: 'var(--sd-purple)', bg: 'var(--sd-purple-light)' },
-  { value: 'module_lead', label: 'Module Lead', color: '#92400e', bg: 'var(--sd-amber-light)' },
+  { value: 'module_lead', label: 'Module Lead', color: 'var(--sd-amber-dark)', bg: 'var(--sd-amber-light)' },
+  { value: 'user', label: 'Member', color: 'var(--sd-gray)', bg: 'var(--sd-gray-light)' },
 ]
 
 type MemberRow = {
@@ -91,12 +92,12 @@ export default function MembersClient({
   return (
     <div>
       {error && (
-        <div style={{ padding: '10px 14px', borderRadius: '7px', fontSize: '13px', border: '1px solid #FCA5A5', background: 'var(--sd-red-light)', color: '#991b1b', marginBottom: '16px' }}>
+        <div style={{ padding: '10px 14px', borderRadius: '7px', fontSize: '13px', border: '1px solid var(--sd-red-border)', background: 'var(--sd-red-light)', color: 'var(--sd-red-dark)', marginBottom: '16px' }}>
           {error}
         </div>
       )}
       {success && (
-        <div style={{ padding: '10px 14px', borderRadius: '7px', fontSize: '13px', border: '1px solid #6EE7B7', background: 'var(--sd-green-light)', color: 'var(--sd-green-dark)', marginBottom: '16px' }}>
+        <div style={{ padding: '10px 14px', borderRadius: '7px', fontSize: '13px', border: '1px solid var(--sd-green-border)', background: 'var(--sd-green-light)', color: 'var(--sd-green-dark)', marginBottom: '16px' }}>
           {success}
         </div>
       )}
@@ -118,13 +119,19 @@ export default function MembersClient({
             </thead>
             <tbody>
               {members.map((m, i) => {
-                const meta = LEVELS.find(l => l.value === m.accessLevel) ?? LEVELS[2]
+                const meta = LEVELS.find(l => l.value === m.accessLevel) ?? LEVELS[3]
+                // EPs can only edit members with module_lead or user level
+                const memberIsHighLevel = m.accessLevel === 'organization_lead' || m.accessLevel === 'event_promoter'
+                const canEditThisMember = isOl || (callerLevel === 'event_promoter' && !memberIsHighLevel)
+                // EPs can only assign module_lead or user; OLs can assign anything
+                const editableLevels = isOl ? LEVELS : LEVELS.filter(l => l.value === 'module_lead' || l.value === 'user')
+
                 return (
                   <tr key={m.id} style={{ borderBottom: i < members.length - 1 ? '1px solid var(--sd-border)' : 'none' }}>
                     <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--sd-text)' }}>{m.displayName}</td>
                     <td style={{ padding: '12px 16px', color: 'var(--sd-muted)', fontSize: '13px' }}>{m.email}</td>
                     <td style={{ padding: '12px 16px' }}>
-                      {(isOl || callerLevel === 'event_promoter') ? (
+                      {canEditThisMember ? (
                         <select
                           value={m.accessLevel}
                           onChange={e => doAction(
@@ -137,7 +144,7 @@ export default function MembersClient({
                             fontSize: '12px', fontWeight: 600, background: meta.bg, color: meta.color, cursor: 'pointer',
                           }}
                         >
-                          {(isOl ? LEVELS : allowedLevels).map(l => (
+                          {editableLevels.map(l => (
                             <option key={l.value} value={l.value}>{l.label}</option>
                           ))}
                         </select>
@@ -180,7 +187,7 @@ export default function MembersClient({
             {pendingInvitations.map(inv => (
               <div key={inv.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--sd-border-light)', fontSize: '13px' }}>
                 <span style={{ color: 'var(--sd-text)' }}>{inv.email}</span>
-                <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, background: 'var(--sd-amber-light)', color: '#92400e' }}>
+                <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, background: 'var(--sd-amber-light)', color: 'var(--sd-amber-dark)' }}>
                   {inv.accessLevel.replace(/_/g, ' ')} &middot; pending
                 </span>
               </div>

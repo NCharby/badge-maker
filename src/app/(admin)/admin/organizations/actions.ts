@@ -135,7 +135,7 @@ export async function toggleArchiveOrganization(
 export async function addOrgMember(
   orgId: string,
   userEmail: string,
-  accessLevel: 'organization_lead' | 'event_promoter' | 'module_lead'
+  accessLevel: 'organization_lead' | 'event_promoter' | 'module_lead' | 'user'
 ): Promise<{ success: true } | { error: string }> {
   const user = await requireAdmin()
   if (!user) return { error: 'Access denied.' }
@@ -239,7 +239,7 @@ export async function removeOrgMember(
 export async function updateMemberAccessLevel(
   orgId: string,
   memberId: string,
-  accessLevel: 'organization_lead' | 'event_promoter' | 'module_lead'
+  accessLevel: 'organization_lead' | 'event_promoter' | 'module_lead' | 'user'
 ): Promise<{ success: true } | { error: string }> {
   const user = await requireAdmin()
   if (!user) return { error: 'Access denied.' }

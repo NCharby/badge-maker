@@ -1,7 +1,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getDisplayName } from '@/types/platform'
 import Link from 'next/link'
-import OrgSelector from './OrgSelector'
+import { getOrgContext } from '@/lib/auth/org-context'
 
 function formatDateRange(start: string, end: string): string {
   const s = new Date(start + 'T12:00:00')
@@ -25,12 +25,7 @@ function getStatusBadge(status: string): { bg: string; color: string } {
   return { bg: 'var(--sd-amber-light)', color: '#92400e' }
 }
 
-export default async function EpDashboardPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ org?: string }>
-}) {
-  const { org: selectedOrgId } = await searchParams
+export default async function EpDashboardPage() {
   const supabase = await createClient()
 
   const {
@@ -50,33 +45,10 @@ export default async function EpDashboardPage({
 
   const admin = createAdminClient()
 
-  // Fetch user's organizations
-  let userOrgs: { id: string; name: string; slug: string; accessLevel: string }[] = []
-  if (user) {
-    if (isAdmin) {
-      // Admins see all orgs
-      const { data: allOrgs } = await admin
-        .from('organizations')
-        .select('id, name, slug')
-        .eq('archived', false)
-        .order('name')
-      userOrgs = (allOrgs ?? []).map(o => ({ id: o.id, name: o.name, slug: o.slug, accessLevel: 'organization_lead' }))
-    } else {
-      const { data: memberships } = await admin
-        .from('organization_members')
-        .select('access_level, organizations!inner(id, name, slug)')
-        .eq('user_id', user.id)
-      userOrgs = (memberships ?? []).map((m: unknown) => {
-        const row = m as { access_level: string; organizations: { id: string; name: string; slug: string } }
-        return { id: row.organizations.id, name: row.organizations.name, slug: row.organizations.slug, accessLevel: row.access_level }
-      })
-    }
-  }
-
-  // Determine which org to filter by
-  const activeOrgId = selectedOrgId && userOrgs.some(o => o.id === selectedOrgId)
-    ? selectedOrgId
-    : userOrgs.length === 1 ? userOrgs[0].id : null
+  // Get active org from cookie (set by OrgSwitcher in AppNav)
+  const { orgs: userOrgs, activeOrgId } = user
+    ? await getOrgContext(user.id, platformUser?.role ?? 'user')
+    : { orgs: [], activeOrgId: null }
 
   // Fetch events — admin with org filter uses admin client; regular EP uses user-scoped RLS
   let events: { id: string; title: string; start_date: string; end_date: string; location: string | null; status: string; module_config: Record<string, { enabled?: boolean } | undefined> | null }[] = []
@@ -193,11 +165,6 @@ export default async function EpDashboardPage({
 
   return (
     <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2rem 1.5rem' }}>
-      {/* Org selector — shown when user has multiple orgs or is admin */}
-      {(userOrgs.length > 1 || isAdmin) && (
-        <OrgSelector orgs={userOrgs} activeOrgId={activeOrgId} isAdmin={isAdmin} />
-      )}
-
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '2rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '0.25rem' }}>
@@ -312,66 +279,6 @@ export default async function EpDashboardPage({
           )}
         </div>
       )}
-      {/* Organizations section */}
-      {userOrgs.length > 0 && (
-        <div style={{ marginTop: '2.5rem' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--sd-muted)', marginBottom: '10px' }}>
-            My Organizations &middot; {userOrgs.length}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {userOrgs.map(org => {
-              const levelLabel = org.accessLevel === 'organization_lead' ? 'Organization Lead'
-                : org.accessLevel === 'event_promoter' ? 'Event Promoter'
-                : 'Module Lead'
-              const levelColor = org.accessLevel === 'organization_lead' ? '#4338CA'
-                : org.accessLevel === 'event_promoter' ? 'var(--sd-purple)'
-                : '#92400e'
-              const levelBg = org.accessLevel === 'organization_lead' ? '#E0E7FF'
-                : org.accessLevel === 'event_promoter' ? 'var(--sd-purple-light)'
-                : 'var(--sd-amber-light)'
-              return (
-                <div
-                  key={org.id}
-                  style={{
-                    background: 'var(--sd-card)',
-                    border: '1px solid var(--sd-border)',
-                    borderRadius: 'var(--sd-radius)',
-                    padding: '14px 20px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '12px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,.06)',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--sd-text)' }}>{org.name}</div>
-                    <span style={{ fontSize: '11px', fontWeight: 600, padding: '1px 8px', borderRadius: '99px', background: levelBg, color: levelColor }}>
-                      {levelLabel}
-                    </span>
-                  </div>
-                  <Link
-                    href={`/org/${org.slug}/dashboard`}
-                    style={{
-                      flexShrink: 0,
-                      padding: '7px 16px',
-                      background: 'var(--sd-purple)',
-                      color: '#fff',
-                      borderRadius: '7px',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      textDecoration: 'none',
-                    }}
-                  >
-                    Manage &rarr;
-                  </Link>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Venues section */}
       <div style={{ marginTop: '2.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>

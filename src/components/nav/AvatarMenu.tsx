@@ -8,9 +8,10 @@ interface AvatarMenuProps {
   initials: string
   displayName: string
   avatarBg: string
+  hasOrgs?: boolean
 }
 
-export default function AvatarMenu({ initials, displayName, avatarBg }: AvatarMenuProps) {
+export default function AvatarMenu({ initials, displayName, avatarBg, hasOrgs = false }: AvatarMenuProps) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -78,6 +79,22 @@ export default function AvatarMenu({ initials, displayName, avatarBg }: AvatarMe
           >
             Profile
           </Link>
+          {hasOrgs && (
+            <Link
+              href="/profile/organization"
+              onClick={() => setOpen(false)}
+              style={{
+                display: 'block',
+                padding: '10px 14px',
+                fontSize: '13px',
+                color: 'var(--sd-text)',
+                textDecoration: 'none',
+                borderTop: '1px solid var(--sd-border)',
+              }}
+            >
+              Organization
+            </Link>
+          )}
           <form action={signOut}>
             <button
               type="submit"

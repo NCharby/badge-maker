@@ -22,6 +22,18 @@ export default async function OrgDashboardPage({
     .single()
   if (!org) redirect('/dashboard')
 
+  // Caller's access level
+  const { data: pu } = await supabase.from('platform_users').select('role').eq('id', user.id).single()
+  const isSa = pu?.role === 'system_admin'
+  let callerLevel = 'user'
+  if (isSa) {
+    callerLevel = 'organization_lead'
+  } else {
+    const { data: mem } = await admin.from('organization_members').select('access_level').eq('organization_id', org.id).eq('user_id', user.id).maybeSingle()
+    callerLevel = mem?.access_level ?? 'user'
+  }
+  const isOl = callerLevel === 'organization_lead'
+
   // Stats
   const { count: memberCount } = await admin
     .from('organization_members')
@@ -52,7 +64,7 @@ export default async function OrgDashboardPage({
     .select('access_level')
     .eq('organization_id', org.id)
 
-  const levelCounts = { organization_lead: 0, event_promoter: 0, module_lead: 0 }
+  const levelCounts = { organization_lead: 0, event_promoter: 0, module_lead: 0, user: 0 }
   for (const m of membersByLevel ?? []) {
     const lvl = m.access_level as keyof typeof levelCounts
     if (lvl in levelCounts) levelCounts[lvl]++
@@ -73,7 +85,7 @@ export default async function OrgDashboardPage({
       </p>
 
       {org.archived && (
-        <div style={{ padding: '10px 14px', borderRadius: 'var(--sd-radius)', background: 'var(--sd-amber-light)', border: '1px solid #FCD34D', color: '#92400e', fontSize: '13px', marginBottom: '20px' }}>
+        <div style={{ padding: '10px 14px', borderRadius: 'var(--sd-radius)', background: 'var(--sd-amber-light)', border: '1px solid var(--sd-amber-border)', color: 'var(--sd-amber-dark)', fontSize: '13px', marginBottom: '20px' }}>
           This organization is archived. No new events can be created.
         </div>
       )}
@@ -100,18 +112,16 @@ export default async function OrgDashboardPage({
             Members by Role
           </h2>
           {[
-            { label: 'Organization Leads', count: levelCounts.organization_lead, color: '#4338CA', bg: '#E0E7FF' },
+            { label: 'Organization Leads', count: levelCounts.organization_lead, color: 'var(--sd-indigo)', bg: 'var(--sd-indigo-light)' },
             { label: 'Event Promoters', count: levelCounts.event_promoter, color: 'var(--sd-purple)', bg: 'var(--sd-purple-light)' },
-            { label: 'Module Leads', count: levelCounts.module_lead, color: '#92400e', bg: 'var(--sd-amber-light)' },
+            { label: 'Module Leads', count: levelCounts.module_lead, color: 'var(--sd-amber-dark)', bg: 'var(--sd-amber-light)' },
+            { label: 'Members', count: levelCounts.user, color: 'var(--sd-gray)', bg: 'var(--sd-gray-light)' },
           ].map(row => (
             <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--sd-border-light)', fontSize: '13px' }}>
               <span style={{ color: 'var(--sd-text)' }}>{row.label}</span>
               <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, background: row.bg, color: row.color }}>{row.count}</span>
             </div>
           ))}
-          <Link href={`/org/${orgSlug}/members`} style={{ display: 'block', marginTop: '12px', fontSize: '13px', color: 'var(--sd-green)', textDecoration: 'none' }}>
-            Manage members &rarr;
-          </Link>
         </div>
 
         {/* Recent events */}
@@ -141,9 +151,11 @@ export default async function OrgDashboardPage({
         <Link href={`/org/${orgSlug}/members`} style={{ padding: '8px 18px', borderRadius: '7px', fontSize: '13px', fontWeight: 600, border: '1px solid var(--sd-border)', background: '#fff', color: 'var(--sd-text)', textDecoration: 'none' }}>
           Manage Members
         </Link>
-        <Link href={`/org/${orgSlug}/settings`} style={{ padding: '8px 18px', borderRadius: '7px', fontSize: '13px', fontWeight: 600, border: '1px solid var(--sd-border)', background: '#fff', color: 'var(--sd-text)', textDecoration: 'none' }}>
-          Organization Settings
-        </Link>
+        {isOl && (
+          <Link href={`/org/${orgSlug}/settings`} style={{ padding: '8px 18px', borderRadius: '7px', fontSize: '13px', fontWeight: 600, border: '1px solid var(--sd-border)', background: '#fff', color: 'var(--sd-text)', textDecoration: 'none' }}>
+            Organization Settings
+          </Link>
+        )}
       </div>
     </div>
   )

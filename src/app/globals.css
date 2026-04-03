@@ -25,6 +25,15 @@
   --sd-blue-light: #DBEAFE;
   --sd-purple: #7C3AED;
   --sd-purple-light: #EDE9FE;
+  --sd-indigo: #4338CA;
+  --sd-indigo-light: #E0E7FF;
+  --sd-amber-dark: #92400e;
+  --sd-amber-border: #FCD34D;
+  --sd-red-dark: #991b1b;
+  --sd-red-border: #FCA5A5;
+  --sd-green-border: #6EE7B7;
+  --sd-gray: #6B7280;
+  --sd-gray-light: #F3F4F6;
   --sd-radius: 10px;
 }
 /* ─────────────────────────────────────────────────────────────────────────── */

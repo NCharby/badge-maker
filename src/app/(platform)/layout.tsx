@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/nav/AppNav'
+import { getOrgContext } from '@/lib/auth/org-context'
 
 export default async function PlatformLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -25,9 +26,11 @@ export default async function PlatformLayout({ children }: { children: React.Rea
     .eq('is_read', false)
     .is('dismissed_at', null)
 
+  const { orgs, activeOrgId } = await getOrgContext(user.id, platformUser?.role ?? 'user')
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--sd-bg)' }}>
-      <AppNav user={platformUser} unreadCount={unreadCount ?? 0} />
+      <AppNav user={platformUser} unreadCount={unreadCount ?? 0} orgs={orgs} activeOrgId={activeOrgId} />
       <main>{children}</main>
     </div>
   )
