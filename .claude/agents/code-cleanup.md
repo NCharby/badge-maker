@@ -9,7 +9,7 @@ description: >
   - "clean up the code", "audit this file", "check for issues"
   - "review what was just generated", "security check"
   - After any bulk generation session involving Supabase schema or auth flows
-model: claude-sonnet-4-5
+model: sonnet
 tools:
   - read_file
   - write_file

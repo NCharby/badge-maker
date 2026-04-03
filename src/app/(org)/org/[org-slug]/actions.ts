@@ -183,6 +183,71 @@ export async function changeOrgMemberLevel(
   return { success: true }
 }
 
+// ── Update Module Lead Access (per-event, per-module) ──────────────────────
+
+export async function updateMemberModuleAccess(
+  orgSlug: string,
+  memberId: string,
+  eventId: string,
+  moduleKeys: string[],
+): Promise<{ success: true } | { error: string }> {
+  const auth = await requireOrgAccess(orgSlug)
+  if ('error' in auth) return { error: auth.error }
+
+  const admin = createAdminClient()
+
+  // Verify target member exists and belongs to this org
+  const { data: member } = await admin
+    .from('organization_members')
+    .select('id, access_level, user_id')
+    .eq('id', memberId)
+    .eq('organization_id', auth.orgId)
+    .single()
+  if (!member) return { error: 'Member not found.' }
+
+  if (member.access_level !== 'module_lead') {
+    return { error: 'Module access can only be configured for Module Leads.' }
+  }
+
+  // Verify event belongs to this org
+  const { data: event } = await admin
+    .from('platform_events')
+    .select('id, module_config')
+    .eq('id', eventId)
+    .eq('organization_id', auth.orgId)
+    .single()
+  if (!event) return { error: 'Event not found in this organization.' }
+
+  // Validate that each requested module is actually enabled on the event
+  const moduleConfig = (event.module_config ?? {}) as Record<string, { enabled?: boolean }>
+  const invalidModules = moduleKeys.filter(key => !moduleConfig[key]?.enabled)
+  if (invalidModules.length > 0) {
+    return { error: `Modules not enabled on this event: ${invalidModules.join(', ')}` }
+  }
+
+  // Delete existing grants for this member + event, then insert new ones
+  await admin
+    .from('organization_module_access')
+    .delete()
+    .eq('organization_member_id', memberId)
+    .eq('event_id', eventId)
+
+  if (moduleKeys.length > 0) {
+    const rows = moduleKeys.map(key => ({
+      organization_member_id: memberId,
+      event_id: eventId,
+      module_key: key,
+    }))
+    const { error: insertError } = await admin
+      .from('organization_module_access')
+      .insert(rows)
+    if (insertError) return { error: insertError.message }
+  }
+
+  revalidatePath(`/org/${orgSlug}/members/${member.user_id}`)
+  return { success: true }
+}
+
 // ── Remove Member ───────────────────────────────────────────────────────────
 
 export async function removeOrgMemberByOl(

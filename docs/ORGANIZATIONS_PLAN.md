@@ -280,8 +280,8 @@ All existing EP Server Actions migrate to call this helper.
 
 ```
 /org/[org-slug]/dashboard              -- org overview, events, member summary
-/org/[org-slug]/members                -- member list, invite, change access
-/org/[org-slug]/members/[user-id]      -- member detail, module access config
+/org/[org-slug]/members                -- member list, invite, change access ("Manage →" link per row)
+/org/[org-slug]/members/[user-id]      -- member detail, module access config (IMPLEMENTED — see below)
 /org/[org-slug]/settings               -- org name, website, social media, payment provider
 /org/[org-slug]/events/new             -- create event scoped to org
 
@@ -289,6 +289,25 @@ All existing EP Server Actions migrate to call this helper.
 /admin/organizations/new               -- create org
 /admin/organizations/[org-id]          -- org detail, OL assignment, tier, archive
 ```
+
+**Implemented: `/org/[org-slug]/members/[user-id]`**
+
+Server page: `src/app/(org)/org/[org-slug]/members/[user-id]/page.tsx`
+Client component: `src/app/(org)/org/[org-slug]/members/[user-id]/MemberDetailClient.tsx`
+
+- Displays member info: display name, email, access level badge
+- **For Module Leads:** renders all org events, each with a checkbox list of that event's enabled modules (sourced from `module_config`). Only modules actually enabled on the event appear as options. A per-event Save button appears when unsaved changes are detected. Saving calls `updateMemberModuleAccess()`.
+- **For non-ML members:** shows an informational message explaining that module access configuration applies to Module Leads only.
+- Members list (`MembersClient.tsx`) was updated to include a "Manage →" link on each row.
+
+**Server Action: `updateMemberModuleAccess(orgSlug, memberId, eventId, moduleKeys[])`**
+Location: `src/app/(org)/org/[org-slug]/actions.ts`
+
+- Validates caller has OL or EP access to the org
+- Validates target member is a Module Lead
+- Validates event belongs to the org
+- Validates each requested module key is enabled on the event's `module_config`
+- Replaces all existing `organization_module_access` grants for the member + event with the new set
 
 ### Modified Routes
 
@@ -343,7 +362,7 @@ Tier enforcement is checked at creation/mutation boundaries (create event, add m
 - `(org)` route group with membership guard layout
 - Dashboard: org events, member summary, org details
 - Member management: invite (search existing user / send registration email), change access level, remove
-- Module Lead access configuration per member per event
+- Module Lead access configuration per member per event ✓ *(implemented — see §13 for route details)*
 - Org settings: name, website, logo, social media, payment provider
 
 ### Phase 5: EP Dashboard + Event Integration

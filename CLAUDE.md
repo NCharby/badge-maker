@@ -2,7 +2,7 @@
 ## AI-Assisted Development Reference Document
 **Organization:** Shiny Dog Productions Inc.
 **Document Status:** Revised Draft — Payment integration, notification enrichment, webhook dedup fix, QA/security audit, EP settings/notifications split, schedule day-grouping and search, workflow UX improvements
-**Last Updated:** April 2026 (Lekd branding; first/last name and profile completeness gate; room locking system with user self-lock, Room Lead lock requests, and EP lock/unlock; private storage bucket signed URLs; emergency contact fields; badge and waiver fixes)
+**Last Updated:** April 2026 (Lekd branding; first/last name and profile completeness gate; room locking system with user self-lock, Room Lead lock requests, and EP lock/unlock; private storage bucket signed URLs; emergency contact fields; badge and waiver fixes; org Module Lead module access configuration UI)
 
 ---
 
@@ -2041,6 +2041,17 @@ All shown in Card format. Clicking a card navigates to the corresponding managem
 **Admin Server Actions** (`src/app/(admin)/admin/users/[user-id]/actions.ts`):
 - `updateUserRole(targetUserId, newRole)` — system_admin guard; blocks self-modification; uses admin client to update role; revalidates list and detail pages.
 - `adminUpdatePaymentProvider(targetUserId, provider)` — system_admin guard; verifies target is EP or admin before writing; uses admin client.
+
+**Organization Routes (implemented — see `docs/ORGANIZATIONS_PLAN.md` for full spec):**
+
+`/org/[org-slug]/members` — Member list with "Manage →" link per row; invite and access-level management. See `docs/ORGANIZATIONS_PLAN.md` §13 for full route inventory.
+
+`/org/[org-slug]/members/[user-id]` — Member detail page with Module Lead access configuration.
+- Server page: `src/app/(org)/org/[org-slug]/members/[user-id]/page.tsx`
+- Client component: `src/app/(org)/org/[org-slug]/members/[user-id]/MemberDetailClient.tsx`
+- For Module Lead members: displays all org events, each with checkboxes for modules enabled on that event (filtered from `module_config`). A per-event Save button appears when changes are detected.
+- For non-ML members: informational message only.
+- Server Action `updateMemberModuleAccess(orgSlug, memberId, eventId, moduleKeys[])` in `src/app/(org)/org/[org-slug]/actions.ts`: validates OL/EP caller, validates target is ML, validates event belongs to org, validates each module key is enabled on the event, then replaces all existing `organization_module_access` grants for that member + event with the submitted set.
 
 ---
 

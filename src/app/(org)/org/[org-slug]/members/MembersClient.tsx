@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { inviteOrgMember, changeOrgMemberLevel, removeOrgMemberByOl } from '../actions'
 import type { OrgAccessLevel } from '@/types/platform'
 
@@ -110,7 +111,7 @@ export default function MembersClient({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--sd-border)', background: 'var(--sd-card2)' }}>
-                {['Name', 'Email', 'Access Level', ...(isOl ? [''] : [])].map(h => (
+                {['Name', 'Email', 'Access Level', '', ...(isOl ? [''] : [])].map((h, idx) => (
                   <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: 'var(--sd-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     {h}
                   </th>
@@ -153,6 +154,14 @@ export default function MembersClient({
                           {meta.label}
                         </span>
                       )}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Link
+                        href={`/org/${orgSlug}/members/${m.userId}`}
+                        style={{ fontSize: '12px', color: 'var(--sd-purple)', textDecoration: 'none', fontWeight: 600 }}
+                      >
+                        Manage &rarr;
+                      </Link>
                     </td>
                     {isOl && (
                       <td style={{ padding: '12px 16px' }}>
