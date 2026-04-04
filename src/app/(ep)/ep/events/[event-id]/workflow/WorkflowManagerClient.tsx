@@ -2,12 +2,13 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import type { WorkflowStatus } from '@/types/platform'
+import type { CancellationPolicy, WorkflowStatus } from '@/types/platform'
 import {
   addWorkflowStatus,
   renameWorkflowStatus,
   deleteWorkflowStatus,
   reorderWorkflowStatuses,
+  updateCancellationPolicy,
 } from './actions'
 
 const SYSTEM_BEFORE = ['Draft', 'Published']
@@ -38,9 +39,11 @@ function SystemStatusPill({ name }: { name: string }) {
 export default function WorkflowManagerClient({
   eventId,
   initialStatuses,
+  initialCancellationPolicy,
 }: {
   eventId: string
   initialStatuses: WorkflowStatus[]
+  initialCancellationPolicy: CancellationPolicy
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -63,6 +66,22 @@ export default function WorkflowManagerClient({
 
   // General error
   const [actionError, setActionError] = useState('')
+
+  // Cancellation policy state
+  const [checkpoints, setCheckpoints] = useState<{ status_id: string; refund_percentage: number }[]>(
+    initialCancellationPolicy.checkpoints
+  )
+  const [hardshipEnabled, setHardshipEnabled] = useState(
+    initialCancellationPolicy.hardship?.enabled ?? false
+  )
+  const [hardshipFrom, setHardshipFrom] = useState(
+    initialCancellationPolicy.hardship?.available_from_status ?? ''
+  )
+  const [hardshipUntil, setHardshipUntil] = useState(
+    initialCancellationPolicy.hardship?.available_until_status ?? 'Registration'
+  )
+  const [policyError, setPolicyError] = useState('')
+  const [policySaved, setPolicySaved] = useState(false)
 
   function moveUp(idx: number) {
     if (idx === 0) return
@@ -160,6 +179,59 @@ export default function WorkflowManagerClient({
     })
   }
 
+  // All status options for policy dropdowns: system-before + custom + system-after
+  const allStatusOptions = [
+    ...SYSTEM_BEFORE.map(name => ({ id: name, name })),
+    ...statuses.map(s => ({ id: s.id, name: s.name })),
+    ...SYSTEM_AFTER.map(name => ({ id: name, name })),
+  ]
+
+  function addCheckpoint() {
+    // Default to first custom status or first system status if no custom ones
+    const defaultId = statuses[0]?.id ?? SYSTEM_BEFORE[0]
+    setCheckpoints(prev => [...prev, { status_id: defaultId, refund_percentage: 100 }])
+    setPolicySaved(false)
+  }
+
+  function removeCheckpoint(idx: number) {
+    setCheckpoints(prev => prev.filter((_, i) => i !== idx))
+    setPolicySaved(false)
+  }
+
+  function updateCheckpointStatus(idx: number, statusId: string) {
+    setCheckpoints(prev => prev.map((cp, i) => i === idx ? { ...cp, status_id: statusId } : cp))
+    setPolicySaved(false)
+  }
+
+  function updateCheckpointPct(idx: number, raw: string) {
+    const pct = parseInt(raw, 10)
+    setCheckpoints(prev => prev.map((cp, i) => i === idx ? { ...cp, refund_percentage: isNaN(pct) ? 0 : Math.min(100, Math.max(0, pct)) } : cp))
+    setPolicySaved(false)
+  }
+
+  function handleSavePolicy() {
+    setPolicyError('')
+    setPolicySaved(false)
+    startTransition(async () => {
+      const policy: CancellationPolicy = {
+        checkpoints,
+        hardship: hardshipEnabled
+          ? {
+              enabled: true,
+              available_from_status: hardshipFrom || null,
+              available_until_status: hardshipUntil || 'Registration',
+            }
+          : undefined,
+      }
+      const result = await updateCancellationPolicy(eventId, policy)
+      if ('error' in result) {
+        setPolicyError(result.error)
+      } else {
+        setPolicySaved(true)
+      }
+    })
+  }
+
   const btnStyle = (variant: 'primary' | 'ghost' | 'danger', disabled = false): React.CSSProperties => ({
     padding: '5px 12px',
     borderRadius: '6px',
@@ -180,6 +252,11 @@ export default function WorkflowManagerClient({
     background: '#fff',
     width: '100%',
     boxSizing: 'border-box',
+  }
+
+  const selectStyle: React.CSSProperties = {
+    ...inputStyle,
+    cursor: 'pointer',
   }
 
   return (
@@ -320,6 +397,174 @@ export default function WorkflowManagerClient({
         ↓ fixed system statuses
       </div>
       {SYSTEM_AFTER.map(name => <SystemStatusPill key={name} name={name} />)}
+
+      {/* ── Refund Policy ─────────────────────────────────────────────────────── */}
+      <hr style={{ border: 'none', borderTop: '1px solid var(--sd-border)', margin: '16px 0 8px' }} />
+
+      <div style={{
+        padding: '16px',
+        background: 'var(--sd-card)',
+        border: '1px solid var(--sd-border)',
+        borderRadius: '8px',
+      }}>
+        <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '4px' }}>
+          Refund Policy
+        </div>
+        <div style={{ fontSize: '12px', color: 'var(--sd-muted)', marginBottom: '20px' }}>
+          Configure refund entitlements and hardship cancellation options for this event.
+        </div>
+
+        {/* Refund Checkpoints */}
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '4px' }}>
+            Refund Checkpoints
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--sd-muted)', marginBottom: '12px' }}>
+            Define what percentage of the ticket price is refundable at each workflow status. Default: 100% until Event Locked.
+          </div>
+
+          {checkpoints.length === 0 && (
+            <div style={{
+              padding: '10px 14px',
+              border: '1px dashed var(--sd-border)',
+              borderRadius: '6px',
+              fontSize: '13px',
+              color: 'var(--sd-muted)',
+              marginBottom: '10px',
+            }}>
+              No checkpoints configured. Refunds default to 100% until Event Locked.
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+            {checkpoints.map((cp, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--sd-muted)', display: 'block', marginBottom: '3px' }}>
+                    At status
+                  </label>
+                  <select
+                    value={cp.status_id}
+                    onChange={e => updateCheckpointStatus(idx, e.target.value)}
+                    style={selectStyle}
+                  >
+                    {allStatusOptions.map(opt => (
+                      <option key={opt.id} value={opt.id}>{opt.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ width: '100px', flexShrink: 0 }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--sd-muted)', display: 'block', marginBottom: '3px' }}>
+                    Refund %
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={cp.refund_percentage}
+                    onChange={e => updateCheckpointPct(idx, e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+                <div style={{ flexShrink: 0, paddingTop: '18px' }}>
+                  <button
+                    onClick={() => removeCheckpoint(idx)}
+                    style={btnStyle('danger')}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={addCheckpoint}
+            style={{ ...btnStyle('ghost'), alignSelf: 'flex-start' }}
+          >
+            + Add Checkpoint
+          </button>
+        </div>
+
+        {/* Hardship Cancellations */}
+        <div style={{
+          paddingTop: '16px',
+          borderTop: '1px solid var(--sd-border-light)',
+          marginBottom: '20px',
+        }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '4px' }}>
+            Hardship Cancellations
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--sd-muted)', marginBottom: '12px' }}>
+            Attendees can submit a hardship request with a reason. You review and set the refund percentage.
+          </div>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '14px' }}>
+            <input
+              type="checkbox"
+              checked={hardshipEnabled}
+              onChange={e => { setHardshipEnabled(e.target.checked); setPolicySaved(false) }}
+            />
+            <span style={{ fontSize: '13px', color: 'var(--sd-text)', fontWeight: 600 }}>
+              Enable hardship cancellation requests
+            </span>
+          </label>
+
+          {hardshipEnabled && (
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--sd-muted)', display: 'block', marginBottom: '3px' }}>
+                  Available from status
+                </label>
+                <select
+                  value={hardshipFrom}
+                  onChange={e => { setHardshipFrom(e.target.value); setPolicySaved(false) }}
+                  style={selectStyle}
+                >
+                  <option value="">— select status —</option>
+                  {allStatusOptions.map(opt => (
+                    <option key={opt.id} value={opt.id}>{opt.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--sd-muted)', display: 'block', marginBottom: '3px' }}>
+                  Available until status
+                </label>
+                <select
+                  value={hardshipUntil}
+                  onChange={e => { setHardshipUntil(e.target.value); setPolicySaved(false) }}
+                  style={selectStyle}
+                >
+                  {allStatusOptions.map(opt => (
+                    <option key={opt.id} value={opt.id}>{opt.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Policy save feedback */}
+        {policyError && (
+          <div style={{ padding: '10px 14px', background: 'var(--sd-red-light)', border: '1px solid #FCA5A5', borderRadius: '6px', fontSize: '12px', color: '#991b1b', marginBottom: '12px' }}>
+            {policyError}
+          </div>
+        )}
+        {policySaved && (
+          <div style={{ padding: '10px 14px', background: 'var(--sd-green-light)', border: '1px solid #6EE7B7', borderRadius: '6px', fontSize: '12px', color: 'var(--sd-green-dark)', marginBottom: '12px' }}>
+            Refund policy saved.
+          </div>
+        )}
+
+        <button
+          onClick={handleSavePolicy}
+          disabled={isPending}
+          style={btnStyle('primary', isPending)}
+        >
+          {isPending ? 'Saving…' : 'Save Refund Policy'}
+        </button>
+      </div>
 
     </div>
   )

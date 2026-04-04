@@ -680,6 +680,552 @@ async function truncateAll() {
   ok('Truncation complete.')
 }
 
+// ── Accounting Seed ──────────────────────────────────────────────────────────
+// Comprehensive seed for analytics/accounting testing.
+// Creates 3 orgs, ~30 users, 10 historical events with 50+ attendees each,
+// paid ticket types, orders, refunds, and 1 active event with all modules.
+
+function uuid(prefix: string, n: number): string {
+  return `${prefix}-0000-0000-0000-${String(n).padStart(12, '0')}`
+}
+
+function randomDate(start: Date, end: Date): Date {
+  return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()))
+}
+
+async function createAuthUser(email: string, password: string): Promise<string | null> {
+  const { data: existing } = await supabase.auth.admin.listUsers()
+  const found = existing?.users?.find(u => u.email === email)
+  if (found) return found.id
+
+  const { data, error } = await supabase.auth.admin.createUser({
+    email, password, email_confirm: true,
+  })
+  if (error) { warn(`Could not create ${email}: ${error.message}`); return null }
+  return data.user.id
+}
+
+async function accountingSeed() {
+  section('Accounting Seed — Truncating all data')
+  await truncateAll()
+
+  section('Accounting Seed — Creating users')
+
+  // Fetch free tier
+  const { data: freeTier } = await supabase
+    .from('organization_tiers')
+    .select('id')
+    .eq('name', 'free')
+    .single()
+  if (!freeTier) fail('Free tier not found. Run migrations first.')
+
+  // ── Create auth users ──────────────────────────────────────────────────────
+  // 1 SA, 3 OLs, 6 EPs (2 per org), 6 MLs (2 per org), 60 attendee users
+  const users: Record<string, string> = {}
+
+  const saId = await createAuthUser('admin@test.local', 'Admin1234!')
+  if (saId) users['admin@test.local'] = saId
+
+  const orgNames = ['Shiny Dog Productions', 'Nightfall Events', 'Summit Gatherings']
+  const orgSlugs = ['shiny-dog', 'nightfall', 'summit']
+  const orgIds = orgSlugs.map((_, i) => uuid('aaaa0001', i + 1))
+
+  // OLs (1 per org)
+  for (let o = 0; o < 3; o++) {
+    const email = `ol${o + 1}@test.local`
+    const id = await createAuthUser(email, 'OrgLead1!')
+    if (id) users[email] = id
+  }
+  // EPs (2 per org)
+  for (let o = 0; o < 3; o++) {
+    for (let e = 0; e < 2; e++) {
+      const email = `ep${o * 2 + e + 1}@test.local`
+      const id = await createAuthUser(email, 'EventPro1!')
+      if (id) users[email] = id
+    }
+  }
+  // MLs (2 per org)
+  for (let o = 0; o < 3; o++) {
+    for (let m = 0; m < 2; m++) {
+      const email = `ml${o * 2 + m + 1}@test.local`
+      const id = await createAuthUser(email, 'ModLead1!')
+      if (id) users[email] = id
+    }
+  }
+  // Attendee users (60 total — enough for 50+ per event with some overlap)
+  for (let i = 1; i <= 60; i++) {
+    const email = `attendee${i}@test.local`
+    const id = await createAuthUser(email, 'Attend1!')
+    if (id) users[email] = id
+  }
+  ok(`Created ${Object.keys(users).length} auth users`)
+
+  // ── platform_users ─────────────────────────────────────────────────────────
+  section('Accounting Seed — Platform users')
+  const sceneNames = [
+    'Phoenix', 'Raven', 'Storm', 'Blaze', 'Frost', 'Shadow', 'Echo', 'Viper',
+    'Luna', 'Ember', 'Drake', 'Nova', 'Hawk', 'Sage', 'Wolf', 'Onyx',
+    'Atlas', 'Zephyr', 'Jade', 'Orion', 'Ivy', 'Rex', 'Cleo', 'Kai',
+    'Mira', 'Axel', 'Rune', 'Nyx', 'Dex', 'Aria', 'Jett', 'Vale',
+    'Sable', 'Quinn', 'Dash', 'Lyra', 'Brock', 'Fern', 'Thorn', 'Pip',
+    'Slate', 'Wren', 'Flint', 'Opal', 'Cruz', 'Lark', 'Haze', 'Mica',
+    'Sly', 'Bolt', 'Coral', 'Pike', 'Dusk', 'Elm', 'Grit', 'Ash',
+    'Bay', 'Clove', 'Reed', 'Spark',
+  ]
+
+  const platformUsers: { id: string; role: string; email: string; date_of_birth: string; preferred_scene_name: string; first_name: string; last_name: string; emergency_contact: string; emergency_phone: string; roommate_finder_hidden: boolean }[] = []
+
+  // Admin
+  if (users['admin@test.local']) {
+    platformUsers.push({
+      id: users['admin@test.local'], role: 'system_admin', email: 'admin@test.local',
+      date_of_birth: dob, preferred_scene_name: 'SysAdmin', first_name: 'Admin', last_name: 'User',
+      emergency_contact: 'Emergency Admin', emergency_phone: '555-0000', roommate_finder_hidden: false,
+    })
+  }
+  // OLs, EPs, MLs
+  for (let o = 0; o < 3; o++) {
+    const olEmail = `ol${o + 1}@test.local`
+    if (users[olEmail]) {
+      platformUsers.push({
+        id: users[olEmail], role: 'event_promoter', email: olEmail,
+        date_of_birth: dob, preferred_scene_name: `OrgLead_${orgSlugs[o]}`, first_name: `Org${o + 1}`, last_name: 'Lead',
+        emergency_contact: 'Emergency OL', emergency_phone: '555-0100', roommate_finder_hidden: false,
+      })
+    }
+    for (let e = 0; e < 2; e++) {
+      const epEmail = `ep${o * 2 + e + 1}@test.local`
+      if (users[epEmail]) {
+        platformUsers.push({
+          id: users[epEmail], role: 'event_promoter', email: epEmail,
+          date_of_birth: dob, preferred_scene_name: `EP_${orgSlugs[o]}_${e + 1}`, first_name: `EP${o * 2 + e + 1}`, last_name: 'Promoter',
+          emergency_contact: 'Emergency EP', emergency_phone: '555-0200', roommate_finder_hidden: false,
+        })
+      }
+    }
+    for (let m = 0; m < 2; m++) {
+      const mlEmail = `ml${o * 2 + m + 1}@test.local`
+      if (users[mlEmail]) {
+        platformUsers.push({
+          id: users[mlEmail], role: 'event_promoter', email: mlEmail,
+          date_of_birth: dob, preferred_scene_name: `ML_${orgSlugs[o]}_${m + 1}`, first_name: `ML${o * 2 + m + 1}`, last_name: 'Lead',
+          emergency_contact: 'Emergency ML', emergency_phone: '555-0300', roommate_finder_hidden: false,
+        })
+      }
+    }
+  }
+  // Attendees
+  for (let i = 1; i <= 60; i++) {
+    const email = `attendee${i}@test.local`
+    if (users[email]) {
+      platformUsers.push({
+        id: users[email], role: 'user', email,
+        date_of_birth: dob, preferred_scene_name: sceneNames[i - 1] ?? `Attendee${i}`, first_name: `User${i}`, last_name: 'Test',
+        emergency_contact: 'Emergency Contact', emergency_phone: '555-9999', roommate_finder_hidden: false,
+      })
+    }
+  }
+
+  for (const u of platformUsers) {
+    const { error } = await supabase.from('platform_users').upsert(u, { onConflict: 'id' })
+    if (error) warn(`platform_users: ${u.email}: ${error.message}`)
+  }
+  ok(`Upserted ${platformUsers.length} platform users`)
+
+  // ── Organizations ──────────────────────────────────────────────────────────
+  section('Accounting Seed — Organizations')
+  for (let o = 0; o < 3; o++) {
+    const { error } = await supabase.from('organizations').upsert({
+      id: orgIds[o],
+      name: orgNames[o],
+      slug: orgSlugs[o],
+      website: `https://${orgSlugs[o]}.example.com`,
+      payment_provider: o === 0 ? 'square' : 'paypal',
+      tier_id: freeTier.id,
+      archived: false,
+    }, { onConflict: 'id' })
+    if (error) warn(`org: ${error.message}`)
+    else ok(`org: ${orgNames[o]}`)
+  }
+
+  // ── Organization members ───────────────────────────────────────────────────
+  section('Accounting Seed — Org members')
+  const memberIds: Record<string, string> = {} // email -> member record id
+
+  for (let o = 0; o < 3; o++) {
+    const orgId = orgIds[o]
+    const members = [
+      { email: `ol${o + 1}@test.local`, access_level: 'organization_lead' },
+      { email: `ep${o * 2 + 1}@test.local`, access_level: 'event_promoter' },
+      { email: `ep${o * 2 + 2}@test.local`, access_level: 'event_promoter' },
+      { email: `ml${o * 2 + 1}@test.local`, access_level: 'module_lead' },
+      { email: `ml${o * 2 + 2}@test.local`, access_level: 'module_lead' },
+    ]
+
+    for (const m of members) {
+      const userId = users[m.email]
+      if (!userId) continue
+      const memberId = uuid('bbbb0001', o * 10 + members.indexOf(m) + 1)
+      const { error } = await supabase.from('organization_members').upsert({
+        id: memberId,
+        organization_id: orgId,
+        user_id: userId,
+        access_level: m.access_level,
+        promoted_via_org: m.access_level !== 'organization_lead',
+      }, { onConflict: 'organization_id,user_id' })
+      if (error) warn(`org_member ${m.email}: ${error.message}`)
+      else {
+        ok(`org_member: ${m.email} → ${orgNames[o]} (${m.access_level})`)
+        memberIds[m.email] = memberId
+      }
+    }
+  }
+
+  // ── Module access for MLs ──────────────────────────────────────────────────
+  console.log('\n  Module Lead access grants...')
+  const moduleKeys = ['ticketing', 'volunteering', 'schedule']
+  for (let o = 0; o < 3; o++) {
+    for (let m = 0; m < 2; m++) {
+      const mlEmail = `ml${o * 2 + m + 1}@test.local`
+      const mId = memberIds[mlEmail]
+      if (!mId) continue
+      for (const mk of moduleKeys) {
+        const { error } = await supabase.from('organization_module_access').upsert({
+          organization_member_id: mId,
+          module_key: mk,
+        }, { onConflict: 'organization_member_id,module_key' })
+        if (error) warn(`module_access ${mlEmail}/${mk}: ${error.message}`)
+      }
+      ok(`ML grants: ${mlEmail} → ${moduleKeys.join(', ')}`)
+    }
+  }
+
+  // ── Venues (1 per org) ─────────────────────────────────────────────────────
+  section('Accounting Seed — Venues')
+  const venueIds = orgSlugs.map((_, i) => uuid('cccc0001', i + 1))
+  for (let o = 0; o < 3; o++) {
+    const olEmail = `ol${o + 1}@test.local`
+    const { error } = await supabase.from('venues').upsert({
+      id: venueIds[o],
+      owner_id: users[olEmail],
+      organization_id: orgIds[o],
+      name: `${orgNames[o]} Hotel`,
+      physical_address: `${100 + o} Main St, City ${o + 1}, TX 75001`,
+      email: `hotel${o + 1}@test.local`,
+    }, { onConflict: 'id' })
+    if (error) warn(`venue: ${error.message}`)
+    else ok(`venue: ${orgNames[o]} Hotel`)
+  }
+
+  // ── Historical events (10 total, ~3-4 per org) ─────────────────────────────
+  section('Accounting Seed — Historical events + active event')
+
+  // Event date spread: one every ~45 days going back 18 months
+  const now = new Date()
+  const eventConfigs: { orgIdx: number; title: string; monthsAgo: number }[] = [
+    { orgIdx: 0, title: 'Summer Splash 2024',    monthsAgo: 18 },
+    { orgIdx: 1, title: 'Autumn Retreat 2024',    monthsAgo: 16 },
+    { orgIdx: 2, title: 'Winter Gathering 2024',  monthsAgo: 14 },
+    { orgIdx: 0, title: 'Spring Fling 2025',      monthsAgo: 12 },
+    { orgIdx: 1, title: 'Summer Heat 2025',       monthsAgo: 10 },
+    { orgIdx: 2, title: 'Fall Festival 2025',     monthsAgo: 8 },
+    { orgIdx: 0, title: 'Holiday Bash 2025',      monthsAgo: 6 },
+    { orgIdx: 1, title: 'New Year Kickoff 2026',  monthsAgo: 4 },
+    { orgIdx: 2, title: 'Valentine Mixer 2026',   monthsAgo: 3 },
+    { orgIdx: 0, title: 'Spring Awakening 2026',  monthsAgo: 1 },
+  ]
+
+  const eventIds: string[] = []
+  const ticketTypeMap: Record<string, { ga: string; vip: string; vol: string; rl: string; staff: string }> = {}
+
+  for (let e = 0; e < eventConfigs.length; e++) {
+    const cfg = eventConfigs[e]
+    const eventId = uuid('dddd0001', e + 1)
+    eventIds.push(eventId)
+
+    const startDate = new Date(now)
+    startDate.setMonth(startDate.getMonth() - cfg.monthsAgo)
+    const endDate = new Date(startDate)
+    endDate.setDate(endDate.getDate() + 3)
+
+    const epEmail = `ep${cfg.orgIdx * 2 + 1}@test.local`
+    const ownerId = users[epEmail]
+    if (!ownerId) { warn(`No owner for event ${cfg.title}`); continue }
+
+    const wsId1 = uuid('eeee0001', e * 10 + 1)
+    const wsId2 = uuid('eeee0001', e * 10 + 2)
+
+    const { error } = await supabase.from('platform_events').upsert({
+      id: eventId,
+      slug: `event-${e + 1}`,
+      owner_id: ownerId,
+      organization_id: orgIds[cfg.orgIdx],
+      title: cfg.title,
+      description: `Historical test event for analytics — ${cfg.title}`,
+      start_date: startDate.toISOString().split('T')[0],
+      end_date: endDate.toISOString().split('T')[0],
+      venue_id: venueIds[cfg.orgIdx],
+      status: 'Closed',
+      workflow_statuses: [
+        { id: wsId1, name: 'Tickets Open', order: 1, description: 'Ticketing opens' },
+        { id: wsId2, name: 'Rooms Open', order: 2, description: 'Rooms open' },
+      ],
+      module_config: {
+        ticketing: { enabled: true, required: true, opens_at_status: wsId1, closes_at_status: null },
+        volunteering: { enabled: true, required: false, opens_at_status: wsId1, closes_at_status: null },
+      },
+      cancellation_policy: { checkpoints: [{ status_id: wsId1, refund_percentage: 50 }] },
+    }, { onConflict: 'id' })
+    if (error) warn(`event ${cfg.title}: ${error.message}`)
+    else ok(`event: ${cfg.title} (${startDate.toISOString().split('T')[0]})`)
+
+    // Ticket types per event: GA ($450), VIP ($650), Volunteer ($250), Room Lead ($0), Staff ($0)
+    const gaId = uuid('ffff0001', e * 10 + 1)
+    const vipId = uuid('ffff0001', e * 10 + 2)
+    const volId = uuid('ffff0001', e * 10 + 3)
+    const rlId = uuid('ffff0001', e * 10 + 4)
+    const staffId = uuid('ffff0001', e * 10 + 5)
+    ticketTypeMap[eventId] = { ga: gaId, vip: vipId, vol: volId, rl: rlId, staff: staffId }
+
+    const tts = [
+      { id: gaId, event_id: eventId, name: 'General Admission', price: 450, available_count: 100, room_lead: false, volunteer_hours_required: 0 },
+      { id: vipId, event_id: eventId, name: 'VIP Pass', price: 650, available_count: 30, room_lead: false, volunteer_hours_required: 0 },
+      { id: volId, event_id: eventId, name: 'Volunteer Pass', price: 250, available_count: 20, room_lead: false, volunteer_hours_required: 4 },
+      { id: rlId, event_id: eventId, name: 'Room Lead', price: 0, available_count: 15, room_lead: true, roommate_codes_enabled: true, volunteer_hours_required: 0 },
+      { id: staffId, event_id: eventId, name: 'Staff Comp', price: 0, available_count: 10, room_lead: false, volunteer_hours_required: 0 },
+    ]
+    for (const tt of tts) {
+      const { error: ttErr } = await supabase.from('ticket_types').upsert(tt, { onConflict: 'id' })
+      if (ttErr) warn(`ticket_type ${tt.name} (event ${e + 1}): ${ttErr.message}`)
+    }
+
+    // Merchandise per event
+    const merchId1 = uuid('aaab0001', e * 10 + 1)
+    const merchId2 = uuid('aaab0001', e * 10 + 2)
+    await supabase.from('merchandise').upsert([
+      { id: merchId1, event_id: eventId, name: 'Event T-Shirt', price: 35, available_count: 100, enabled: true },
+      { id: merchId2, event_id: eventId, name: 'Sticker Pack', price: 10, available_count: 200, enabled: true },
+    ], { onConflict: 'id' })
+  }
+
+  // ── Attendees + Orders for historical events ───────────────────────────────
+  section('Accounting Seed — Attendees, orders, and refunds')
+
+  const attendeeEmails = Array.from({ length: 60 }, (_, i) => `attendee${i + 1}@test.local`)
+  const refundChannels: (string | null)[] = ['standard', 'standard', 'standard', 'hardship', 'chargeback', null]
+
+  for (let e = 0; e < eventConfigs.length; e++) {
+    const eventId = eventIds[e]
+    const ttMap = ticketTypeMap[eventId]
+    if (!ttMap) continue
+
+    const cfg = eventConfigs[e]
+    const eventStart = new Date(now)
+    eventStart.setMonth(eventStart.getMonth() - cfg.monthsAgo)
+
+    // 50-65 attendees per event, drawn from the attendee pool with overlap
+    const attendeeCount = 50 + Math.floor(Math.random() * 16)
+    const startIdx = (e * 7) % 60 // offset so different events overlap partially
+
+    console.log(`\n  Event ${e + 1}: ${cfg.title} — ${attendeeCount} attendees`)
+
+    const ticketDistribution = [
+      { typeId: ttMap.ga, typeName: 'GA', count: Math.floor(attendeeCount * 0.55), price: 450 },
+      { typeId: ttMap.vip, typeName: 'VIP', count: Math.floor(attendeeCount * 0.18), price: 650 },
+      { typeId: ttMap.vol, typeName: 'Vol', count: Math.floor(attendeeCount * 0.12), price: 250 },
+      { typeId: ttMap.rl, typeName: 'RL', count: Math.floor(attendeeCount * 0.08), price: 0 },
+      { typeId: ttMap.staff, typeName: 'Staff', count: Math.floor(attendeeCount * 0.07), price: 0 },
+    ]
+
+    let attendeeIdx = 0
+    for (const dist of ticketDistribution) {
+      for (let a = 0; a < dist.count; a++) {
+        const email = attendeeEmails[(startIdx + attendeeIdx) % 60]
+        const userId = users[email]
+        if (!userId) { attendeeIdx++; continue }
+
+        const orderId = uuid('1111' + String(e).padStart(4, '0'), attendeeIdx + 1)
+        const orderDate = randomDate(
+          new Date(eventStart.getTime() - 60 * 86400000),
+          new Date(eventStart.getTime() - 5 * 86400000)
+        )
+
+        // Determine if this order gets a refund (~10% of paid tickets)
+        const isPaid = dist.price > 0
+        const isRefund = isPaid && Math.random() < 0.10
+        const isCancelled = isPaid && !isRefund && Math.random() < 0.05
+        const refundAmount = isRefund ? (Math.random() < 0.5 ? dist.price : dist.price * 0.5) : 0
+        const channel = isRefund ? refundChannels[Math.floor(Math.random() * refundChannels.length)] : null
+
+        let orderStatus = 'complete'
+        if (isCancelled) orderStatus = 'cancelled'
+        else if (isRefund && refundAmount >= dist.price) orderStatus = 'refunded'
+        else if (isRefund) orderStatus = 'partial_refund'
+
+        // Insert order
+        const { error: orderErr } = await supabase.from('orders').upsert({
+          id: orderId,
+          event_id: eventId,
+          user_id: userId,
+          payment_provider: cfg.orgIdx === 0 ? 'square' : 'paypal',
+          payment_transaction_id: `txn_${orderId.slice(0, 8)}`,
+          status: orderStatus,
+          subtotal: dist.price,
+          amount_refunded: parseFloat(refundAmount.toFixed(2)),
+          refund_channel: channel,
+          completed_at: orderDate.toISOString(),
+        }, { onConflict: 'id' })
+        if (orderErr) { warn(`order: ${orderErr.message}`); attendeeIdx++; continue }
+
+        // Insert order_items (ticket)
+        await supabase.from('order_items').upsert({
+          id: uuid('2222' + String(e).padStart(4, '0'), attendeeIdx + 1),
+          order_id: orderId,
+          item_type: 'ticket',
+          item_id: dist.typeId,
+          quantity: 1,
+          unit_price: dist.price,
+          amount_refunded: parseFloat(refundAmount.toFixed(2)),
+        }, { onConflict: 'id' })
+
+        // Merchandise purchase (~40% of paid attendees)
+        if (isPaid && Math.random() < 0.4) {
+          const merchItemId = uuid('aaab0001', e * 10 + (Math.random() < 0.7 ? 1 : 2))
+          const merchPrice = merchItemId.endsWith('1') ? 35 : 10
+          await supabase.from('order_items').upsert({
+            id: uuid('3333' + String(e).padStart(4, '0'), attendeeIdx + 1),
+            order_id: orderId,
+            item_type: 'merchandise',
+            item_id: merchItemId,
+            quantity: 1,
+            unit_price: merchPrice,
+            amount_refunded: 0,
+          }, { onConflict: 'id' })
+        }
+
+        // Event attendee record
+        const ticketStatus = isCancelled ? 'Incomplete' : 'Complete'
+        const lockStatus = !isCancelled && !isRefund ? 'Locked' : 'Unlocked'
+        await supabase.from('event_attendees').upsert({
+          id: uuid('4444' + String(e).padStart(4, '0'), attendeeIdx + 1),
+          event_id: eventId,
+          user_id: userId,
+          ticket_type_id: dist.typeId,
+          ticket_purchased_at: orderDate.toISOString(),
+          order_id: orderId,
+          application_status: 'Approved',
+          ticket_status: ticketStatus,
+          lock_status: lockStatus,
+          is_room_lead: dist.typeName === 'RL',
+          volunteer_hours_required: dist.typeName === 'Vol' ? 4 : 0,
+        }, { onConflict: 'event_id,user_id' })
+
+        attendeeIdx++
+      }
+    }
+    ok(`Event ${e + 1}: ${attendeeIdx} attendees seeded`)
+  }
+
+  // ── Active event with ALL modules ──────────────────────────────────────────
+  section('Accounting Seed — Active event (all modules)')
+
+  const activeEventId = uuid('dddd0001', 99)
+  const activeWs1 = uuid('eeee0099', 1)
+  const activeWs2 = uuid('eeee0099', 2)
+  const activeWs3 = uuid('eeee0099', 3)
+
+  const activeTtGa = uuid('ffff0099', 1)
+  const activeTtVip = uuid('ffff0099', 2)
+  const activeTtVol = uuid('ffff0099', 3)
+  const activeTtRl = uuid('ffff0099', 4)
+
+  const activeStart = new Date(now)
+  activeStart.setMonth(activeStart.getMonth() + 2)
+  const activeEnd = new Date(activeStart)
+  activeEnd.setDate(activeEnd.getDate() + 4)
+
+  const activeOwnerId = users['ep1@test.local']!
+  const { error: activeErr } = await supabase.from('platform_events').upsert({
+    id: activeEventId,
+    slug: 'upcoming-gala-2026',
+    owner_id: activeOwnerId,
+    organization_id: orgIds[0],
+    title: 'Upcoming Gala 2026',
+    description: 'Active event with all modules enabled — first custom status',
+    start_date: activeStart.toISOString().split('T')[0],
+    end_date: activeEnd.toISOString().split('T')[0],
+    venue_id: venueIds[0],
+    status: 'Applications Open',
+    workflow_statuses: [
+      { id: activeWs1, name: 'Applications Open', order: 1, description: 'Applications open' },
+      { id: activeWs2, name: 'Tickets Open', order: 2, description: 'Tickets open' },
+      { id: activeWs3, name: 'Rooms Open', order: 3, description: 'Rooms open' },
+    ],
+    module_config: {
+      application: { enabled: true, required: true, opens_at_status: activeWs1, closes_at_status: activeWs2 },
+      ticketing: { enabled: true, required: true, opens_at_status: activeWs2, closes_at_status: null },
+      waiver: { enabled: true, required: true, opens_at_status: activeWs2, closes_at_status: null },
+      venue: { enabled: true, required: false, opens_at_status: activeWs3, closes_at_status: null },
+      volunteering: { enabled: true, required: false, opens_at_status: activeWs2, closes_at_status: null },
+      schedule: { enabled: true, required: false, opens_at_status: 'Published', closes_at_status: null },
+      badge: { enabled: true, required: false, opens_at_status: activeWs2, closes_at_status: null },
+    },
+    cancellation_policy: {
+      checkpoints: [
+        { status_id: activeWs1, refund_percentage: 100 },
+        { status_id: activeWs2, refund_percentage: 50 },
+      ],
+    },
+    room_lock_in_date: new Date(activeStart.getTime() - 14 * 86400000).toISOString(),
+  }, { onConflict: 'id' })
+  if (activeErr) warn(`active event: ${activeErr.message}`)
+  else ok('Active event: Upcoming Gala 2026 (status: Applications Open)')
+
+  // Ticket types for active event
+  const activeTts = [
+    { id: activeTtGa, event_id: activeEventId, name: 'General Admission', price: 500, available_count: 150, room_lead: false, volunteer_hours_required: 0 },
+    { id: activeTtVip, event_id: activeEventId, name: 'VIP Experience', price: 750, available_count: 40, room_lead: false, volunteer_hours_required: 0 },
+    { id: activeTtVol, event_id: activeEventId, name: 'Volunteer Pass', price: 300, available_count: 25, room_lead: false, volunteer_hours_required: 4 },
+    { id: activeTtRl, event_id: activeEventId, name: 'Room Lead', price: 0, available_count: 20, room_lead: true, roommate_codes_enabled: true, volunteer_hours_required: 0 },
+  ]
+  for (const tt of activeTts) {
+    const { error: ttErr } = await supabase.from('ticket_types').upsert(tt, { onConflict: 'id' })
+    if (ttErr) warn(`active ticket_type ${tt.name}: ${ttErr.message}`)
+    else ok(`active ticket_type: ${tt.name} ($${tt.price})`)
+  }
+
+  // Application form for active event
+  const activeFormId = uuid('aaac0001', 1)
+  await supabase.from('application_forms').upsert({
+    id: activeFormId,
+    event_id: activeEventId,
+    title: 'Upcoming Gala Application',
+    fields: [
+      { id: uuid('aaac0002', 1), type: 'text', label: 'Preferred scene name?', options: [], required: true, order: 1 },
+      { id: uuid('aaac0002', 2), type: 'radio', label: 'How did you hear about us?', options: ['Friend', 'Social Media', 'Website'], required: true, order: 2 },
+    ],
+  }, { onConflict: 'id' })
+  ok('Application form for active event')
+
+  // Volunteer shifts for active event
+  for (let s = 0; s < 4; s++) {
+    const shiftDate = new Date(activeStart)
+    shiftDate.setDate(shiftDate.getDate() + Math.floor(s / 2))
+    shiftDate.setHours(10 + (s % 2) * 4)
+    await supabase.from('volunteer_shifts').upsert({
+      id: uuid('aaad0001', s + 1),
+      event_id: activeEventId,
+      name: `Shift ${s + 1} — ${s % 2 === 0 ? 'Morning' : 'Afternoon'}`,
+      date_time: shiftDate.toISOString(),
+      duration_minutes: 120,
+      capacity: 5,
+    }, { onConflict: 'id' })
+  }
+  ok('4 volunteer shifts for active event')
+
+  ok('Accounting seed complete!')
+}
+
 async function main() {
   console.log('\n========================================================')
   console.log('  Lekd Platform — Development Seed Script')
@@ -688,6 +1234,24 @@ async function main() {
   console.log(`  Test user DOB: ${dob} (30 years ago)`)
   console.log('\n  WARNING: Development only. NEVER run against production.')
   console.log('\n  admin@test.local / Admin1234! is always created.\n')
+
+  const doAccountingSeed = await ask('Run Accounting Seed? (truncates all, creates orgs + historical events + sales data)')
+
+  if (doAccountingSeed) {
+    await accountingSeed()
+    console.log('\n========================================================')
+    console.log('  Accounting Seed complete.')
+    console.log('  admin@test.local  / Admin1234!  (System Administrator)')
+    console.log('  ol1@test.local    / OrgLead1!   (Org Lead — Shiny Dog)')
+    console.log('  ep1@test.local    / EventPro1!  (EP — Shiny Dog)')
+    console.log('  ml1@test.local    / ModLead1!   (ML — Shiny Dog)')
+    console.log('')
+    console.log('  3 organizations, 10 historical events, 1 active event')
+    console.log('  ~550 attendee records with paid orders and refunds')
+    console.log('========================================================\n')
+    rl.close()
+    return
+  }
 
   const doTruncate = await ask('Truncate all data before seeding? (full reset)')
   if (doTruncate) {

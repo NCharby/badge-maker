@@ -71,26 +71,26 @@ export async function checkEventAccess(
         return { authorized: true, reason: 'org_member', orgAccessLevel: level }
       }
 
-      // Module Lead: check for specific module grant
+      // Module Lead: check org-wide module grants
+      // Grants are stored at the org level; event-level filtering (which modules
+      // are enabled on the specific event) is applied downstream in epEventGuard.
       if (level === 'module_lead') {
         if (!options?.moduleKey) {
-          // No module specified — Module Leads need a module-specific check
-          // Check if they have ANY module access on this event
+          // Check if they have ANY module grant in this org
           const { count } = await admin
             .from('organization_module_access')
             .select('*', { count: 'exact', head: true })
             .eq('organization_member_id', membership.id)
-            .eq('event_id', eventId)
 
           if (count && count > 0) {
             return { authorized: true, reason: 'module_lead', orgAccessLevel: 'module_lead' }
           }
         } else {
+          // Check for a specific module grant (org-wide)
           const { data: moduleGrant } = await admin
             .from('organization_module_access')
             .select('id')
             .eq('organization_member_id', membership.id)
-            .eq('event_id', eventId)
             .eq('module_key', options.moduleKey)
             .maybeSingle()
 

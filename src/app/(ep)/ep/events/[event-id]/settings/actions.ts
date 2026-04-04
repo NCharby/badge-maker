@@ -11,6 +11,8 @@ export async function updateEventDetails(
     start_date: string
     end_date: string
     room_lock_in_date: string
+    late_registration_enabled: boolean
+    late_registration_email: string
   },
 ): Promise<{ success: true } | { error: string }> {
   const { authorized, admin } = await epEventGuard(eventId)
@@ -30,6 +32,8 @@ export async function updateEventDetails(
       start_date: data.start_date,
       end_date: data.end_date,
       room_lock_in_date: data.room_lock_in_date || null,
+      late_registration_enabled: data.late_registration_enabled,
+      late_registration_email: data.late_registration_email.trim() || null,
     })
     .eq('id', eventId)
   if (error) return { error: error.message }
@@ -38,5 +42,6 @@ export async function updateEventDetails(
   revalidatePath(`/ep/events/${eventId}/settings`)
   revalidatePath(`/ep/events/${eventId}/notifications`)
   revalidatePath('/ep/dashboard')
+  revalidatePath('/events/browse')
   return { success: true }
 }

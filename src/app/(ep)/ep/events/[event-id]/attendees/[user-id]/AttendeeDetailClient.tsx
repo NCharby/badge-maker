@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { updateApplicationStatus } from './actions'
+import { updateApplicationStatus, approveHardshipRequest, denyHardshipRequest } from './actions'
 
 const APPLICATION_STATUSES = [
   'Incomplete',
@@ -23,6 +23,13 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   'Closed':        { bg: '#F3F4F6', color: '#9CA3AF' },
 }
 
+interface HardshipRequest {
+  id: string
+  reason: string
+  supporting_details: string | null
+  created_at: string
+}
+
 interface Props {
   eventId: string
   targetUserId: string
@@ -32,6 +39,8 @@ interface Props {
   badgeStatus: string
   lockStatus: string
   roomStatus: string
+  hardshipRequest: HardshipRequest | null
+  orderSubtotal: number | null
 }
 
 export default function AttendeeDetailClient({
@@ -43,6 +52,8 @@ export default function AttendeeDetailClient({
   badgeStatus,
   lockStatus,
   roomStatus,
+  hardshipRequest,
+  orderSubtotal,
 }: Props) {
   const [currentAppStatus, setCurrentAppStatus] = useState(applicationStatus)
   const [pendingStatus, setPendingStatus] = useState<string | null>(null)
@@ -50,6 +61,14 @@ export default function AttendeeDetailClient({
   const [epNote, setEpNote] = useState('')
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
+
+  // Hardship review state
+  const [hardshipAction, setHardshipAction] = useState<'idle' | 'approve' | 'deny'>('idle')
+  const [hardshipPct, setHardshipPct] = useState<number>(100)
+  const [hardshipNote, setHardshipNote] = useState('')
+  const [hardshipError, setHardshipError] = useState('')
+  const [hardshipSuccess, setHardshipSuccess] = useState('')
+  const [hardshipResolved, setHardshipResolved] = useState(false)
 
   const appBadge = STATUS_COLORS[currentAppStatus] ?? STATUS_COLORS['Incomplete']
 
@@ -82,8 +101,294 @@ export default function AttendeeDetailClient({
     })
   }
 
+  const inputStyle: React.CSSProperties = {
+    padding: '6px 10px',
+    border: '1px solid var(--sd-border)',
+    borderRadius: '6px',
+    fontSize: '13px',
+    background: 'var(--sd-card)',
+    color: 'var(--sd-text)',
+    width: '100%',
+    boxSizing: 'border-box',
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+      {/* Hardship cancellation request card */}
+      {hardshipRequest && !hardshipResolved && (
+        <div style={{
+          background: 'var(--sd-card)',
+          border: '1px solid var(--sd-border)',
+          borderLeft: '4px solid var(--sd-amber)',
+          borderRadius: '8px',
+          padding: '16px',
+          marginBottom: '4px',
+        }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--sd-text)' }}>
+              Hardship Cancellation Request
+            </span>
+            <span style={{
+              fontSize: '11px',
+              fontWeight: 600,
+              padding: '2px 8px',
+              borderRadius: '99px',
+              background: 'var(--sd-amber-light)',
+              color: 'var(--sd-amber)',
+            }}>
+              Pending
+            </span>
+          </div>
+
+          {/* Reason */}
+          <div style={{ marginBottom: '10px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--sd-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>
+              Reason
+            </div>
+            <div style={{
+              background: 'var(--sd-card2)',
+              padding: '10px 14px',
+              borderRadius: '6px',
+              fontSize: '13px',
+              fontStyle: 'italic',
+              color: 'var(--sd-text)',
+            }}>
+              {hardshipRequest.reason}
+            </div>
+          </div>
+
+          {/* Supporting details */}
+          {hardshipRequest.supporting_details && (
+            <div style={{ marginBottom: '10px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--sd-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>
+                Supporting Details
+              </div>
+              <div style={{
+                background: 'var(--sd-card2)',
+                padding: '10px 14px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                color: 'var(--sd-text)',
+              }}>
+                {hardshipRequest.supporting_details}
+              </div>
+            </div>
+          )}
+
+          {/* Meta row */}
+          <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--sd-muted)', marginBottom: '14px' }}>
+            <span>
+              <strong>Submitted:</strong> {new Date(hardshipRequest.created_at).toLocaleString()}
+            </span>
+            <span>
+              <strong>Order amount:</strong> ${orderSubtotal?.toFixed(2) ?? '—'}
+            </span>
+          </div>
+
+          {/* Success message */}
+          {hardshipSuccess && (
+            <p style={{ fontSize: '13px', color: 'var(--sd-green)', marginBottom: '8px', fontWeight: 600 }}>
+              {hardshipSuccess}
+            </p>
+          )}
+
+          {/* Error message */}
+          {hardshipError && (
+            <p style={{ fontSize: '12px', color: 'var(--sd-red)', marginBottom: '8px' }}>
+              {hardshipError}
+            </p>
+          )}
+
+          {/* Idle — show Approve / Deny buttons */}
+          {hardshipAction === 'idle' && !hardshipSuccess && (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => { setHardshipError(''); setHardshipNote(''); setHardshipAction('approve') }}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: 'var(--sd-green)',
+                  color: '#fff',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Approve
+              </button>
+              <button
+                onClick={() => { setHardshipError(''); setHardshipNote(''); setHardshipAction('deny') }}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: 'var(--sd-red)',
+                  color: '#fff',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Deny
+              </button>
+            </div>
+          )}
+
+          {/* Approve inline form */}
+          {hardshipAction === 'approve' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <label style={{ fontSize: '13px', color: 'var(--sd-text)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                  Refund Percentage
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={hardshipPct}
+                  onChange={e => setHardshipPct(Math.min(100, Math.max(0, Number(e.target.value))))}
+                  style={{ ...inputStyle, width: '60px' }}
+                />
+                <span style={{ fontSize: '13px', color: 'var(--sd-muted)' }}>%</span>
+                <span style={{ fontSize: '13px', color: 'var(--sd-text)', marginLeft: 'auto' }}>
+                  = <strong>${((orderSubtotal ?? 0) * hardshipPct / 100).toFixed(2)}</strong>
+                </span>
+              </div>
+              <div>
+                <label style={{ fontSize: '13px', color: 'var(--sd-text)', fontWeight: 500, display: 'block', marginBottom: '4px' }}>
+                  Note (optional)
+                </label>
+                <textarea
+                  value={hardshipNote}
+                  onChange={e => setHardshipNote(e.target.value)}
+                  rows={2}
+                  placeholder="Internal note for this decision"
+                  style={{ ...inputStyle, resize: 'vertical' }}
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  onClick={() => {
+                    setHardshipError('')
+                    startTransition(async () => {
+                      const result = await approveHardshipRequest(
+                        eventId,
+                        hardshipRequest.id,
+                        hardshipPct,
+                        hardshipNote || undefined,
+                      )
+                      if ('error' in result) {
+                        setHardshipError(result.error)
+                      } else {
+                        setHardshipSuccess('Request approved and attendee notified.')
+                        setHardshipResolved(true)
+                        setHardshipAction('idle')
+                      }
+                    })
+                  }}
+                  disabled={isPending}
+                  style={{
+                    padding: '7px 16px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: 'var(--sd-green)',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: isPending ? 'not-allowed' : 'pointer',
+                    opacity: isPending ? 0.7 : 1,
+                  }}
+                >
+                  Confirm Approval
+                </button>
+                <button
+                  onClick={() => { setHardshipAction('idle'); setHardshipError('') }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '13px',
+                    color: 'var(--sd-muted)',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Deny inline form */}
+          {hardshipAction === 'deny' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div>
+                <label style={{ fontSize: '13px', color: 'var(--sd-text)', fontWeight: 500, display: 'block', marginBottom: '4px' }}>
+                  Note (optional)
+                </label>
+                <textarea
+                  value={hardshipNote}
+                  onChange={e => setHardshipNote(e.target.value)}
+                  rows={2}
+                  placeholder="Internal note for this decision"
+                  style={{ ...inputStyle, resize: 'vertical' }}
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  onClick={() => {
+                    setHardshipError('')
+                    startTransition(async () => {
+                      const result = await denyHardshipRequest(
+                        eventId,
+                        hardshipRequest.id,
+                        hardshipNote || undefined,
+                      )
+                      if ('error' in result) {
+                        setHardshipError(result.error)
+                      } else {
+                        setHardshipSuccess('Request denied and attendee notified.')
+                        setHardshipResolved(true)
+                        setHardshipAction('idle')
+                      }
+                    })
+                  }}
+                  disabled={isPending}
+                  style={{
+                    padding: '7px 16px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: 'var(--sd-red)',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: isPending ? 'not-allowed' : 'pointer',
+                    opacity: isPending ? 0.7 : 1,
+                  }}
+                >
+                  Confirm Denial
+                </button>
+                <button
+                  onClick={() => { setHardshipAction('idle'); setHardshipError('') }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '13px',
+                    color: 'var(--sd-muted)',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Application status card */}
       <div style={{
         background: 'var(--sd-card)',
@@ -188,26 +493,23 @@ export default function AttendeeDetailClient({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
               <div>
                 <button
-                  disabled={true}
+                  onClick={() => applyStatus(pendingStatus!, 'revoke_and_refund', epNote || undefined)}
+                  disabled={isPending}
                   style={{
                     width: '100%',
                     padding: '12px 16px',
                     borderRadius: '7px',
                     border: '1px solid var(--sd-border)',
-                    background: '#F3F4F6',
-                    color: '#9CA3AF',
+                    background: 'var(--sd-card)',
+                    color: 'var(--sd-text)',
                     fontSize: '13px',
                     fontWeight: 600,
-                    cursor: 'not-allowed',
+                    cursor: isPending ? 'not-allowed' : 'pointer',
                     textAlign: 'left',
-                    opacity: 0.6,
                   }}
                 >
                   Cancel ticket and initiate refund (per Cancellation Policy)
                 </button>
-                <p style={{ fontSize: '11px', color: 'var(--sd-muted)', marginTop: '4px', marginBottom: 0 }}>
-                  Refund processing requires payment integration (not yet configured).
-                </p>
               </div>
 
               <div>

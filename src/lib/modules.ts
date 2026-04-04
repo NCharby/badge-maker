@@ -62,6 +62,60 @@ export function getModuleOpenState(
   return 'open'
 }
 
+/**
+ * Determines if a new user could begin the attendance process for an event.
+ *
+ * Returns false if:
+ * - Event is Draft, Event Locked, or any status after Event Locked
+ * - The first required module's opens_at_status has passed (its module is closed),
+ *   meaning the entry point for new attendees is no longer available
+ *
+ * This is used on the browse page to separate "Upcoming" from "Closing Soon" events.
+ */
+export function canBeginAttendance(
+  eventStatus: string,
+  moduleConfig: Record<string, ModuleConfig | undefined>,
+  workflowStatuses: WorkflowStatus[],
+): boolean {
+  const order = buildStatusOrder(workflowStatuses)
+  const currentIdx = order.indexOf(eventStatus)
+  if (currentIdx === -1) return false
+
+  // Draft or Event Locked+ are not attendable
+  const lockedIdx = order.indexOf('Event Locked')
+  if (eventStatus === 'Draft' || (lockedIdx !== -1 && currentIdx >= lockedIdx)) return false
+
+  // Find the earliest required module by opens_at_status position
+  const CANDIDATES: (keyof typeof moduleConfig)[] = ['application', 'ticketing', 'waiver', 'volunteering']
+  let earliestRequired: { key: string; opensIdx: number; closesIdx: number } | null = null
+
+  for (const key of CANDIDATES) {
+    const cfg = moduleConfig[key]
+    if (!cfg?.enabled || !cfg?.required) continue
+
+    const opensName = cfg.opens_at_status
+      ? resolveStatusRef(cfg.opens_at_status, workflowStatuses)
+      : 'Published'
+    const opensIdx = order.indexOf(opensName)
+
+    const closesRef = cfg.closes_at_status ?? 'Event Locked'
+    const closesName = resolveStatusRef(closesRef, workflowStatuses)
+    const closesIdx = order.indexOf(closesName)
+
+    if (!earliestRequired || opensIdx < earliestRequired.opensIdx) {
+      earliestRequired = { key, opensIdx, closesIdx }
+    }
+  }
+
+  // No required modules → event is always attendable (until Event Locked)
+  if (!earliestRequired) return true
+
+  // If the first required module is closed, new users can't begin
+  if (earliestRequired.closesIdx !== -1 && currentIdx >= earliestRequired.closesIdx) return false
+
+  return true
+}
+
 /** Returns true only when the module is in the 'open' state (fully interactive). */
 export function isModuleOpen(
   config: ModuleConfig,

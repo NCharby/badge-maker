@@ -126,6 +126,24 @@ export default async function AdminDashboardPage() {
             Create and manage reusable event configuration templates.
           </div>
         </a>
+        <a
+          href="/admin/analytics"
+          style={{
+            display: 'block',
+            background: 'var(--sd-card)',
+            border: '1px solid var(--sd-border)',
+            borderRadius: 'var(--sd-radius)',
+            padding: '1.25rem 1.5rem',
+            textDecoration: 'none',
+            color: 'var(--sd-text)',
+          }}
+        >
+          <div style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>📊</div>
+          <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Platform Analytics</div>
+          <div style={{ fontSize: '0.825rem', color: 'var(--sd-muted)' }}>
+            Revenue trends, registration funnels, and platform-wide KPIs.
+          </div>
+        </a>
       </div>
     </div>
   )

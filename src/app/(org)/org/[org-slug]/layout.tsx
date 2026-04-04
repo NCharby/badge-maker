@@ -63,6 +63,7 @@ export default async function OrgLayout({
   const navItems = [
     { href: `/org/${orgSlug}/dashboard`, label: 'Overview' },
     { href: `/org/${orgSlug}/members`, label: 'Members' },
+    { href: `/org/${orgSlug}/analytics`, label: 'Analytics' },
     { href: `/org/${orgSlug}/settings`, label: 'Settings' },
   ]
 

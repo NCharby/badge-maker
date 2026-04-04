@@ -4,16 +4,16 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateMemberModuleAccess } from '../../actions'
 
-const MODULE_LABELS: Record<string, string> = {
-  application: 'Application',
-  ticketing: 'Tickets',
-  waiver: 'Waiver',
-  venue: 'Venue',
-  room_selection: 'Basic Event Rooms',
-  volunteering: 'Volunteer',
-  schedule: 'Schedule',
-  badge: 'Badge',
-}
+const ALL_MODULES: { key: string; label: string }[] = [
+  { key: 'application', label: 'Application' },
+  { key: 'ticketing', label: 'Tickets' },
+  { key: 'waiver', label: 'Waiver' },
+  { key: 'venue', label: 'Venue' },
+  { key: 'room_selection', label: 'Basic Event Rooms' },
+  { key: 'volunteering', label: 'Volunteer' },
+  { key: 'schedule', label: 'Schedule' },
+  { key: 'badge', label: 'Badge' },
+]
 
 const LEVEL_META: Record<string, { label: string; color: string; bg: string }> = {
   organization_lead: { label: 'Organization Lead', color: 'var(--sd-indigo)', bg: 'var(--sd-indigo-light)' },
@@ -22,61 +22,40 @@ const LEVEL_META: Record<string, { label: string; color: string; bg: string }> =
   user: { label: 'Member', color: 'var(--sd-gray)', bg: 'var(--sd-gray-light)' },
 }
 
-type EventRow = {
-  id: string
-  title: string
-  status: string
-  enabledModules: string[]
-  grantedModules: string[]
-}
-
 export default function MemberDetailClient({
   orgSlug,
   memberId,
   accessLevel,
-  events,
+  grantedModules,
 }: {
   orgSlug: string
   memberId: string
   accessLevel: string
-  events: EventRow[]
+  grantedModules: string[]
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [selection, setSelection] = useState<string[]>([...grantedModules])
 
-  // Local state for checkbox selections, keyed by event ID
-  const [selections, setSelections] = useState<Record<string, string[]>>(() => {
-    const initial: Record<string, string[]> = {}
-    for (const event of events) {
-      initial[event.id] = [...event.grantedModules]
-    }
-    return initial
-  })
+  const hasChanges =
+    selection.length !== grantedModules.length ||
+    selection.some(k => !grantedModules.includes(k))
 
-  // Track which events have unsaved changes
-  function hasChanges(eventId: string, original: string[]): boolean {
-    const current = selections[eventId] ?? []
-    if (current.length !== original.length) return true
-    return current.some(k => !original.includes(k)) || original.some(k => !current.includes(k))
+  function toggleModule(moduleKey: string) {
+    setSelection(prev =>
+      prev.includes(moduleKey)
+        ? prev.filter(k => k !== moduleKey)
+        : [...prev, moduleKey]
+    )
   }
 
-  function toggleModule(eventId: string, moduleKey: string) {
-    setSelections(prev => {
-      const current = prev[eventId] ?? []
-      const next = current.includes(moduleKey)
-        ? current.filter(k => k !== moduleKey)
-        : [...current, moduleKey]
-      return { ...prev, [eventId]: next }
-    })
-  }
-
-  function saveEvent(eventId: string) {
+  function save() {
     setError('')
     setSuccess('')
     startTransition(async () => {
-      const result = await updateMemberModuleAccess(orgSlug, memberId, eventId, selections[eventId] ?? [])
+      const result = await updateMemberModuleAccess(orgSlug, memberId, selection)
       if ('error' in result) {
         setError(result.error)
       } else {
@@ -88,9 +67,6 @@ export default function MemberDetailClient({
 
   const meta = LEVEL_META[accessLevel] ?? LEVEL_META.user
   const isModuleLead = accessLevel === 'module_lead'
-
-  // Only show events that have at least one enabled module
-  const eventsWithModules = events.filter(e => e.enabledModules.length > 0)
 
   return (
     <div>
@@ -134,109 +110,76 @@ export default function MemberDetailClient({
           </p>
         </div>
       ) : (
-        <>
-          <h2 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--sd-text)', marginBottom: '12px' }}>
-            Module Access by Event
-          </h2>
-          <p style={{ fontSize: '12px', color: 'var(--sd-muted)', marginBottom: '16px', marginTop: 0 }}>
-            Select which modules this Module Lead can manage for each event. Only modules enabled on the event are shown.
-          </p>
-
-          {eventsWithModules.length === 0 ? (
-            <div style={{
-              background: 'var(--sd-card)',
-              border: '1px solid var(--sd-border)',
-              borderRadius: 'var(--sd-radius)',
-              padding: '20px',
-              textAlign: 'center',
-              color: 'var(--sd-muted)',
-              fontSize: '14px',
-            }}>
-              No events with enabled modules in this organization.
+        <div style={{
+          background: 'var(--sd-card)',
+          border: '1px solid var(--sd-border)',
+          borderRadius: 'var(--sd-radius)',
+          padding: '20px',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div>
+              <h2 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--sd-text)', margin: 0 }}>
+                Module Access
+              </h2>
+              <p style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '4px', marginBottom: 0 }}>
+                Select which modules this Module Lead can manage across all organization events. Access is filtered per event based on which modules are enabled.
+              </p>
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {eventsWithModules.map(event => {
-                const changed = hasChanges(event.id, event.grantedModules)
-                const currentSelection = selections[event.id] ?? []
+            {hasChanges && (
+              <button
+                onClick={save}
+                disabled={isPending}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  border: 'none',
+                  background: isPending ? 'var(--sd-muted)' : 'var(--sd-green)',
+                  color: '#fff',
+                  cursor: isPending ? 'not-allowed' : 'pointer',
+                  flexShrink: 0,
+                  marginLeft: '16px',
+                }}
+              >
+                Save
+              </button>
+            )}
+          </div>
 
-                return (
-                  <div
-                    key={event.id}
-                    style={{
-                      background: 'var(--sd-card)',
-                      border: '1px solid var(--sd-border)',
-                      borderRadius: 'var(--sd-radius)',
-                      padding: '16px 20px',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--sd-text)' }}>
-                          {event.title}
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'var(--sd-muted)', marginTop: '2px' }}>
-                          {event.status}
-                        </div>
-                      </div>
-                      {changed && (
-                        <button
-                          onClick={() => saveEvent(event.id)}
-                          disabled={isPending}
-                          style={{
-                            padding: '6px 14px',
-                            borderRadius: '6px',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            border: 'none',
-                            background: isPending ? 'var(--sd-muted)' : 'var(--sd-green)',
-                            color: '#fff',
-                            cursor: isPending ? 'not-allowed' : 'pointer',
-                          }}
-                        >
-                          Save
-                        </button>
-                      )}
-                    </div>
-
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                      {event.enabledModules.map(moduleKey => {
-                        const checked = currentSelection.includes(moduleKey)
-                        return (
-                          <label
-                            key={moduleKey}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '6px 10px',
-                              borderRadius: '6px',
-                              fontSize: '13px',
-                              cursor: 'pointer',
-                              border: `1px solid ${checked ? 'var(--sd-purple)' : 'var(--sd-border)'}`,
-                              background: checked ? 'var(--sd-purple-light)' : 'transparent',
-                              color: checked ? 'var(--sd-purple)' : 'var(--sd-text)',
-                              fontWeight: checked ? 600 : 400,
-                              transition: 'all 0.15s ease',
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleModule(event.id, moduleKey)}
-                              style={{ accentColor: 'var(--sd-purple)' }}
-                            />
-                            {MODULE_LABELS[moduleKey] ?? moduleKey}
-                          </label>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '16px' }}>
+            {ALL_MODULES.map(({ key, label }) => {
+              const checked = selection.includes(key)
+              return (
+                <label
+                  key={key}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    border: `1px solid ${checked ? 'var(--sd-purple)' : 'var(--sd-border)'}`,
+                    background: checked ? 'var(--sd-purple-light)' : 'transparent',
+                    color: checked ? 'var(--sd-purple)' : 'var(--sd-text)',
+                    fontWeight: checked ? 600 : 400,
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleModule(key)}
+                    style={{ accentColor: 'var(--sd-purple)' }}
+                  />
+                  {label}
+                </label>
+              )
+            })}
+          </div>
+        </div>
       )}
     </div>
   )

@@ -2,8 +2,10 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
-import type { ModuleConfig, WorkflowStatus } from '@/types/platform'
+import type { ModuleConfig, WorkflowStatus, CancellationPolicy } from '@/types/platform'
 import { getModuleOpenState } from '@/lib/modules'
+import { getApplicableRefundPercentage, isHardshipAvailable } from '@/lib/refunds'
+import { RefundButton } from './RefundButton'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -326,7 +328,7 @@ export default async function EventAttendeePage({
   // Fetch event (admin client — users have no RLS on platform_events; §3)
   const { data: event } = await adminSupabase
     .from('platform_events')
-    .select('id, slug, title, description, start_date, end_date, location, status, module_config, workflow_statuses, telegram_group, telegram_chat_link, discord_server, room_lock_in_date, organizations(name, logo_url)')
+    .select('id, slug, title, description, start_date, end_date, location, status, module_config, workflow_statuses, cancellation_policy, telegram_group, telegram_chat_link, discord_server, room_lock_in_date, organizations(name, logo_url)')
     .eq('id', eventId)
     .single()
 
@@ -574,6 +576,37 @@ export default async function EventAttendeePage({
     confirmedVolunteerMinutes = (confirmedShifts ?? []).reduce((sum, s) => sum + s.duration_minutes, 0)
   }
 
+  // ── Refund / hardship state for ticket card ──────────────────────────────
+  const cancellationPolicy = (event.cancellation_policy ?? null) as CancellationPolicy | null
+  const refundPercentage = getApplicableRefundPercentage(event.status, workflowStatuses, cancellationPolicy)
+  const hardshipAvailableForEvent = isHardshipAvailable(event.status, workflowStatuses, cancellationPolicy)
+
+  // Check for an existing pending hardship request (admin client — service role reads all rows)
+  let hasExistingHardshipRequest = false
+  if (hardshipAvailableForEvent && (attendee as unknown as AttendeeRow).ticket_status === 'Complete') {
+    const { data: existingHardship } = await adminSupabase
+      .from('hardship_requests')
+      .select('id')
+      .eq('event_id', eventId)
+      .eq('user_id', user.id)
+      .eq('status', 'pending')
+      .maybeSingle()
+    hasExistingHardshipRequest = !!existingHardship
+  }
+
+  // Fetch ticket unit_price for RefundButton display
+  let ticketPrice = 0
+  const attendeeTyped = attendee as unknown as AttendeeRow
+  if (attendeeTyped.ticket_status === 'Complete' && attendeeTyped.order_id) {
+    const { data: ticketItem } = await adminSupabase
+      .from('order_items')
+      .select('unit_price')
+      .eq('order_id', attendeeTyped.order_id)
+      .eq('item_type', 'ticket')
+      .maybeSingle()
+    ticketPrice = Number(ticketItem?.unit_price ?? 0)
+  }
+
   // Build module cards — ALL enabled modules (open, closed, and not_yet_open)
   // For room_selection: either the Basic Event Rooms key OR the Venue module key may
   // provide rooms. Both surface as the same "Room Selection" card in the hub.
@@ -727,36 +760,101 @@ export default async function EventAttendeePage({
           </span>
         </div>
 
-        {/* Progress bar */}
-        {totalRequired > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '16px' }}>
-            <div style={{ flex: 1, height: '8px', background: '#E5E7EB', borderRadius: '99px', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${progressPct}%`, background: 'var(--sd-green)', borderRadius: '99px', transition: 'width .3s' }} />
-            </div>
-            <span style={{ fontSize: '13px', color: 'var(--sd-muted)', whiteSpace: 'nowrap' }}>
-              {completedRequired} of {totalRequired} required step{totalRequired !== 1 ? 's' : ''} complete
-            </span>
-          </div>
-        )}
+        {/* Progress bar and lock are in the lock status panel below */}
       </div>
 
 
-      {/* Module grid */}
-      {cards.length > 0 && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-            gap: '16px',
-            marginBottom: '24px',
-          }}
-        >
-          {cards.map(card => (
+      {/* ── Lock status + progress — integrated into header panel ────────── */}
+      {showLockSection && (
+        <div style={{
+          background: 'var(--sd-card)',
+          border: '1px solid var(--sd-border)',
+          borderRadius: 'var(--sd-radius)',
+          padding: '20px 28px',
+          marginBottom: '24px',
+          boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--sd-text)' }}>Attendance Lock</span>
+              <span style={{ fontSize: '12px', fontWeight: 500, padding: '3px 10px', borderRadius: '99px', ...lockStatusStyle }}>
+                {lockStatus}
+              </span>
+            </div>
+            {lockStatus !== 'Locked' && (
+              <form action={handleReadyToLock} style={{ margin: 0 }}>
+                <button
+                  type="submit"
+                  disabled={!canLock}
+                  style={{
+                    padding: '7px 16px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: canLock ? 'pointer' : 'not-allowed',
+                    background: canLock ? 'var(--sd-green)' : '#E5E7EB',
+                    color: canLock ? '#fff' : 'var(--sd-muted)',
+                    opacity: lockStatus === 'Ready to Lock' ? 0.6 : 1,
+                  }}
+                >
+                  {lockStatus === 'Ready to Lock' ? 'Signal sent' : 'Ready to Lock'}
+                </button>
+              </form>
+            )}
+          </div>
+
+          {/* Requirements checklist — compact inline */}
+          {allRequiredCards.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+              {allRequiredCards.map(card => (
+                <span
+                  key={card.key}
+                  style={{
+                    fontSize: '12px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '3px 10px',
+                    borderRadius: '99px',
+                    background: card.isComplete ? 'var(--sd-green-light)' : '#FEF3C7',
+                    color: card.isComplete ? 'var(--sd-green-dark)' : '#92400e',
+                    fontWeight: 500,
+                  }}
+                >
+                  {card.isComplete ? '✓' : '○'} {card.label}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Progress bar */}
+          {totalRequired > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ flex: 1, height: '6px', background: '#E5E7EB', borderRadius: '99px', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${progressPct}%`, background: 'var(--sd-green)', borderRadius: '99px', transition: 'width .3s' }} />
+              </div>
+              <span style={{ fontSize: '12px', color: 'var(--sd-muted)', whiteSpace: 'nowrap' }}>
+                {completedRequired}/{totalRequired}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Module cards — required first, then optional ────────────────── */}
+      {(() => {
+        const requiredCards = cards.filter(c => c.isRequired)
+        const optionalCards = cards.filter(c => !c.isRequired)
+
+        function renderCard(card: ModuleCard) {
+          return (
             <div
               key={card.key}
               style={{
                 background: card.isNotYetOpen ? 'var(--sd-card)' : card.isActionRequired ? '#FFFBEB' : 'var(--sd-card)',
-                border: `1px ${card.isRequired && !card.isNotYetOpen ? 'solid' : 'dashed'} ${card.isActionRequired ? '#FCD34D' : 'var(--sd-border)'}`,
+                border: `1px solid ${card.isActionRequired ? '#FCD34D' : 'var(--sd-border)'}`,
+                borderLeft: card.isRequired && !card.isNotYetOpen ? '4px solid var(--sd-green)' : undefined,
                 borderRadius: 'var(--sd-radius)',
                 padding: '20px',
                 boxShadow: '0 1px 3px rgba(0,0,0,.06)',
@@ -774,15 +872,7 @@ export default async function EventAttendeePage({
                     <span style={{ fontSize: '11px', color: 'var(--sd-muted)', fontStyle: 'italic' }}>read-only</span>
                   )}
                 </div>
-                <span
-                  style={{
-                    fontSize: '12px',
-                    fontWeight: 500,
-                    padding: '3px 10px',
-                    borderRadius: '99px',
-                    ...card.statusStyle,
-                  }}
-                >
+                <span style={{ fontSize: '12px', fontWeight: 500, padding: '3px 10px', borderRadius: '99px', ...card.statusStyle }}>
                   {card.statusLabel}
                 </span>
               </div>
@@ -795,134 +885,70 @@ export default async function EventAttendeePage({
               {/* Extra detail */}
               {card.detail && <div style={{ marginBottom: '10px' }}>{card.detail}</div>}
 
-              {/* CTA — not shown for not_yet_open cards */}
-              {!card.isNotYetOpen && (card.ctaHref ? (
+              {/* Refund / hardship button — ticket card only */}
+              {card.key === 'ticketing' && attendeeTyped.ticket_status === 'Complete' && (
+                <RefundButton
+                  eventId={eventId}
+                  refundPercentage={refundPercentage}
+                  hardshipAvailable={hardshipAvailableForEvent}
+                  ticketPrice={ticketPrice}
+                  hasExistingHardshipRequest={hasExistingHardshipRequest}
+                />
+              )}
+
+              {/* CTA — always a button for consistency */}
+              {!card.isNotYetOpen && card.ctaHref && card.ctaLabel && (
                 <Link
                   href={card.ctaHref}
                   style={{
-                    display: 'inline-block',
-                    fontSize: '12px',
-                    color: 'var(--sd-green)',
+                    display: 'block',
+                    textAlign: 'center',
+                    padding: '8px 16px',
+                    background: card.isActionRequired ? 'var(--sd-green)' : 'var(--sd-card)',
+                    color: card.isActionRequired ? '#fff' : 'var(--sd-green)',
+                    border: card.isActionRequired ? 'none' : '1px solid var(--sd-border)',
+                    borderRadius: '7px',
+                    fontWeight: 600,
+                    fontSize: '13px',
                     textDecoration: 'none',
-                    ...(card.isActionRequired
-                      ? {
-                          display: 'block',
-                          textAlign: 'center',
-                          padding: '8px 16px',
-                          background: 'var(--sd-green)',
-                          color: '#fff',
-                          borderRadius: '7px',
-                          fontWeight: 600,
-                          fontSize: '13px',
-                        }
-                      : {}),
+                    marginTop: '4px',
                   }}
                 >
                   {card.ctaLabel}
                 </Link>
-              ) : card.ctaLabel ? (
-                <span style={{ fontSize: '12px', color: 'var(--sd-muted)' }}>{card.ctaLabel}</span>
-              ) : null)}
-
-              {/* Optional tag */}
-              {!card.isRequired && (
-                <div style={{ marginTop: '8px' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--sd-muted)', fontStyle: 'italic' }}>Optional</span>
-                </div>
               )}
             </div>
-          ))}
-        </div>
-      )}
+          )
+        }
 
-      {/* Lock section — hidden until event moves past Published */}
-      {showLockSection && <div
-        style={{
-          background: 'var(--sd-card)',
-          border: '1px solid var(--sd-border)',
-          borderRadius: 'var(--sd-radius)',
-          padding: '24px',
-          boxShadow: '0 1px 3px rgba(0,0,0,.06)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <div>
-            <div style={{ fontSize: '15px', fontWeight: 600 }}>Attendance Lock Status</div>
-            <div style={{ marginTop: '6px' }}>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  padding: '3px 10px',
-                  borderRadius: '99px',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  ...lockStatusStyle,
-                }}
-              >
-                {lockStatus}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <p style={{ fontSize: '13px', color: 'var(--sd-muted)', marginBottom: '16px' }}>
-          {lockStatus === 'Locked'
-            ? 'Your attendance is locked. No further changes can be made.'
-            : lockStatus === 'Ready to Lock'
-            ? 'Your "Ready to Lock" signal has been sent. The event promoter will review and lock your attendance.'
-            : "When you've completed all required steps, you can signal \"Ready to Lock\" to notify the Event Promoter."}
-        </p>
-
-        {/* Requirements checklist */}
-        {allRequiredCards.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '16px' }}>
-            {allRequiredCards.map(card => (
-              <div
-                key={card.key}
-                style={{
-                  fontSize: '13px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  color: card.isComplete ? 'var(--sd-green-dark)' : 'var(--sd-amber)',
-                }}
-              >
-                {card.isComplete ? '✓' : '⏳'} {card.label} — {card.statusLabel}
-                {!card.isComplete && ' (required)'}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Ready to Lock form */}
-        {lockStatus !== 'Locked' && (
-          <form action={handleReadyToLock}>
-            <button
-              type="submit"
-              disabled={!canLock}
-              style={{
-                padding: '10px 20px',
-                borderRadius: '7px',
-                border: 'none',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: canLock ? 'pointer' : 'not-allowed',
-                background: canLock ? 'var(--sd-green)' : '#E5E7EB',
-                color: canLock ? '#fff' : 'var(--sd-muted)',
-                opacity: lockStatus === 'Ready to Lock' ? 0.6 : 1,
-              }}
-            >
-              🔒 {lockStatus === 'Ready to Lock' ? 'Signal sent' : 'Ready to Lock'}
-            </button>
-            {!canLock && lockStatus === 'Unlocked' && (
-              <p style={{ fontSize: '12px', color: 'var(--sd-muted)', marginTop: '8px' }}>
-                Complete all required steps to enable Ready to Lock.
-              </p>
+        return (
+          <>
+            {/* Required modules */}
+            {requiredCards.length > 0 && (
+              <>
+                <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--sd-muted)', marginBottom: '10px' }}>
+                  Required Steps
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                  {requiredCards.map(renderCard)}
+                </div>
+              </>
             )}
-          </form>
-        )}
-      </div>}
+
+            {/* Optional modules */}
+            {optionalCards.length > 0 && (
+              <>
+                <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--sd-muted)', marginBottom: '10px' }}>
+                  Optional
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                  {optionalCards.map(renderCard)}
+                </div>
+              </>
+            )}
+          </>
+        )
+      })()}
     </div>
   )
 }

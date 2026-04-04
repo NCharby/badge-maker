@@ -1,7 +1,7 @@
 # SD Platform — Remaining Work to MVP 1
 
 **Generated:** March 2026 | **Last updated:** April 2026
-**Audit basis:** Full QA/PM regression of codebase as of March 2026; April 2026 documentation sync
+**Audit basis:** Full QA/PM regression of codebase as of March 2026; April 2026 documentation sync (analytics & accounting module; refund & cancellation system)
 
 This document tracks all outstanding work required before the MVP 1 target (May Ticket Opening). Items are prioritized by whether they block launch or can be completed in parallel.
 
@@ -142,6 +142,10 @@ Every Server Action that fires an in-platform notification also has a `// TODO: 
 | 34 | `rooms/actions.ts` — `roomLeadSendLockRequest` | Room Lead name, room name/number, event name |
 | 35 | `rooms/actions.ts` — `acceptLockRequest` | Acceptor name, event name, room number |
 | 36 | `rooms/actions.ts` — `declineLockRequest` | Decliner name, event name, room number |
+| 37 | `events/[event-id]/refund/actions.ts` — `requestStandardRefund` | Refund amount, percentage, event name, order ID (user email); EP notification of refund |
+| 38 | `events/[event-id]/refund/actions.ts` — `submitHardshipRequest` | User scene name, event name, reason excerpt (to EP) |
+| 39 | `ep/events/[event-id]/attendees/[user-id]/actions.ts` — `approveHardshipRequest` | Approved refund amount, event name, EP note |
+| 40 | `ep/events/[event-id]/attendees/[user-id]/actions.ts` — `denyHardshipRequest` | Event name, EP note |
 
 **Implementation pattern** (add after each `createInPlatformNotification` call):
 ```typescript
@@ -192,21 +196,6 @@ export async function sendTelegramMessage(handle: string, message: string) {
   })
 }
 ```
-
----
-
-### 8. Refund Percentage Calculation in selfCancelTicket
-
-**Status:** `// TODO: proper implementation` comment in `src/app/(platform)/events/[event-id]/ticket/actions.ts`
-**What's missing:** The cancellation policy checkpoint lookup — find the most recently passed checkpoint (highest-order workflow status the event has reached) and apply its `refund_percentage`.
-
-**Implementation guidance:**
-1. Load `platform_events.cancellation_policy` and `platform_events.workflow_statuses` and `platform_events.status`
-2. Find the current status position in `workflow_statuses` order
-3. Filter checkpoints whose `status_id` corresponds to a workflow status with `order ≤ current_order`
-4. Take the checkpoint with the highest order (most recently passed)
-5. Apply `refund_percentage / 100 * subtotal` to compute the refund amount
-6. If no checkpoint matched, refund percentage is 0 (no refund)
 
 ---
 
@@ -288,6 +277,12 @@ The following security issues were identified in the QA audit and have been fixe
 | Puppeteer fix | `require('puppeteer')` instead of ESM import for compatibility |
 | Badge confirmation fix | Removed client-side success state; uses `router.refresh()` |
 | Documentation agent | `.claude/agents/documentation.md` created |
+| Analytics & Accounting module | Migration `20260402000015` adds `refund_channel` to `orders`; `src/lib/analytics/` (types, format, queries); event accounting at `/ep/events/[event-id]/accounting` (Excel export, two-tab layout); org analytics at `/org/[org-slug]/analytics`; admin analytics at `/admin/analytics`; Recharts added as dependency |
+| Refund & Cancellation system | Migration `20260402000016` — `hardship_requests` table; `src/lib/refunds.ts` (pure utility functions); `requestStandardRefund` Server Action (fully automatic — percentage calc → payment API → order update → ticket reset → EP notify); `submitHardshipRequest` / `approveHardshipRequest` / `denyHardshipRequest` Server Actions; `RefundButton` client component (adaptive: standard %, hardship request, or pending badge); EP attendees list refund column + hardship badge; EP attendee detail hardship review card; `updateCancellationPolicy` extended for hardship config; `isStatusReferenced()` extended for hardship boundaries; template apply re-maps hardship UUIDs; 4 new notification types (rows 37–40) added to `src/lib/notifications.ts` |
+
+**Known gaps in the Analytics & Accounting module:**
+- **PDF export not wired** — `/ep/events/[event-id]/accounting` Excel export works; PDF download is not yet implemented.
+- **Daily Event Views deferred** — Page view tracking (Feature 3 from analytics PRD) requires a new `event_page_views` table, a client-side beacon, and a privacy review. Deferred to a future phase; no implementation exists.
 
 ### Remaining Security Recommendations (not yet addressed)
 
@@ -303,10 +298,11 @@ The following security issues were identified in the QA audit and have been fixe
 | Tier | Count | Status |
 |---|---|---|
 | Tier 1 — Blockers | 5 items | Not started |
-| Tier 2 — Significant | 3 items | `// TODO` stubs (now includes rows 34–36 for email/Telegram) |
+| Tier 2 — Significant | 2 items | `// TODO` stubs (email and Telegram sends; now includes rows 37–40 for email) |
 | Tier 3 — Moderate | 4 items | Not started / needs verification |
 | Security (completed Mar 2026) | 5 fixes | Done |
-| Completed Apr 2026 | 16 items | Done (branding, profile, room locking, storage, bug fixes) |
+| Completed Apr 2026 | 18 items | Done (branding, profile, room locking, storage, bug fixes, analytics & accounting, refund & cancellation system) |
+| Analytics gaps | 2 items | PDF export not wired; daily event views deferred |
 | Security (recommended) | 2 items | Optional hardening |
 
-**Estimated state:** ~80% of MVP 1 functionality is implemented. The platform is feature-complete for the happy-path ticket/room/volunteer/application/room-locking flows. Profile completeness gating and the room locking system are now in place. The gaps are primarily in outbound communication (email, Telegram), reporting, and the Telegram bot receive path.
+**Estimated state:** ~88% of MVP 1 functionality is implemented. The platform is feature-complete for the happy-path ticket/room/volunteer/application/room-locking flows and now includes financial analytics and a full refund & cancellation system (standard automatic refunds and EP-reviewed hardship cancellations). The gaps are primarily in outbound communication (email, Telegram), reporting endpoints, and the Telegram bot receive path.

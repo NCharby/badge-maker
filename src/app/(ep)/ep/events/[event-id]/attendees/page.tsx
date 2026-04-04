@@ -61,6 +61,7 @@ export default async function EpAttendeesPage({
       waiver_status,
       badge_status,
       lock_status,
+      order_id,
       platform_users!inner(id, email, preferred_scene_name)
     `)
     .eq('event_id', eventId)
@@ -73,8 +74,18 @@ export default async function EpAttendeesPage({
     waiver_status: string
     badge_status: string
     lock_status: string
+    order_id: string | null
     platform_users: { id: string; email: string; preferred_scene_name: string | null }
   }[]
+
+  // Fetch all pending hardship requests for this event in one query
+  const { data: pendingHardships } = await admin
+    .from('hardship_requests')
+    .select('user_id')
+    .eq('event_id', eventId)
+    .eq('status', 'pending')
+
+  const pendingHardshipUserIds = new Set((pendingHardships ?? []).map(h => h.user_id))
 
   const filtered = activeTab === 'All'
     ? rows
@@ -152,7 +163,7 @@ export default async function EpAttendeesPage({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--sd-border)', background: 'var(--sd-card2)' }}>
-                {['Scene name', 'Email', 'Application', 'Ticket', 'Waiver', 'Badge', 'Lock'].map(h => (
+                {['Scene name', 'Email', 'Application', 'Ticket', 'Waiver', 'Badge', 'Lock', 'Refund'].map(h => (
                   <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: 'var(--sd-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     {h}
                   </th>
@@ -205,6 +216,32 @@ export default async function EpAttendeesPage({
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: '13px', color: 'var(--sd-muted)' }}>
                       {row.lock_status}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      {row.ticket_status === 'Complete' ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Link
+                            href={`/ep/events/${eventId}/attendees/${row.user_id}`}
+                            style={{ fontSize: '13px', color: 'var(--sd-purple)', textDecoration: 'none' }}
+                          >
+                            Refund →
+                          </Link>
+                          {pendingHardshipUserIds.has(row.user_id) && (
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '99px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              background: 'var(--sd-amber-light)',
+                              color: 'var(--sd-amber-dark)',
+                            }}>
+                              Hardship
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--sd-muted)' }}>—</span>
+                      )}
                     </td>
                   </tr>
                 )

@@ -129,9 +129,34 @@ export interface PlatformEvent {
     badge?: ModuleConfig
   }
   hotel_contact_email: string | null
-  cancellation_policy: {
-    checkpoints: { status_id: string; refund_percentage: number }[]
-  } | null
+  cancellation_policy: CancellationPolicy | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CancellationPolicy {
+  checkpoints: { status_id: string; refund_percentage: number }[]
+  hardship?: {
+    enabled: boolean
+    available_from_status: string | null  // UUID or system status name
+    available_until_status: string        // default "Registration"
+  }
+}
+
+export type HardshipRequestStatus = 'pending' | 'approved' | 'denied'
+
+export interface HardshipRequest {
+  id: string
+  event_id: string
+  user_id: string
+  order_id: string
+  status: HardshipRequestStatus
+  reason: string
+  supporting_details: string | null
+  refund_percentage: number | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  ep_note: string | null
   created_at: string
   updated_at: string
 }
@@ -236,7 +261,7 @@ export interface EventTemplateSnapshot {
   core_config: {
     module_config: Record<string, unknown>
     workflow_statuses: WorkflowStatus[]
-    cancellation_policy: { checkpoints: { status_id: string; refund_percentage: number }[] } | null
+    cancellation_policy: CancellationPolicy | null
   }
   ticketing?: {
     ticket_groups: Array<{ name: string; available_count: number | null }>

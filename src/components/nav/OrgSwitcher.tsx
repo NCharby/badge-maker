@@ -18,10 +18,18 @@ export default function OrgSwitcher({
     // "none" = explicit No Organization; empty string should not happen
     const cookieVal = value || 'none'
     document.cookie = `active_org=${cookieVal};path=/;max-age=${60 * 60 * 24 * 365};samesite=lax`
-    // Full page reload ensures all server AND client components re-initialize
-    // with the new org context. router.refresh() only re-renders server components
-    // but leaves client state stale (e.g. form fields, selected IDs).
-    window.location.reload()
+
+    // Redirect to EP dashboard instead of reloading the current page.
+    // Pages scoped to a specific event or org (e.g. /ep/events/[id], /org/[slug])
+    // may no longer be accessible under the newly selected org. Navigating to
+    // the dashboard avoids permission mismatches and gives the user a clean
+    // landing page scoped to the new org context.
+    const path = window.location.pathname
+    if (path.startsWith('/ep/events/') || path.startsWith('/org/')) {
+      window.location.href = '/ep/dashboard'
+    } else {
+      window.location.reload()
+    }
   }
 
   return (

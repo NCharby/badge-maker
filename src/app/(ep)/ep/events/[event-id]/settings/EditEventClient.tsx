@@ -36,6 +36,8 @@ interface Props {
     start_date: string
     end_date: string
     room_lock_in_date: string
+    late_registration_enabled: boolean
+    late_registration_email: string
   }
 }
 
@@ -50,6 +52,8 @@ export default function EditEventClient({ eventId, currentStatus, initialValues 
   const [startDate, setStartDate] = useState(initialValues.start_date)
   const [endDate, setEndDate] = useState(initialValues.end_date)
   const [roomLockInDate, setRoomLockInDate] = useState(initialValues.room_lock_in_date)
+  const [lateRegEnabled, setLateRegEnabled] = useState(initialValues.late_registration_enabled)
+  const [lateRegEmail, setLateRegEmail] = useState(initialValues.late_registration_email)
 
   const isPublished = currentStatus !== DRAFT_STATUS
 
@@ -62,7 +66,12 @@ export default function EditEventClient({ eventId, currentStatus, initialValues 
     if (endDate < startDate) { setError('End date must be on or after start date.'); return }
 
     startTransition(async () => {
-      const result = await updateEventDetails(eventId, { title, description, start_date: startDate, end_date: endDate, room_lock_in_date: roomLockInDate })
+      const result = await updateEventDetails(eventId, {
+        title, description, start_date: startDate, end_date: endDate,
+        room_lock_in_date: roomLockInDate,
+        late_registration_enabled: lateRegEnabled,
+        late_registration_email: lateRegEmail,
+      })
       if ('error' in result) {
         setError(result.error)
       } else {
@@ -151,6 +160,37 @@ export default function EditEventClient({ eventId, currentStatus, initialValues 
           <p style={{ fontSize: '11px', color: 'var(--sd-muted)', marginTop: '4px' }}>
             The deadline for all attendees to finalize their room selections. Time defaults to 12:00 AM if not specified. Required for lock countdown notifications.
           </p>
+        </div>
+
+        {/* Late Registration */}
+        <div style={{ borderTop: '1px solid var(--sd-border)', paddingTop: '18px' }}>
+          <label style={{ ...labelStyle, textTransform: 'none', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={lateRegEnabled}
+              onChange={e => setLateRegEnabled(e.target.checked)}
+              style={{ accentColor: 'var(--sd-purple)' }}
+            />
+            Enable &quot;Contact Promoter&quot; for closing-soon events
+          </label>
+          <p style={{ fontSize: '11px', color: 'var(--sd-muted)', marginTop: '4px', marginBottom: lateRegEnabled ? '12px' : 0 }}>
+            When enabled, users who can no longer begin the attendance process will see a &quot;Contact Promoter&quot; button on the browse page.
+          </p>
+          {lateRegEnabled && (
+            <div>
+              <label style={labelStyle}>Alternate Contact Email</label>
+              <input
+                type="email"
+                style={inputStyle}
+                value={lateRegEmail}
+                onChange={e => setLateRegEmail(e.target.value)}
+                placeholder="Leave blank to use your account email"
+              />
+              <p style={{ fontSize: '11px', color: 'var(--sd-muted)', marginTop: '4px' }}>
+                Inquiries will be sent to this address. If blank, your account email is used.
+              </p>
+            </div>
+          )}
         </div>
 
         {error && <p style={{ fontSize: '12px', color: 'var(--sd-red)', margin: 0 }}>{error}</p>}

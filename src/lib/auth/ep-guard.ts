@@ -18,13 +18,12 @@ export async function epEventGuard(eventId: string, options?: { moduleKey?: stri
 
   const admin = createAdminClient()
 
-  // For Module Leads, fetch their module grants for this event
+  // For Module Leads, fetch their org-wide module grants
   let moduleGrants: string[] | null = null
   if (access.orgAccessLevel === 'module_lead') {
     const { data: grants } = await admin
       .from('organization_module_access')
       .select('module_key, organization_members!inner(user_id)')
-      .eq('event_id', eventId)
       .eq('organization_members.user_id', user.id)
     moduleGrants = (grants ?? []).map((g: { module_key: string }) => g.module_key)
   }

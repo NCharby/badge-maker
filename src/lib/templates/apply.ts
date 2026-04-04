@@ -49,11 +49,22 @@ export async function applyTemplate(
     let newCancellationPolicy = snapshot.core_config.cancellation_policy
     if (newCancellationPolicy?.checkpoints) {
       newCancellationPolicy = {
+        ...newCancellationPolicy,
         checkpoints: newCancellationPolicy.checkpoints.map(cp => ({
           ...cp,
           status_id: statusMap.get(cp.status_id) ?? cp.status_id,
         })),
       }
+    }
+    if (newCancellationPolicy?.hardship) {
+      const h = { ...newCancellationPolicy.hardship }
+      if (h.available_from_status && statusMap.has(h.available_from_status)) {
+        h.available_from_status = statusMap.get(h.available_from_status)!
+      }
+      if (h.available_until_status && statusMap.has(h.available_until_status)) {
+        h.available_until_status = statusMap.get(h.available_until_status)!
+      }
+      newCancellationPolicy = { ...newCancellationPolicy, hardship: h }
     }
 
     // ── Step 4: Update event with core config ───────────────────────────────

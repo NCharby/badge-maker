@@ -13,7 +13,7 @@ export default async function EventSettingsPage({
 
   const { data: event } = await admin
     .from('platform_events')
-    .select('id, title, description, start_date, end_date, status, room_lock_in_date')
+    .select('id, title, description, start_date, end_date, status, room_lock_in_date, late_registration_enabled, late_registration_email')
     .eq('id', eventId)
     .single()
 
@@ -51,6 +51,8 @@ export default async function EventSettingsPage({
           start_date: event.start_date,
           end_date: event.end_date,
           room_lock_in_date: event.room_lock_in_date ? event.room_lock_in_date.slice(0, 16) : '',
+          late_registration_enabled: event.late_registration_enabled ?? false,
+          late_registration_email: event.late_registration_email ?? '',
         }}
       />
     </div>

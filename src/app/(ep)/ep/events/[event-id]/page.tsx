@@ -84,6 +84,7 @@ export default async function EpEventPage({
           { label: 'Volunteer', href: `/ep/events/${eventId}/volunteer`, icon: '🙋', desc: 'Manage volunteer shifts' },
           { label: 'Schedule', href: `/ep/events/${eventId}/schedule`, icon: '📅', desc: 'Event schedule' },
           { label: 'Badge', href: `/ep/events/${eventId}/badge`, icon: '🎫', desc: 'View attendee badge status and created badges' },
+          { label: 'Accounting', href: `/ep/events/${eventId}/accounting`, icon: '💰', desc: 'Revenue, refunds, and ticket capacity' },
           { label: 'Notifications', href: `/ep/events/${eventId}/notifications`, icon: '🔔', desc: 'Configure Telegram channel notifications' },
           { label: 'Lock Check', href: `/ep/events/${eventId}/lock-check`, icon: '🔍', desc: 'Review attendee module completion and send reminders' },
         ]
@@ -104,6 +105,7 @@ export default async function EpEventPage({
               item.label === 'Workflow' ||
               item.label === 'Modules' ||
               item.label === 'Attendees' ||
+              item.label === 'Accounting' ||
               item.label === 'Notifications' ||
               item.label === 'Lock Check' ||
               Object.entries(moduleConfig).some(

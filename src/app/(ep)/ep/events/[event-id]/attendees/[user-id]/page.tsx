@@ -76,6 +76,26 @@ export default async function EpAttendeeDetailPage({
     .eq('user_id', targetUserId)
     .single()
 
+  // Fetch pending hardship request (at most one per attendee per event)
+  const { data: hardshipRequest } = await admin
+    .from('hardship_requests')
+    .select('id, reason, supporting_details, created_at, order_id')
+    .eq('event_id', eventId)
+    .eq('user_id', targetUserId)
+    .eq('status', 'pending')
+    .maybeSingle()
+
+  // If a hardship request exists, fetch the associated order subtotal
+  let orderSubtotal: number | null = null
+  if (hardshipRequest?.order_id) {
+    const { data: orderRow } = await admin
+      .from('orders')
+      .select('subtotal')
+      .eq('id', hardshipRequest.order_id)
+      .single()
+    if (orderRow) orderSubtotal = Number(orderRow.subtotal)
+  }
+
   const displayName = getDisplayName(profile)
 
   return (
@@ -192,6 +212,17 @@ export default async function EpAttendeeDetailPage({
           badgeStatus={attendee.badge_status}
           lockStatus={attendee.lock_status}
           roomStatus={attendee.room_status}
+          hardshipRequest={
+            hardshipRequest
+              ? {
+                  id: hardshipRequest.id,
+                  reason: hardshipRequest.reason,
+                  supporting_details: hardshipRequest.supporting_details ?? null,
+                  created_at: hardshipRequest.created_at,
+                }
+              : null
+          }
+          orderSubtotal={orderSubtotal}
         />
       </div>
     </div>

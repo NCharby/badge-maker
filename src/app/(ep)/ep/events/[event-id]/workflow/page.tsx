@@ -2,7 +2,7 @@ import { epEventGuard } from '@/lib/auth/ep-guard'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import WorkflowManagerClient from './WorkflowManagerClient'
-import type { WorkflowStatus } from '@/types/platform'
+import type { CancellationPolicy, WorkflowStatus } from '@/types/platform'
 
 export default async function WorkflowPage({
   params,
@@ -15,7 +15,7 @@ export default async function WorkflowPage({
 
   const { data: event } = await admin
     .from('platform_events')
-    .select('id, title, status, workflow_statuses')
+    .select('id, title, status, workflow_statuses, cancellation_policy')
     .eq('id', eventId)
     .single()
 
@@ -50,6 +50,7 @@ export default async function WorkflowPage({
       <WorkflowManagerClient
         eventId={eventId}
         initialStatuses={workflowStatuses}
+        initialCancellationPolicy={(event.cancellation_policy ?? { checkpoints: [] }) as CancellationPolicy}
       />
     </div>
   )

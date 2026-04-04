@@ -37,6 +37,10 @@ export type NotificationType =
   | 'room_lock_request'         // Room Lead sent lock request to occupant
   | 'room_lock_request_accepted' // Occupant accepted lock request
   | 'room_lock_request_declined' // Occupant declined lock request and left room
+  | 'standard_refund_processed'   // EP: attendee self-service refund was processed
+  | 'hardship_request_submitted'  // EP: attendee submitted hardship cancellation request
+  | 'hardship_request_approved'   // Attendee: EP approved hardship request
+  | 'hardship_request_denied'     // Attendee: EP denied hardship request
 
 /**
  * Write an in-platform notification record for the given user.

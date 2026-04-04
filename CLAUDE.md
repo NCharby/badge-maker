@@ -1,8 +1,8 @@
 # SD Platform — CLAUDE.md
 ## AI-Assisted Development Reference Document
 **Organization:** Shiny Dog Productions Inc.
-**Document Status:** Revised Draft — Payment integration, notification enrichment, webhook dedup fix, QA/security audit, EP settings/notifications split, schedule day-grouping and search, workflow UX improvements
-**Last Updated:** April 2026 (Lekd branding; first/last name and profile completeness gate; room locking system with user self-lock, Room Lead lock requests, and EP lock/unlock; private storage bucket signed URLs; emergency contact fields; badge and waiver fixes; org Module Lead module access configuration UI)
+**Document Status:** Revised Draft — Payment integration, notification enrichment, webhook dedup fix, QA/security audit, EP settings/notifications split, schedule day-grouping and search, workflow UX improvements; Analytics & Accounting module; Refund & Cancellation system
+**Last Updated:** April 2026 (Lekd branding; first/last name and profile completeness gate; room locking system with user self-lock, Room Lead lock requests, and EP lock/unlock; private storage bucket signed URLs; emergency contact fields; badge and waiver fixes; org Module Lead module access configuration UI; Analytics & Accounting module — event accounting, org analytics, admin analytics, refund_channel on orders; Refund & Cancellation system — standard automatic refunds, hardship cancellation flow, refund utility library, EP workflow page policy configuration)
 
 ---
 
@@ -95,6 +95,7 @@ The new platform is built as an extension of the existing badge-maker Next.js co
 | Telegram | Bot API |
 | Storage | Supabase Storage with RLS |
 | Payments | Square (primary); PayPal (required addition — see §6.2) |
+| Charts | Recharts — used in org and admin analytics dashboards |
 | Node.js | 20.x LTS — pinned via `.nvmrc` at repo root |
 | Deployment | Hostinger Node.js Web Apps (Business or Cloud plan) — GitHub integration via hPanel; push to `main` triggers auto-redeploy |
 | Containerization | Docker / docker-compose — **development only**; not used in production |
@@ -113,6 +114,7 @@ src/
 │   └── pages/                  # Page-level components
 ├── hooks/                      # Custom React hooks
 ├── lib/                        # Utility functions
+│   └── analytics/              # Analytics query layer (types.ts, format.ts, queries.ts)
 └── types/                      # TypeScript definitions
 ```
 
@@ -868,7 +870,7 @@ A VolunteerShift represents a single volunteer opportunity within an Event. Shif
 
 ### Cancellation Policy
 
-The Cancellation Policy is configured by the Event Promoter in the Event Configuration. The Event Promoter selects Event workflow statuses as checkpoints and assigns a refund percentage to each.
+The Cancellation Policy is configured by the Event Promoter in the Event Configuration (Workflow page, Refund Policy section). It defines standard refund checkpoints and an optional hardship cancellation path.
 
 **Schema:** Stored as JSONB on `platform_events.cancellation_policy`:
 ```json
@@ -877,16 +879,30 @@ The Cancellation Policy is configured by the Event Promoter in the Event Configu
     { "status_id": "550e8400-e29b-41d4-a716-446655440000", "refund_percentage": 100 },
     { "status_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "refund_percentage": 50 },
     { "status_id": "a97b5c3e-12f4-4d87-a8c9-5e67f210d3b1", "refund_percentage": 0 }
-  ]
+  ],
+  "hardship": {
+    "enabled": true,
+    "available_from_status": null,
+    "available_until_status": "Registration"
+  }
 }
 ```
 - `status_id` references the UUID of a `workflow_statuses` entry (not the name) — renaming a status does not break the policy
 - `refund_percentage` is an integer 0–100
-- At the time of cancellation, the system identifies the most recently passed checkpoint — the highest-order workflow status the Event has already reached — and applies its `refund_percentage`
+- At the time of cancellation, the system identifies the most recently passed checkpoint — the highest-order workflow status the Event has already reached — and applies its `refund_percentage`. This calculation is performed by `getApplicableRefundPercentage()` in `src/lib/refunds.ts`.
 - The policy applies to all cancellations regardless of timing (there is no automatic full-refund period)
-- **Scope:** Applies to ticket price and merchandise sales only. Room costs are excluded — rooms are purchased directly from the hotel and are not processed by the platform.
+- **Scope:** Applies to ticket price only. Merchandise and room costs are excluded — merchandise is excluded by design; rooms are purchased directly from the hotel and are not processed by the platform.
+- **Default policy:** 100% refund until `Event Locked`, 0% after. Applied when no checkpoints have been configured.
 
-> **Note:** The specific checkpoints and percentages are defined per Event by the Event Promoter.
+**Hardship field** (optional):
+- `enabled` — boolean; when false the hardship path is hidden from attendees
+- `available_from_status` — UUID of the earliest status at which the hardship path appears; `null` means available from the start of the event workflow
+- `available_until_status` — UUID or system-fixed status name of the last status at which the hardship path is available; default is `"Registration"`
+- Availability is evaluated by `isHardshipAvailable()` in `src/lib/refunds.ts`
+
+**`hardship_requests` table** (see §5a for full schema): tracks attendee-submitted hardship cancellation requests with EP review fields. One pending request per user per event (enforced via partial unique index). Status values: `pending`, `approved`, `denied`.
+
+> **Note:** The specific checkpoints and percentages are defined per Event by the Event Promoter. `hardship` status references are protected by `isStatusReferenced()` — deleting a status that is a hardship boundary is blocked.
 
 ---
 
@@ -1015,6 +1031,8 @@ All new platform tables are created via timestamped migration files in `supabase
 20260401000002_add_emergency_contact_to_users.sql
 20260401000003_add_first_last_name_to_users.sql
 20260401000004_room_locking_system.sql       — user_locked/room_lead_locked on event_attendees; room_lock_requests table
+20260402000015_add_refund_channel.sql        — refund_channel column on orders
+20260402000016_create_hardship_requests.sql  — hardship_requests table for EP-reviewed hardship cancellations
 ```
 
 ### `platform_users` (full schema)
@@ -1216,6 +1234,7 @@ CREATE TABLE orders (
     CHECK (status IN ('pending','complete','refunded','partial_refund','cancelled')),
   subtotal DECIMAL(10,2) NOT NULL,
   amount_refunded DECIMAL(10,2) DEFAULT 0,
+  refund_channel TEXT CHECK (refund_channel IN ('standard','hardship','chargeback')),  -- set when a refund is issued; used to slice refund data in analytics
   created_at TIMESTAMPTZ DEFAULT now(),
   completed_at TIMESTAMPTZ
 );
@@ -1447,6 +1466,39 @@ CREATE INDEX room_lock_requests_target_pending_idx
 
 ---
 
+### `hardship_requests` (full schema)
+
+Tracks attendee-submitted hardship cancellation requests awaiting EP review. Standard refunds (policy-percentage based) do not use this table — they are processed automatically by `requestStandardRefund()`. Hardship requests are for cases where the attendee cannot attend and the standard policy would result in a low or zero refund.
+
+```sql
+CREATE TABLE hardship_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id UUID NOT NULL REFERENCES platform_events(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES platform_users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'approved', 'denied')),
+  reason TEXT NOT NULL,               -- attendee-provided reason
+  supporting_details TEXT,            -- optional additional context from attendee
+  approved_percentage INTEGER         -- set by EP on approval; 0–100
+    CHECK (approved_percentage BETWEEN 0 AND 100),
+  ep_note TEXT,                       -- EP-visible note attached on approval or denial
+  reviewed_by UUID REFERENCES platform_users(id),  -- EP who acted on the request
+  reviewed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- One pending request per user per event; approved/denied rows are not constrained
+CREATE UNIQUE INDEX hardship_requests_one_pending_per_user_event
+  ON hardship_requests(event_id, user_id)
+  WHERE status = 'pending';
+```
+
+**RLS:** Users can SELECT and INSERT their own rows. UPDATE (status changes, adding ep_note, approved_percentage) is restricted to service role (EP actions use the admin client). EPs access hardship data via admin client in Server Actions.
+
+**EP review flow:** The hardship review card on the EP attendee detail page shows all pending requests for that attendee. The EP sets a custom refund percentage and optionally adds a note, then approves or denies. Approval calls `approveHardshipRequest()` which calls the payment API for the actual refund. Denial calls `denyHardshipRequest()` — no money movement.
+
+---
+
 ### `platform_notifications` (full schema)
 
 Persistent in-platform notification store. All notification types write a record here regardless of whether email/Telegram is also sent. The service role inserts records; users may read and update (mark-read, dismiss) only their own rows.
@@ -1501,6 +1553,10 @@ CREATE INDEX platform_notifications_user_unread_idx
 | `room_lock_request` | 34 | Occupant | Room detail |
 | `room_lock_request_accepted` | 35 | Room Lead | Room detail |
 | `room_lock_request_declined` | 36 | Room Lead | Room detail |
+| `standard_refund_processed` | 37 | User + EP | Event hub (user); EP attendee detail |
+| `hardship_request_submitted` | 38 | EP (owner) | EP attendee detail |
+| `hardship_request_approved` | 39 | User | Event hub |
+| `hardship_request_denied` | 40 | User | Event hub |
 
 Rows 12, 13, 17–21, 23 are scheduler-triggered and remain `console.log` stubs pending external scheduler integration.
 
@@ -1557,9 +1613,17 @@ Ticketing is the only module required for Event creation. All other modules are 
 
 **Refund Policy:**
 - The configured Cancellation Policy always applies at the time of cancellation — there is no automatic full-refund period
-- **Pre-lock:** Users may self-initiate a cancellation via the platform. The platform calculates the applicable refund percentage per the Cancellation Policy, calls the Square or PayPal Refund API using the provider stored on the **original `orders` record** (not the EP's current setting), and records the result. The ticket is marked cancelled.
-- **Post-lock:** Refunds require Event Promoter initiation only. The EP initiates the refund from the event management panel; the platform calls the Refund API for the provider on the original order. No user-initiated refunds are permitted post-lock.
-- Refunds apply to ticket and merchandise purchases only; room costs are not handled by the platform
+- **Refund scope:** Ticket price only. Merchandise is excluded. Room costs are excluded (paid directly to hotel).
+- **Standard refund (automatic):** Users initiate via the `RefundButton` on their event hub ticket card. `requestStandardRefund(eventId)` calculates the applicable percentage using `getApplicableRefundPercentage()` (`src/lib/refunds.ts`), calls the Square or PayPal Refund API using the provider stored on the **original `orders` record** (not the EP's current setting), updates the order status, resets the attendee's ticket status, and notifies the EP (notification type `standard_refund_processed`). No EP action is required.
+- **Hardship cancellation:** When the standard refund percentage is 0% but hardship is enabled and available for the current event status (`isHardshipAvailable()` in `src/lib/refunds.ts`), the `RefundButton` shows "Request Hardship Cancellation" instead. The attendee submits a reason and optional supporting details via `submitHardshipRequest()`. A `hardship_requests` record is created (`status = 'pending'`). The EP reviews from the attendee detail page and calls `approveHardshipRequest()` (sets custom percentage, calls payment API) or `denyHardshipRequest()` (no refund). While a request is pending, the button shows "Hardship Request Pending".
+- **Button adaptation logic:** The `RefundButton` client component is adaptive — it shows "Request Refund (X%)" when standard percentage > 0%, "Request Hardship Cancellation" when standard is 0% but hardship is available and no pending request exists, and "Hardship Request Pending" badge when a pending request exists. If neither path is available, no button is shown.
+- **EP refund column:** The EP attendees list page shows a rightmost "Refund" column with a "Refund →" link and an amber "Hardship" badge when a pending hardship request exists.
+- **`revoke_and_refund` action:** Sets `refund_channel = 'standard'` on the order record for analytics attribution.
+- **`refund_channel` column on `orders`:** Set to `'standard'`, `'hardship'`, or `'chargeback'` when a refund is issued. Used to slice refund data in Analytics & Accounting reports.
+- **Refund utility library** (`src/lib/refunds.ts`):
+  - `getApplicableRefundPercentage(currentStatus, workflowStatuses, policy)` — pure function; returns 0–100
+  - `isHardshipAvailable(currentStatus, workflowStatuses, policy)` — pure function; returns boolean
+  - `calculateTicketRefundCents(orderItems, percentage)` — ticket-only; merchandise excluded
 
 **Merchandise in checkout (step 4):**
 - Merchandise items shown are filtered by `ticket_type_restriction`: if non-empty, only show items whose restriction includes the user's ticket type ID
@@ -2009,9 +2073,22 @@ All shown in Card format. Clicking a card navigates to the corresponding managem
 - **Notification Settings card:** Per-notification-type toggles for "Post to channel" and "Send DM to user", plus optional custom message template. Lock countdown rows (1-week, 48-hour) show a green badge with the configured Lock-In Date when set, or an amber warning linking to Event Settings when not set.
 - **Room Selection Opens is not a separate notification type** — this is covered by the Event Status Transition notification (row 25). Any status transition (including one that opens rooms) fires row 25.
 
-`/ep/events/[event-id]/workflow` — Custom workflow status management. The **Add Custom Status form is positioned at the top of the page** (above the full status chain display) for discoverability. Below it: system statuses (Draft, Published), custom status rows with reorder arrows / rename / delete, system statuses (Event Locked onward). Save Order button appears inline when unsaved reordering is pending.
+`/ep/events/[event-id]/workflow` — Custom workflow status management and refund policy configuration. The **Add Custom Status form is positioned at the top of the page** (above the full status chain display) for discoverability. Below it: system statuses (Draft, Published), custom status rows with reorder arrows / rename / delete, system statuses (Event Locked onward). Save Order button appears inline when unsaved reordering is pending.
+
+**Refund Policy section** (below the status chain): EP configures cancellation policy checkpoints and hardship settings on this same page.
+- **Checkpoint configuration:** One or more rows, each with a status dropdown (custom or system statuses) and a percentage input (0–100). Saved via `updateCancellationPolicy()` Server Action with validation.
+- **Hardship toggle:** Enable/disable checkbox + "available from" status dropdown (optional) + "available until" status dropdown. Defaults to enabled with `available_until_status = 'Registration'`.
+- **Status deletion protection:** `isStatusReferenced()` is extended to check hardship `available_from_status` and `available_until_status` UUID references in addition to existing `module_config` and checkpoint references. A status referenced by a hardship boundary cannot be deleted.
+- **Template apply:** When an event config template is applied, hardship status UUID references are re-mapped to the target event's matching workflow statuses.
 
 `/ep/events/[event-id]/schedule` — See §6.5 for EP schedule management UI details (day grouping, search, day filter chips).
+
+`/ep/events/[event-id]/accounting` — Event-level accounting and ticket sales. Two tabs:
+- **Accounting tab:** KPI cards (gross revenue, net revenue after refunds, total attendees, average ticket price), attendee breakdown by ticket type, ticket revenue table, merchandise revenue table. Excel export via Server Action builds a workbook with Summary, Ticket Revenue, and Merchandise Revenue sheets.
+- **Ticket Sales tab:** Capacity bars per ticket type with sold/remaining counts, and issued-ticket breakdown.
+- Access: OL, EP, SA. Module Leads do not have access.
+- The Accounting card is added to the EP event page card grid; it is not module-gated (always visible when the event exists).
+- PDF export is not yet wired — Excel only.
 
 > **Registration Panel:** Deferred to MVP 2 (when QR code check-in is built). In MVP 1, on-site check-in is handled by a separate dedicated application — not the SD Platform. The `Registration` status signals the check-in phase is active; no platform UI is needed in MVP 1.
 
@@ -2042,7 +2119,11 @@ All shown in Card format. Clicking a card navigates to the corresponding managem
 - `updateUserRole(targetUserId, newRole)` — system_admin guard; blocks self-modification; uses admin client to update role; revalidates list and detail pages.
 - `adminUpdatePaymentProvider(targetUserId, provider)` — system_admin guard; verifies target is EP or admin before writing; uses admin client.
 
+`/admin/analytics` — Platform-wide analytics dashboard. SA only (enforced by admin layout). Sections: platform-wide KPI cards (total revenue, total events, total attendees, refund totals), revenue trend bar chart (Recharts), top organizations by revenue, top events by revenue, registration funnel, refund breakdown by channel. A "Platform Analytics" card is added to the admin dashboard grid.
+
 **Organization Routes (implemented — see `docs/ORGANIZATIONS_PLAN.md` for full spec):**
+
+`/org/[org-slug]/analytics` — Org-level analytics dashboard. Accessible to OL and EP; not visible to Module Leads (filtered by the org sub-nav `visibleNav` logic). Sections: org KPI cards, revenue trend bar chart (Recharts), registration funnel, top events by revenue, attendee retention table, operational breakdowns (applications, volunteers, refunds by channel). An "Analytics" nav item is added to the org sub-nav.
 
 `/org/[org-slug]/members` — Member list with "Manage →" link per row; invite and access-level management. See `docs/ORGANIZATIONS_PLAN.md` §13 for full route inventory.
 
@@ -2106,6 +2187,10 @@ Complete inventory of all platform notifications. Every entry must be implemente
 | 34 | Room Lead sends lock request to occupant | Occupant | In-platform | Room Lead scene name, room name/number, event name, "Accept or decline" |
 | 35 | Occupant accepts Room Lead lock request | Room Lead | In-platform | Occupant scene name, event name, room number |
 | 36 | Occupant declines Room Lead lock request (removed from room) | Room Lead | In-platform | Occupant scene name, event name, room number |
+| 37 | Standard refund processed automatically | User + EP | Email (user); EP configurable | Refund amount, refund percentage applied, event name, original order ID |
+| 38 | Hardship cancellation request submitted by attendee | Event Promoter | Configurable per EP preferences | User scene name, event name, reason excerpt |
+| 39 | Hardship request approved by EP | User | Email | Approved refund amount, event name, EP note if provided |
+| 40 | Hardship request denied by EP | User | Email | Event name, EP note if provided |
 
 > **"Room Selection Opens" is not a separate Telegram notification type.** When rooms open, the event transitions to a new workflow status, which fires the Event Status Transition notification (row 25). No standalone "rooms_open" Telegram notification exists — row 25 covers it.
 
@@ -2120,6 +2205,38 @@ Complete inventory of all platform notifications. Every entry must be implemente
 > **In-platform messaging (Odoo Help Desk):** Conversational support messaging (Odoo Help Desk routing) remains MVP 2. All support communication in MVP 1 uses email (Resend). The Odoo Help Desk integration is implemented as a stub (`// TODO: Odoo integration — not implemented`) at each integration point.
 
 > **User notification preferences:** Regular users can toggle `email_notifications_enabled` and `telegram_notifications_enabled` globally from their Profile Management page. They cannot opt out per notification type. `telegram_notifications_enabled` defaults to `false` and activates automatically when `telegram_verified` becomes `true`.
+
+---
+
+### 6.13 Analytics & Accounting Module
+
+Provides financial reporting and operational analytics at three scopes: event-level (EP), org-level (OL/EP), and platform-level (SA). The feature is implemented but not module-gated — it is always visible based on the caller's role.
+
+**Data layer** (`src/lib/analytics/`):
+- `types.ts` — TypeScript interfaces for all analytics return values: `FinancialSummary`, `TicketRevenueRow`, `MerchandiseRevenueRow`, and related types
+- `format.ts` — Shared currency, percent, and compact number formatters used across all analytics UI components
+- `queries.ts` — Query functions at each scope: `getEventFinancialSummary`, `getOrgRevenueTrend`, `getPlatformTopOrgs`, and related helpers; all use the admin client (service role) since they aggregate across multiple users and events
+
+**Event Accounting** (`/ep/events/[event-id]/accounting`):
+- Two-tab layout: "Accounting" and "Ticket Sales"
+- **Accounting tab:** KPI cards (gross revenue, net revenue, total attendees, average ticket price); attendee breakdown by ticket type; ticket revenue table; merchandise revenue table
+- **Ticket Sales tab:** capacity bars per ticket type (sold vs. remaining); issued-ticket breakdown
+- **Excel export:** Server Action builds an `.xlsx` workbook (Summary, Ticket Revenue, Merchandise Revenue sheets) and returns it for download. PDF export is not yet implemented — Excel only.
+- Access: OL, EP, SA. Module Leads are excluded. The Accounting card on the EP event page grid is non-module-gated.
+
+**Org Analytics** (`/org/[org-slug]/analytics`):
+- Access: OL and EP; excluded from org sub-nav for Module Leads via the existing `visibleNav` filter in the org layout
+- Sections: KPI cards, revenue trend bar chart (Recharts), registration funnel, top events by revenue, attendee retention table, operational breakdowns (applications, volunteers, refunds by channel)
+
+**Admin Analytics** (`/admin/analytics`):
+- Access: SA only (enforced by the admin layout)
+- Sections: platform-wide KPI cards, revenue trend bar chart (Recharts), top organizations, top events, registration funnel, refund breakdown by `refund_channel`
+- A "Platform Analytics" card is added to the admin dashboard grid
+
+**Charting:** Recharts (`recharts` npm package) is used for bar charts in both org and admin analytics dashboards.
+
+**Deferred (future phase):**
+- Daily Event Views (page view tracking) — requires a new `event_page_views` table, client-side beacon, and privacy review. Not implemented in this phase.
 
 ---
 
@@ -2330,9 +2447,9 @@ A bulk report packet containing all critical event information formatted for off
 
 ### MVP 1 — Target: May Ticket Opening
 
-- Ticketing ✓ *(checkout flow, Square Web Payments SDK, PayPal JS SDK, soft locks, roommate codes, EP payment config UI)*
+- Ticketing ✓ *(checkout flow, Square Web Payments SDK, PayPal JS SDK, soft locks, roommate codes, EP payment config UI, standard automatic refunds, hardship cancellation flow)*
 - Hotel Room Selection ✓ *(Roommate Finder, room applications, claim-by-email, bed blocking, reservation, Room Open Group, room matrix CSV import)*
-- Attendee Portal ✓ *(dashboard, event hub, module gating, ready-to-lock, self-cancel)*
+- Attendee Portal ✓ *(dashboard, event hub, module gating, ready-to-lock, standard refund button, hardship cancellation request)*
 - Telegram Bot (basic) **[PARTIAL]** *(grammY installed, invite link generation for badge-maker flow works; `/api/telegram/webhook` route handler not yet created — bot cannot receive messages or commands; outbound platform notification sends not wired)*
 - Email & Telegram Alerts **[PARTIAL]** *(notification center `/notifications` built, AppNav bell built, in-platform delivery wired for all notification rows; email and Telegram sends remain `// TODO` stubs — zero outbound email or Telegram messages sent by platform Server Actions)*
 - Schedule ✓ *(activity management, CSV import, Schedule → Volunteer integration)*
@@ -2375,7 +2492,10 @@ A bulk report packet containing all critical event information formatted for off
 - **Payment provider per transaction:** `orders.payment_provider` is locked at transaction time. Refunds always use the provider from the original order record. See §4 for full architecture.
 - **Square webhook event types:** Square sends `payment.created` and `payment.updated` (not `payment.completed`). The handler guards on `payment.status === 'COMPLETED'` because `payment.created` may fire before a payment settles. For refunds, Square sends `refund.created` and `refund.updated`. The webhook script (`scripts/register-payment-webhooks.sh`) and Square developer dashboard subscriptions must use these exact names — subscribing to `payment.completed` or `refund.completed` will never fire.
 - **PayPal webhook `custom_id`:** The `PAYMENT.CAPTURE.COMPLETED` handler expects `resource.custom_id` to carry the internal `orders.id`. If this field is missing, the handler logs a `console.error` and returns without updating the order — `payment_transaction_id` stays null and future refunds via the EP panel will fail silently unless investigated. Always verify `custom_id` is being set when creating the PayPal order.
-- **Status UUID references:** `module_config` and `cancellation_policy` store UUID references to `workflow_statuses` entries, not display names. Renaming a status updates only its `name` field; all references remain intact.
+- **Status UUID references:** `module_config` and `cancellation_policy` (including hardship boundary statuses) store UUID references to `workflow_statuses` entries, not display names. Renaming a status updates only its `name` field; all references remain intact.
+- **Refund utility library:** `src/lib/refunds.ts` contains three pure functions: `getApplicableRefundPercentage`, `isHardshipAvailable`, and `calculateTicketRefundCents`. These are the single source of truth for refund calculations — all Server Actions must call these functions rather than re-implementing the logic inline.
+- **Standard vs. hardship refund attribution:** `orders.refund_channel` is set to `'standard'` for automatic policy-based refunds and `'hardship'` for EP-approved hardship refunds. This column drives refund breakdown slicing in analytics reports.
+- **Hardship flow does not bypass payment APIs:** `approveHardshipRequest()` calls the same Square/PayPal refund API path as standard refunds, using the provider stored on the original `orders` record.
 - **Offline Reporting Packet:** Triggered by external scheduler after event transitions to `Event Locked` — never inline in the Server Action. See §10.
 - **Hotel contact email:** Stored on `venues.email` (default) and overridable per-event via `platform_events.hotel_contact_email`. Weekly hotel reports use the override if set.
 - **Event discovery:** Authenticated users browse events via `GET /api/events` Route Handler using service role key. Returns only events with status ≥ `Published`. No PII exposed.

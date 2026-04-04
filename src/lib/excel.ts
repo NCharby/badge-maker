@@ -223,3 +223,214 @@ export async function buildOfflinePacketWorkbook(data: OfflinePacketData): Promi
   const buffer = await workbook.xlsx.writeBuffer()
   return Buffer.from(buffer)
 }
+
+// ─── Event Accounting Workbook ─────────────────────────────────────────────
+
+export interface AccountingExportData {
+  eventTitle: string
+  eventDates: string
+  totalIncome: number
+  totalRefunds: number
+  totalCancellations: number
+  netRevenue: number
+  ticketRevenue: { name: string; issued: number; price: number; revenue: number }[]
+  merchandiseRevenue: { name: string; qty: number; unitPrice: number; revenue: number; status: string }[]
+}
+
+const CURRENCY_FORMAT = '"$"#,##0.00'
+
+export async function buildEventAccountingWorkbook(data: AccountingExportData): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook()
+
+  // ── Tab 1: Summary ──
+  const summary = workbook.addWorksheet('Summary')
+  setColumnWidths(summary, [28, 20])
+
+  const titleRow = summary.addRow([data.eventTitle])
+  titleRow.font = { bold: true, size: 14 }
+  summary.addRow([data.eventDates])
+  summary.addRow([])
+
+  const kpis: [string, number][] = [
+    ['Total Event Income', data.totalIncome],
+    ['Total Refunds', data.totalRefunds],
+    ['Total Cancellations', data.totalCancellations],
+    ['Net Revenue', data.netRevenue],
+  ]
+  for (const [label, value] of kpis) {
+    const row = summary.addRow([label, value])
+    row.getCell(1).font = { bold: true }
+    row.getCell(2).numFmt = CURRENCY_FORMAT
+  }
+
+  // ── Tab 2: Ticket Revenue ──
+  const tickets = workbook.addWorksheet('Ticket Revenue')
+  setColumnWidths(tickets, [30, 12, 14, 16])
+  styleHeaderRow(tickets.addRow(['Ticket Type', 'Issued', 'Price', 'Revenue']))
+
+  let ticketTotalIssued = 0
+  let ticketTotalRevenue = 0
+  for (const t of data.ticketRevenue) {
+    const row = tickets.addRow([t.name, t.issued, t.price, t.revenue])
+    row.getCell(3).numFmt = CURRENCY_FORMAT
+    row.getCell(4).numFmt = CURRENCY_FORMAT
+    ticketTotalIssued += t.issued
+    ticketTotalRevenue += t.revenue
+  }
+  const ticketTotal = tickets.addRow(['Total', ticketTotalIssued, '', ticketTotalRevenue])
+  ticketTotal.font = { bold: true }
+  ticketTotal.getCell(4).numFmt = CURRENCY_FORMAT
+
+  // ── Tab 3: Merchandise Revenue ──
+  const merch = workbook.addWorksheet('Merchandise Revenue')
+  setColumnWidths(merch, [30, 10, 14, 16, 12])
+  styleHeaderRow(merch.addRow(['Product', 'Qty', 'Unit Price', 'Revenue', 'Status']))
+
+  let merchTotalQty = 0
+  let merchTotalRevenue = 0
+  for (const m of data.merchandiseRevenue) {
+    const row = merch.addRow([m.name, m.qty, m.unitPrice, m.revenue, m.status])
+    row.getCell(3).numFmt = CURRENCY_FORMAT
+    row.getCell(4).numFmt = CURRENCY_FORMAT
+    merchTotalQty += m.qty
+    merchTotalRevenue += m.revenue
+  }
+  const merchTotal = merch.addRow(['Total', merchTotalQty, '', merchTotalRevenue, ''])
+  merchTotal.font = { bold: true }
+  merchTotal.getCell(4).numFmt = CURRENCY_FORMAT
+
+  const acctBuffer = await workbook.xlsx.writeBuffer()
+  return Buffer.from(acctBuffer)
+}
+
+// ─── Org Analytics Workbook ────────────────────────────────────────────────
+
+export interface OrgAnalyticsExportData {
+  orgName: string
+  totalRevenue: number
+  totalRefunds: number
+  netRevenue: number
+  activeEvents: number
+  totalAttendees: number
+  topEvents: { title: string; date: string; attendees: number; revenue: number }[]
+  applicationStats: { submitted: number; approved: number; declined: number; approvalRate: number }
+  volunteerStats: { shifts: number; filled: number; fillRate: number; hours: number }
+  refundStats: { total: number; rate: number; byChannel: { channel: string; amount: number; count: number }[] }
+}
+
+export async function buildOrgAnalyticsWorkbook(data: OrgAnalyticsExportData): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook()
+
+  // ── Tab 1: Summary ──
+  const summary = workbook.addWorksheet('Summary')
+  setColumnWidths(summary, [30, 22])
+
+  const titleRow = summary.addRow([data.orgName])
+  titleRow.font = { bold: true, size: 14 }
+  summary.addRow(['Organization Analytics Export'])
+  summary.addRow([])
+
+  const kpis: [string, number][] = [
+    ['Total Revenue', data.totalRevenue],
+    ['Total Refunds', data.totalRefunds],
+    ['Net Revenue', data.netRevenue],
+    ['Active Events', data.activeEvents],
+    ['Total Attendees', data.totalAttendees],
+  ]
+  for (const [label, value] of kpis) {
+    const row = summary.addRow([label, value])
+    row.getCell(1).font = { bold: true }
+    const isMonetary = label.toLowerCase().includes('revenue') || label.toLowerCase().includes('refund')
+    if (isMonetary) row.getCell(2).numFmt = CURRENCY_FORMAT
+  }
+
+  // ── Tab 2: Revenue by Event ──
+  const events = workbook.addWorksheet('Revenue by Event')
+  setColumnWidths(events, [36, 14, 14, 18])
+  styleHeaderRow(events.addRow(['Event Title', 'Date', 'Attendees', 'Net Revenue']))
+
+  let totalRevenue = 0
+  let totalAttendees = 0
+  for (const evt of data.topEvents) {
+    const row = events.addRow([evt.title, evt.date, evt.attendees, evt.revenue])
+    row.getCell(4).numFmt = CURRENCY_FORMAT
+    totalRevenue += evt.revenue
+    totalAttendees += evt.attendees
+  }
+
+  if (data.topEvents.length > 0) {
+    const totalRow = events.addRow(['Total', '', totalAttendees, totalRevenue])
+    totalRow.font = { bold: true }
+    totalRow.getCell(4).numFmt = CURRENCY_FORMAT
+  }
+
+  // ── Tab 3: Operational Stats ──
+  const ops = workbook.addWorksheet('Operational Stats')
+  setColumnWidths(ops, [30, 20])
+
+  // Section: Application Stats
+  const appHeader = ops.addRow(['Application Stats'])
+  appHeader.font = { bold: true, size: 12 }
+  ops.addRow([])
+
+  const appRows: [string, number | string][] = [
+    ['Submitted', data.applicationStats.submitted],
+    ['Approved', data.applicationStats.approved],
+    ['Declined', data.applicationStats.declined],
+    ['Approval Rate', `${(data.applicationStats.approvalRate * 100).toFixed(1)}%`],
+  ]
+  for (const [label, value] of appRows) {
+    const row = ops.addRow([label, value])
+    row.getCell(1).font = { bold: true }
+  }
+
+  ops.addRow([])
+  ops.addRow([])
+
+  // Section: Volunteer Overview
+  const volHeader = ops.addRow(['Volunteer Overview'])
+  volHeader.font = { bold: true, size: 12 }
+  ops.addRow([])
+
+  const volRows: [string, number | string][] = [
+    ['Shifts Available', data.volunteerStats.shifts],
+    ['Shifts Filled', data.volunteerStats.filled],
+    ['Fill Rate', `${(data.volunteerStats.fillRate * 100).toFixed(1)}%`],
+    ['Hours Pledged', data.volunteerStats.hours],
+  ]
+  for (const [label, value] of volRows) {
+    const row = ops.addRow([label, value])
+    row.getCell(1).font = { bold: true }
+  }
+
+  ops.addRow([])
+  ops.addRow([])
+
+  // Section: Refund Breakdown
+  const refHeader = ops.addRow(['Refund Breakdown'])
+  refHeader.font = { bold: true, size: 12 }
+  ops.addRow([])
+
+  const totalRefRow = ops.addRow(['Total Refunds', data.refundStats.total])
+  totalRefRow.getCell(1).font = { bold: true }
+  totalRefRow.getCell(2).numFmt = CURRENCY_FORMAT
+
+  const refRateRow = ops.addRow(['Refund Rate', `${(data.refundStats.rate * 100).toFixed(1)}%`])
+  refRateRow.getCell(1).font = { bold: true }
+
+  if (data.refundStats.byChannel.length > 0) {
+    ops.addRow([])
+    styleHeaderRow(ops.addRow(['Channel', 'Amount', 'Count']))
+    for (const ch of data.refundStats.byChannel) {
+      const row = ops.addRow([
+        ch.channel.charAt(0).toUpperCase() + ch.channel.slice(1),
+        ch.amount,
+        ch.count,
+      ])
+      row.getCell(2).numFmt = CURRENCY_FORMAT
+    }
+  }
+
+  const orgBuffer = await workbook.xlsx.writeBuffer()
+  return Buffer.from(orgBuffer)
+}

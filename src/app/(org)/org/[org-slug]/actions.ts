@@ -183,12 +183,16 @@ export async function changeOrgMemberLevel(
   return { success: true }
 }
 
-// ── Update Module Lead Access (per-event, per-module) ──────────────────────
+// ── Update Module Lead Access (org-wide) ───────────────────────────────────
+
+const VALID_MODULE_KEYS = [
+  'application', 'ticketing', 'waiver', 'venue',
+  'room_selection', 'volunteering', 'schedule', 'badge',
+]
 
 export async function updateMemberModuleAccess(
   orgSlug: string,
   memberId: string,
-  eventId: string,
   moduleKeys: string[],
 ): Promise<{ success: true } | { error: string }> {
   const auth = await requireOrgAccess(orgSlug)
@@ -209,33 +213,21 @@ export async function updateMemberModuleAccess(
     return { error: 'Module access can only be configured for Module Leads.' }
   }
 
-  // Verify event belongs to this org
-  const { data: event } = await admin
-    .from('platform_events')
-    .select('id, module_config')
-    .eq('id', eventId)
-    .eq('organization_id', auth.orgId)
-    .single()
-  if (!event) return { error: 'Event not found in this organization.' }
-
-  // Validate that each requested module is actually enabled on the event
-  const moduleConfig = (event.module_config ?? {}) as Record<string, { enabled?: boolean }>
-  const invalidModules = moduleKeys.filter(key => !moduleConfig[key]?.enabled)
-  if (invalidModules.length > 0) {
-    return { error: `Modules not enabled on this event: ${invalidModules.join(', ')}` }
+  // Validate module keys
+  const invalid = moduleKeys.filter(k => !VALID_MODULE_KEYS.includes(k))
+  if (invalid.length > 0) {
+    return { error: `Invalid module keys: ${invalid.join(', ')}` }
   }
 
-  // Delete existing grants for this member + event, then insert new ones
+  // Replace all grants for this member
   await admin
     .from('organization_module_access')
     .delete()
     .eq('organization_member_id', memberId)
-    .eq('event_id', eventId)
 
   if (moduleKeys.length > 0) {
     const rows = moduleKeys.map(key => ({
       organization_member_id: memberId,
-      event_id: eventId,
       module_key: key,
     }))
     const { error: insertError } = await admin

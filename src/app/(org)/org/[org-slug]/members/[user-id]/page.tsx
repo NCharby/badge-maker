@@ -65,40 +65,13 @@ export default async function OrgMemberDetailPage({
 
   const displayName = targetProfile.preferred_scene_name?.trim() || targetProfile.email.split('@')[0]
 
-  // Fetch org events with their module configs (for module assignment UI)
-  const { data: orgEvents } = await admin
-    .from('platform_events')
-    .select('id, title, status, module_config')
-    .eq('organization_id', org.id)
-    .order('start_date', { ascending: false })
-
-  // Fetch existing module access grants for this member
+  // Fetch existing org-wide module grants for this member
   const { data: existingGrants } = await admin
     .from('organization_module_access')
-    .select('event_id, module_key')
+    .select('module_key')
     .eq('organization_member_id', member.id)
 
-  // Build grants map: { eventId: [moduleKey, ...] }
-  const grantsMap: Record<string, string[]> = {}
-  for (const grant of existingGrants ?? []) {
-    if (!grantsMap[grant.event_id]) grantsMap[grant.event_id] = []
-    grantsMap[grant.event_id].push(grant.module_key)
-  }
-
-  // Build events list with enabled modules
-  const events = (orgEvents ?? []).map(e => {
-    const mc = (e.module_config ?? {}) as Record<string, { enabled?: boolean }>
-    const enabledModules = Object.entries(mc)
-      .filter(([, cfg]) => cfg?.enabled)
-      .map(([key]) => key)
-    return {
-      id: e.id,
-      title: e.title,
-      status: e.status,
-      enabledModules,
-      grantedModules: grantsMap[e.id] ?? [],
-    }
-  })
+  const grantedModules = (existingGrants ?? []).map(g => g.module_key)
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem 1.5rem' }}>
@@ -120,7 +93,7 @@ export default async function OrgMemberDetailPage({
         orgSlug={orgSlug}
         memberId={member.id}
         accessLevel={member.access_level}
-        events={events}
+        grantedModules={grantedModules}
       />
     </div>
   )
